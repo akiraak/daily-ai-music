@@ -23,7 +23,7 @@ daily-ai-music は、Suno を使って音楽を生成し、iPhone から操作�
 
 ## 未確定事項(決まり次第このファイルを更新)
 
-- Suno との連携方式(公式 API の可否、認証方法)— 要調査
+- ~~Suno との連携方式~~ — 調査済み([docs/specs/suno-api.md](docs/specs/suno-api.md))。当面はサードパーティ API(第一候補 sunoapi.org、Bearer 認証)を抽象化レイヤ越しに使い、公式 API(早期アクセス応募中)が出たら差し替える方針
 - バックエンドのフレームワークとホスティング先
 - 音源ファイルの保存先(オブジェクトストレージ等)
 - iOS アプリの UI フレームワーク(SwiftUI を想定)と API 認証方式
