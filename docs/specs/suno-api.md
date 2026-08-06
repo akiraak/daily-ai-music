@@ -48,6 +48,18 @@
 
 サードパーティ API はいずれも Suno 非公認(アカウントプール/リバースエンジニアリング)。公式 API の登場や Suno 側の対策で**将来使えなくなる可能性がある**前提で、連携層を抽象化しておくこと。
 
+## 実測結果(2026-08-06、kie.ai で検証)
+
+検証スクリプト: `scripts/verify-sunoapi.mjs`(`.env` の `SUNOAPI_ORG_KEY` / `SUNOAPI_BASE_URL` を使用)
+
+- **sunoapi.org は Google ログイン(唯一の登録手段)がエラーで登録不可**だったため、同一運営・同一 API 構造の **kie.ai**(`https://api.kie.ai`)で検証した
+- 生成: `POST /api/v1/generate`(customMode=false, model=V5, instrumental=false)。`callBackUrl` は必須だが**プレースホルダ URL でも受理され、ポーリングで完了検知できる**
+- ステータス遷移: `PENDING`(〜15s)→ `TEXT_SUCCESS`(30〜91s)→ `SUCCESS`(106s)。**リクエストから 2 曲完成まで約 108 秒**
+- 成果物: 1 リクエストで 2 曲(各約 3 分、MP3 192kbps / 48kHz ステレオ、約 4MB)
+- クレジット: **1 リクエスト = 12 クレジット消費**(80 → 68)。kie.ai は登録時に 80 クレジット付与
+- クレジット確認エンドポイントはプロバイダで異なる: sunoapi.org は `GET /api/v1/generate/credit`、kie.ai は `GET /api/v1/chat/credit`(レスポンス形式は同一)
+- `audioUrl` のホストは `tempfile.aiquickdraw.com`。**ドメイン名からして一時ファイル置き場**であり、自前ストレージへの即時ダウンロード保存が必須(下記の設計示唆どおり)
+
 ## バックエンド設計への示唆
 
 - 生成は非同期(数十秒〜数分)。**リクエスト → task_id → コールバック or ポーリングで完了検知 → audio URL 取得** の流れになるため、バックエンドにジョブ管理(生成タスクの状態遷移)が必要

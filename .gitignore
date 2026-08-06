@@ -6,3 +6,6 @@ vibeboard/node_modules/
 # ローカル設定・秘密情報
 .env*
 .secrets/
+
+# 検証スクリプトの生成物
+output/
