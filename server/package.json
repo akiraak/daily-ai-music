@@ -1,0 +1,20 @@
+{
+  "name": "daily-ai-music-server",
+  "version": "0.1.0",
+  "description": "daily-ai-music backend + web admin",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node src/index.ts",
+    "dev": "node --watch src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "type": "module",
+  "dependencies": {
+    "@hono/node-server": "^2.1.0",
+    "hono": "^4.13.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.2",
+    "typescript": "^7.0.2"
+  }
+}

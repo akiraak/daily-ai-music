@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>daily-ai-music</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header>
+    <h1>daily-ai-music</h1>
+    <div id="credits" class="credits" title="残クレジット"></div>
+  </header>
+
+  <main>
+    <section class="panel">
+      <h2>音楽を生成</h2>
+      <form id="generate-form">
+        <textarea id="prompt" rows="3" maxlength="2000"
+          placeholder="例: A calm and warm morning song with acoustic guitar and soft vocals"
+          required></textarea>
+        <div class="form-row">
+          <label class="checkbox">
+            <input type="checkbox" id="instrumental"> インストゥルメンタル(ボーカルなし)
+          </label>
+          <button type="submit" id="generate-button">生成する</button>
+        </div>
+        <p id="form-message" class="form-message" hidden></p>
+      </form>
+    </section>
+
+    <section class="panel" id="active-panel" hidden>
+      <h2>生成中</h2>
+      <ul id="active-tasks" class="task-list"></ul>
+    </section>
+
+    <section class="panel">
+      <h2>楽曲一覧</h2>
+      <ul id="tracks" class="track-list"></ul>
+      <p id="tracks-empty" class="empty">まだ楽曲がありません。上のフォームから生成してください。</p>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>

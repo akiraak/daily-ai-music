@@ -9,3 +9,5 @@ vibeboard/node_modules/
 
 # 検証スクリプトの生成物
 output/
+data/
+node_modules/

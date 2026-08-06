@@ -19,13 +19,36 @@ daily-ai-music は、Suno を使って音楽を生成し、iPhone から操作�
 
 ## 現状
 
-コードは未実装(README と LICENSE のみ)。ビルド・テスト等のコマンドは存在しない。実装が始まったら、このファイルにコマンドとアーキテクチャの詳細を追記すること。
+バックエンド + Web 管理画面(`server/`)が動く。ブラウザから生成リクエスト・進行状況の確認・楽曲の一覧と再生ができる。iOS アプリと自動生成スケジューラは未実装。
+
+### コマンド
+
+```bash
+./run-server.sh    # サーバー起動 → http://localhost:3014(PORT 環境変数で変更可)
+                   # 初回の npm install と、ポートを掴んでいる既存プロセスの停止も行う
+
+# 個別に実行する場合
+cd server
+npm run dev        # --watch 付き起動(開発用)
+npm run typecheck  # tsc --noEmit
+```
+
+- Node 24 の TS 直接実行(型ストリップ)を使うためビルドステップは無い。`erasableSyntaxOnly` な構文のみ使用可(enum・パラメータプロパティ不可)。import は `.ts` 拡張子付きで書く
+- API キーはリポジトリ直下の `.env`(`SUNOAPI_ORG_KEY` / `SUNOAPI_BASE_URL`)から読む
+
+### バックエンド構成(`server/`)
+
+- **Hono + @hono/node-server**: API・静的配信(`public/` の管理画面、`/audio/*` `/images/*` は Range 対応で配信)
+- **node:sqlite**(`data/db.sqlite`): `tasks`(生成ジョブ)と `tracks`(完成楽曲)。`data/` は gitignore
+- **`src/suno/client.ts`**: Suno 連携の抽象化インターフェース。実装は `kieai.ts`(kie.ai / sunoapi.org 互換)。公式 API が出たらここを差し替える
+- **`src/generation.ts`**: 生成ジョブ管理。10 秒間隔のポーラーが未完了タスクを照会し、完了したら音源・カバー画像を即 `data/` へダウンロード(プロバイダの URL は一時ファイルのため)。サーバー再起動時も DB から未完了タスクを拾って自動再開
+- API: `POST /api/generate` / `GET /api/tasks` / `GET /api/tracks` / `GET /api/credits`
 
 ## 未確定事項(決まり次第このファイルを更新)
 
 - ~~Suno との連携方式~~ — 調査・検証済み([docs/specs/suno-api.md](docs/specs/suno-api.md))。当面はサードパーティ API を抽象化レイヤ越しに使い、公式 API(早期アクセス応募中)が出たら差し替える方針。**kie.ai**(sunoapi.org と同一運営・同一 API 構造、Bearer 認証)で生成フローを検証済み(sunoapi.org は Google ログイン不可だったため kie.ai を採用)。検証スクリプト: `scripts/verify-sunoapi.mjs`
-- バックエンドのフレームワークとホスティング先
-- 音源ファイルの保存先(オブジェクトストレージ等)
+- ~~バックエンドのフレームワーク~~ — Hono(Node.js 24)に決定。ホスティング先は未定(ランタイム可搬性の高い Hono を選んだのはこのため)
+- 音源ファイルの保存先 — 当面はローカル `data/`。オブジェクトストレージ(S3 等)への移行は未定
 - iOS アプリの UI フレームワーク(SwiftUI を想定)と API 認証方式
 
 <!-- vibeboard:begin -->
