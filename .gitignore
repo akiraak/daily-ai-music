@@ -1,0 +1,8 @@
+vibeboard/dist/
+vibeboard/node_modules/
+
+.DS_Store
+
+# ローカル設定・秘密情報
+.env*
+.secrets/
