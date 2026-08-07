@@ -8,6 +8,12 @@ import * as db from "./db.ts";
 import { startGeneration, startPoller, sunoClient } from "./generation.ts";
 import { generateSongPlan } from "./llm.ts";
 import { CATEGORY_LABELS, SEED_PRESETS } from "./presets.ts";
+import {
+  getDailySettings,
+  isValidTimezone,
+  runDaily,
+  startScheduler,
+} from "./scheduler.ts";
 
 const app = new Hono();
 
@@ -104,6 +110,63 @@ api.get("/profile", (c) => {
       ? { content: profile.content, createdAt: profile.created_at }
       : null,
   });
+});
+
+// --- 毎日の自動生成の設定・手動トリガ ---
+
+api.get("/settings", (c) => {
+  return c.json({ settings: getDailySettings() });
+});
+
+// 部分更新: { dailyEnabled?, adventureProbability?, dailyHour?, dailyTimezone? }
+api.put("/settings", async (c) => {
+  const body = await c.req.json().catch(() => null);
+  if (body === null || typeof body !== "object") {
+    return c.json({ error: "JSON body を指定してください" }, 400);
+  }
+  const updates: [key: string, value: string][] = [];
+  if ("dailyEnabled" in body) {
+    if (typeof body.dailyEnabled !== "boolean") {
+      return c.json({ error: "dailyEnabled は boolean です" }, 400);
+    }
+    updates.push(["daily_enabled", String(body.dailyEnabled)]);
+  }
+  if ("adventureProbability" in body) {
+    const p = body.adventureProbability;
+    if (typeof p !== "number" || !(p >= 0 && p <= 1)) {
+      return c.json({ error: "adventureProbability は 0〜1 の数値です" }, 400);
+    }
+    updates.push(["adventure_probability", String(p)]);
+  }
+  if ("dailyHour" in body) {
+    const h = body.dailyHour;
+    if (!Number.isInteger(h) || h < 0 || h > 23) {
+      return c.json({ error: "dailyHour は 0〜23 の整数です" }, 400);
+    }
+    updates.push(["daily_hour", String(h)]);
+  }
+  if ("dailyTimezone" in body) {
+    if (typeof body.dailyTimezone !== "string" || !isValidTimezone(body.dailyTimezone)) {
+      return c.json({ error: "dailyTimezone が不正です(IANA タイムゾーン名)" }, 400);
+    }
+    updates.push(["daily_timezone", body.dailyTimezone]);
+  }
+  if (updates.length === 0) {
+    return c.json({ error: "更新するフィールドを指定してください" }, 400);
+  }
+  for (const [key, value] of updates) db.setSetting(key, value);
+  return c.json({ settings: getDailySettings() });
+});
+
+// 自動生成の手動トリガ(検証・デバッグ用)。last_daily_date は更新しない
+api.post("/daily/run", async (c) => {
+  try {
+    const { task, adventure, profileUpdated } = await runDaily();
+    return c.json({ task: taskJson(task), adventure, profileUpdated }, 201);
+  } catch (err) {
+    console.error(`[api] daily/run 失敗: ${err}`);
+    return c.json({ error: `自動生成に失敗しました: ${err}` }, 502);
+  }
 });
 
 api.get("/tasks", (c) => {
@@ -304,4 +367,5 @@ if (db.countPresets() === 0) {
 serve({ fetch: app.fetch, port: PORT }, (info) => {
   console.log(`daily-ai-music admin: http://localhost:${info.port}/admin/`);
   startPoller();
+  startScheduler();
 });

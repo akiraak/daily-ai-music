@@ -396,7 +396,25 @@ $("preset-form").addEventListener("submit", async (e) => {
   }
 });
 
+// --- 好みプロファイル閲覧 ---
+async function loadProfile() {
+  try {
+    const { profile } = await fetchJson("/admin/api/profile");
+    $("profile-meta").textContent = profile
+      ? `更新: ${formatDate(profile.createdAt)}`
+      : "まだプロファイルがありません。曲を評価すると、毎日の自動生成時に作成されます。";
+    $("profile-content").textContent = profile?.content ?? "";
+  } catch (err) {
+    console.warn("profile load failed:", err);
+  }
+}
+// パネルを開いたときに最新を取り直す
+$("profile-panel").addEventListener("toggle", () => {
+  if ($("profile-panel").open) loadProfile();
+});
+
 refreshCredits();
 refresh();
 loadPresets();
+loadProfile();
 setInterval(refresh, POLL_MS);

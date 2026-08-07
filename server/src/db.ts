@@ -35,6 +35,7 @@ export interface TrackRow {
   image_file: string | null;
   rating: number | null; // 1 = 👍, -1 = 👎, NULL = 未評価
   favorite: number; // 0/1(★)
+  rated_at: string | null; // 最後に評価を変更した日時
   created_at: string;
 }
 
@@ -79,6 +80,11 @@ db.exec(`
     content TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
   );
+  CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+  );
 `);
 
 // 既存 DB への後方互換マイグレーション(カラムが無ければ追加)
@@ -92,6 +98,7 @@ function addColumnIfMissing(table: string, column: string, ddl: string): void {
 }
 addColumnIfMissing("tracks", "rating", "rating INTEGER");
 addColumnIfMissing("tracks", "favorite", "favorite INTEGER NOT NULL DEFAULT 0");
+addColumnIfMissing("tracks", "rated_at", "rated_at TEXT"); // 最後に評価を変更した日時(プロファイル更新の差分検出用)
 addColumnIfMissing("tasks", "mode", "mode TEXT NOT NULL DEFAULT 'manual'");
 addColumnIfMissing("tasks", "style", "style TEXT");
 addColumnIfMissing("tasks", "lyrics", "lyrics TEXT");
@@ -238,17 +245,34 @@ export function listRecentStyles(limit = 5): string[] {
   return rows.map((r) => r.style);
 }
 
-// 評価済みの楽曲(プロファイル更新用)。since 以降に作成された評価付き楽曲を返す
+// 評価済みの楽曲(プロファイル更新用)。since 以降に評価が変更された楽曲を返す
 export function listRatedTracks(sinceIso?: string): TrackWithTaskRow[] {
   return db
     .prepare(
       `SELECT tracks.*, tasks.mode, tasks.style, tasks.lyrics, tasks.lyrics_ja, tasks.intent
        FROM tracks JOIN tasks ON tasks.id = tracks.task_id
        WHERE (tracks.rating IS NOT NULL OR tracks.favorite = 1)
-         AND tracks.created_at > ?
+         AND tracks.rated_at IS NOT NULL AND tracks.rated_at > ?
        ORDER BY tracks.id`
     )
     .all(sinceIso ?? "") as unknown as TrackWithTaskRow[];
+}
+
+// --- 設定(key-value)---
+
+export function getSetting(key: string): string | undefined {
+  const row = db.prepare(`SELECT value FROM settings WHERE key = ?`).get(key) as
+    | { value: string }
+    | undefined;
+  return row?.value;
+}
+
+export function setSetting(key: string, value: string): void {
+  db.prepare(
+    `INSERT INTO settings (key, value) VALUES (?, ?)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value,
+       updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`
+  ).run(key, value);
 }
 
 export function getTrack(id: number): TrackWithTaskRow | undefined {
@@ -328,16 +352,14 @@ export function updateTrackRating(
 ): TrackWithTaskRow | undefined {
   if (!getTrack(id)) return undefined;
   if (input.rating !== undefined) {
-    db.prepare(`UPDATE tracks SET rating = ? WHERE id = ?`).run(
-      input.rating,
-      id
-    );
+    db.prepare(
+      `UPDATE tracks SET rating = ?, rated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?`
+    ).run(input.rating, id);
   }
   if (input.favorite !== undefined) {
-    db.prepare(`UPDATE tracks SET favorite = ? WHERE id = ?`).run(
-      input.favorite ? 1 : 0,
-      id
-    );
+    db.prepare(
+      `UPDATE tracks SET favorite = ?, rated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?`
+    ).run(input.favorite ? 1 : 0, id);
   }
   return getTrack(id);
 }
