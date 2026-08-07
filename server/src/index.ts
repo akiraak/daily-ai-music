@@ -98,9 +98,18 @@ app.use(
     rewriteRequestPath: (p) => p.replace(/^\/images/, ""),
   })
 );
-app.use("/*", serveStatic({ root: PUBLIC_DIR }));
+// 管理画面は /admin 配下(本番で Cloudflare Access をこのパスだけに掛けるため)
+app.get("/", (c) => c.redirect("/admin/"));
+app.get("/admin", (c) => c.redirect("/admin/"));
+app.use(
+  "/admin/*",
+  serveStatic({
+    root: PUBLIC_DIR,
+    rewriteRequestPath: (p) => p.replace(/^\/admin/, ""),
+  })
+);
 
 serve({ fetch: app.fetch, port: PORT }, (info) => {
-  console.log(`daily-ai-music admin: http://localhost:${info.port}`);
+  console.log(`daily-ai-music admin: http://localhost:${info.port}/admin/`);
   startPoller();
 });

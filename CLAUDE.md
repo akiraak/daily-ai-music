@@ -24,7 +24,7 @@ daily-ai-music は、Suno を使って音楽を生成し、iPhone から操作�
 ### コマンド
 
 ```bash
-./run-server.sh        # サーバー起動 → http://localhost:3014(PORT 環境変数で変更可)
+./run-server.sh        # サーバー起動 → 管理画面 http://localhost:3014/admin/(PORT 環境変数で変更可)
                        # 初回の npm install と、ポートを掴んでいる既存プロセスの停止も行う
 ./run-ios-device.sh    # iOS アプリを実機にインストール・起動(既定は本番 https://music.chobi.me へ接続、
                        # --local でMacのLAN IP自動検出。.env の API_SECRET 注入)
@@ -52,7 +52,7 @@ esl-learning-assistant と同方式。`/api/*` は `X-API-Secret` ヘッダ必�
 
 ### バックエンド構成(`server/`)
 
-- **Hono + @hono/node-server**: API・静的配信(`public/` の管理画面、`/audio/*` `/images/*` は Range 対応で配信)
+- **Hono + @hono/node-server**: API・静的配信(`public/` の管理画面は `/admin` 配下。本番で Cloudflare Access をこのパスだけに掛けるため。`/` は `/admin/` へリダイレクト。`/audio/*` `/images/*` は Range 対応で配信)
 - **node:sqlite**(`data/db.sqlite`): `tasks`(生成ジョブ)と `tracks`(完成楽曲)。`data/` は gitignore
 - **`src/suno/client.ts`**: Suno 連携の抽象化インターフェース。実装は `kieai.ts`(kie.ai / sunoapi.org 互換)。公式 API が出たらここを差し替える
 - **`src/generation.ts`**: 生成ジョブ管理。10 秒間隔のポーラーが未完了タスクを照会し、完了したら音源・カバー画像を即 `data/` へダウンロード(プロバイダの URL は一時ファイルのため)。サーバー再起動時も DB から未完了タスクを拾って自動再開
@@ -65,14 +65,6 @@ esl-learning-assistant と同方式。`/api/*` は `X-API-Secret` ヘッダ必�
 - `Services/BackendAPI.swift`: `/api/*` 共通処理(UserDefaults → Info.plist 埋め込み値の順で URL/secret を解決、`X-API-Secret` 付与、os.Logger)
 - 接続先の既定はビルド時に Info.plist へ埋め込む(`run-ios-device.sh` が本番 `https://music.chobi.me` を注入。`--local` で Mac の LAN IP。空ならシミュレータ向けに `http://localhost:3014` へフォールバック)
 - UI テスト(`DailyAIMusicUITests`): 一覧 → タップ → 再生開始のスモークテスト
-
-### バックエンド構成(`server/`)
-
-- **Hono + @hono/node-server**: API・静的配信(`public/` の管理画面、`/audio/*` `/images/*` は Range 対応で配信)
-- **node:sqlite**(`data/db.sqlite`): `tasks`(生成ジョブ)と `tracks`(完成楽曲)。`data/` は gitignore
-- **`src/suno/client.ts`**: Suno 連携の抽象化インターフェース。実装は `kieai.ts`(kie.ai / sunoapi.org 互換)。公式 API が出たらここを差し替える
-- **`src/generation.ts`**: 生成ジョブ管理。10 秒間隔のポーラーが未完了タスクを照会し、完了したら音源・カバー画像を即 `data/` へダウンロード(プロバイダの URL は一時ファイルのため)。サーバー再起動時も DB から未完了タスクを拾って自動再開
-- API: `POST /api/generate` / `GET /api/tasks` / `GET /api/tracks` / `GET /api/credits`
 
 ## 未確定事項(決まり次第このファイルを更新)
 
