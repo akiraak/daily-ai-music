@@ -8,11 +8,30 @@ struct Track: Identifiable, Decodable, Equatable {
     let duration: Double
     let audioUrl: String
     let imageUrl: String?
+    /// 1 = 👍, -1 = 👎, nil = 未評価
+    let rating: Int?
     let createdAt: Date
 }
 
 struct TracksResponse: Decodable {
     let tracks: [Track]
+}
+
+/// POST /api/tracks/:id/rating の body。サーバーは "rating" キー必須のため、
+/// nil(評価解除)でもキーを省略せず "rating": null を送る
+struct RatingRequest: Encodable {
+    let rating: Int?
+
+    private enum CodingKeys: String, CodingKey { case rating }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(rating, forKey: .rating)
+    }
+}
+
+struct RatingResponse: Decodable {
+    let track: Track
 }
 
 /// GET /api/tasks の生成ジョブ

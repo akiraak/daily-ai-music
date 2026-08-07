@@ -1,5 +1,7 @@
 # DONE
 
+- [x] 2026-08-07 アプリに評価ボタンがない — iOS の楽曲一覧の各行に管理画面と同じトグル式 👍/👎 ボタンを追加(`POST /api/tracks/:id/rating`。行タップ再生は維持し、評価ボタンは `.borderless` の独立タップ領域。`Track` に `rating` 追加、解除時は `"rating": null` をカスタム encode で送信)。UI テスト `RatingUITests` 追加(トグル後に元の評価へ復元するのでデータを汚さない)、既存再生テストと合わせシミュレータで 2 件パス。プラン: [docs/plans/archive/ios-rating-buttons.md](docs/plans/archive/ios-rating-buttons.md)
+
 - [x] 2026-08-07 評価を良い悪いの２択にする — ★(お気に入り)を廃止し 👍/👎 の 2 択に統一。起動時マイグレーションで `tracks.favorite` を DROP(★のみで未評価の曲は 👍 に変換。実 DB で確認)。`POST /api/tracks/:id/rating` は `{ rating: 1 | -1 | null }` のみ受付(favorite 送信は 400)、tracks API レスポンス・プロファイル更新 LLM 入力・管理画面の ★ ボタンも削除。プラン: [docs/plans/archive/rating-two-choice.md](docs/plans/archive/rating-two-choice.md)
 
 - [x] 2026-08-07 管理画面からポイントチャージする画面へリンクをつける — ヘッダーの残クレジット表示の隣に kie.ai のチャージ画面(`https://kie.ai/billing`)を別タブで開く「チャージ」リンクを常時表示で追加。プラン: [docs/plans/archive/admin-credits-charge-link.md](docs/plans/archive/admin-credits-charge-link.md)
