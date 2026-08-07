@@ -26,7 +26,8 @@ daily-ai-music は、Suno を使って音楽を生成し、iPhone から操作�
 ```bash
 ./run-server.sh        # サーバー起動 → http://localhost:3014(PORT 環境変数で変更可)
                        # 初回の npm install と、ポートを掴んでいる既存プロセスの停止も行う
-./run-ios-device.sh    # iOS アプリを実機にインストール・起動(MacのLAN IP自動検出、.env の API_SECRET 注入)
+./run-ios-device.sh    # iOS アプリを実機にインストール・起動(既定は本番 https://music.chobi.me へ接続、
+                       # --local でMacのLAN IP自動検出。.env の API_SECRET 注入)
 
 # 個別に実行する場合
 cd server
@@ -62,7 +63,7 @@ esl-learning-assistant と同方式。`/api/*` は `X-API-Secret` ヘッダ必�
 - **XcodeGen + SwiftUI**(iOS 17+、Swift 6)。`project.yml` が真実源で `.xcodeproj` は生成物(gitignore)。esl-learning-assistant と同じ構成
 - 画面: 楽曲一覧(AVPlayer ストリーミング再生・ミニプレイヤー・バックグラウンド再生対応)/ 生成(プロンプト送信 + 5 秒ポーリングの進行表示)/ 設定(サーバー URL・API Secret・接続テスト)
 - `Services/BackendAPI.swift`: `/api/*` 共通処理(UserDefaults → Info.plist 埋め込み値の順で URL/secret を解決、`X-API-Secret` 付与、os.Logger)
-- 接続先の既定はビルド時に Info.plist へ埋め込む(`run-ios-device.sh` が注入。空ならシミュレータ向けに `http://localhost:3014` へフォールバック)
+- 接続先の既定はビルド時に Info.plist へ埋め込む(`run-ios-device.sh` が本番 `https://music.chobi.me` を注入。`--local` で Mac の LAN IP。空ならシミュレータ向けに `http://localhost:3014` へフォールバック)
 - UI テスト(`DailyAIMusicUITests`): 一覧 → タップ → 再生開始のスモークテスト
 
 ### バックエンド構成(`server/`)

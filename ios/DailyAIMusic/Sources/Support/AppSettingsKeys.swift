@@ -4,7 +4,8 @@ enum AppSettingsKeys {
     static let backendBaseURL = "backendBaseURL"
     static let apiSecret = "apiSecret"
 
-    /// ビルド時に Info.plist へ埋め込まれた値(実機ビルドは run-ios-device.sh が Mac の IP を注入する)。
+    /// ビルド時に Info.plist へ埋め込まれた値(実機ビルドは run-ios-device.sh が
+    /// 本番 URL https://music.chobi.me を注入する。--local 時は Mac の LAN IP)。
     /// 未設定・空ならローカル開発サーバーにフォールバックする(シミュレータ向け)
     static var defaultBackendBaseURL: String {
         if let value = Bundle.main.object(forInfoDictionaryKey: "BackendBaseURL") as? String,
