@@ -60,6 +60,14 @@ db.exec(`
     favorite INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
   );
+  CREATE TABLE IF NOT EXISTS presets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    category TEXT NOT NULL,
+    value TEXT NOT NULL,
+    label_ja TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    UNIQUE (category, value)
+  );
 `);
 
 // 既存 DB への後方互換マイグレーション(カラムが無ければ追加)
@@ -158,6 +166,66 @@ export function getTrack(id: number): TrackRow | undefined {
   return db.prepare(`SELECT * FROM tracks WHERE id = ?`).get(id) as
     | TrackRow
     | undefined;
+}
+
+export interface PresetRow {
+  id: number;
+  category: string;
+  value: string;
+  label_ja: string;
+  created_at: string;
+}
+
+export function listPresets(): PresetRow[] {
+  return db
+    .prepare(`SELECT * FROM presets ORDER BY category, id`)
+    .all() as unknown as PresetRow[];
+}
+
+export function getPreset(id: number): PresetRow | undefined {
+  return db.prepare(`SELECT * FROM presets WHERE id = ?`).get(id) as
+    | PresetRow
+    | undefined;
+}
+
+export function countPresets(): number {
+  const row = db.prepare(`SELECT COUNT(*) AS n FROM presets`).get() as {
+    n: number;
+  };
+  return row.n;
+}
+
+// (category, value) の UNIQUE 違反は SQLite の例外をそのまま投げる(API 層で 409 にする)
+export function createPreset(input: {
+  category: string;
+  value: string;
+  labelJa: string;
+}): PresetRow {
+  const result = db
+    .prepare(`INSERT INTO presets (category, value, label_ja) VALUES (?, ?, ?)`)
+    .run(input.category, input.value, input.labelJa);
+  return getPreset(Number(result.lastInsertRowid))!;
+}
+
+export function updatePreset(
+  id: number,
+  input: { category?: string; value?: string; labelJa?: string }
+): PresetRow | undefined {
+  const current = getPreset(id);
+  if (!current) return undefined;
+  db.prepare(
+    `UPDATE presets SET category = ?, value = ?, label_ja = ? WHERE id = ?`
+  ).run(
+    input.category ?? current.category,
+    input.value ?? current.value,
+    input.labelJa ?? current.label_ja,
+    id
+  );
+  return getPreset(id);
+}
+
+export function deletePreset(id: number): boolean {
+  return db.prepare(`DELETE FROM presets WHERE id = ?`).run(id).changes > 0;
 }
 
 // 評価の部分更新。渡されたフィールドだけ書き換え、更新後の行を返す

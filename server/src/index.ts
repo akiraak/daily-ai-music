@@ -6,6 +6,7 @@ import { Hono } from "hono";
 import { API_SECRET, AUDIO_DIR, IMAGE_DIR, PORT, PUBLIC_DIR } from "./config.ts";
 import * as db from "./db.ts";
 import { startGeneration, startPoller, sunoClient } from "./generation.ts";
+import { CATEGORY_LABELS, SEED_PRESETS } from "./presets.ts";
 
 const app = new Hono();
 
@@ -118,6 +119,88 @@ api.get("/credits", async (c) => {
   return c.json({ credits: await sunoClient.getCredits() });
 });
 
+// --- プリセット管理 ---
+
+function presetJson(p: db.PresetRow) {
+  return {
+    id: p.id,
+    category: p.category,
+    value: p.value,
+    labelJa: p.label_ja,
+    createdAt: p.created_at,
+  };
+}
+
+// body の各フィールドを検証して trim 済み値を返す。partial=true なら未指定フィールドを許す
+function parsePresetBody(
+  body: unknown,
+  partial: boolean
+): { category?: string; value?: string; labelJa?: string } | { error: string } {
+  if (body === null || typeof body !== "object") {
+    return { error: "JSON body を指定してください" };
+  }
+  const b = body as Record<string, unknown>;
+  const result: { category?: string; value?: string; labelJa?: string } = {};
+  for (const key of ["category", "value", "labelJa"] as const) {
+    if (b[key] === undefined) {
+      if (!partial) return { error: `${key} を指定してください` };
+      continue;
+    }
+    if (typeof b[key] !== "string") return { error: `${key} は文字列です` };
+    const trimmed = (b[key] as string).trim();
+    if (!trimmed) return { error: `${key} が空です` };
+    if (trimmed.length > 100) return { error: `${key} が長すぎます(100 文字以内)` };
+    result[key] = trimmed;
+  }
+  if (partial && Object.keys(result).length === 0) {
+    return { error: "更新するフィールドを指定してください" };
+  }
+  return result;
+}
+
+api.get("/presets", (c) => {
+  return c.json({
+    presets: db.listPresets().map(presetJson),
+    categoryLabels: CATEGORY_LABELS,
+  });
+});
+
+api.post("/presets", async (c) => {
+  const parsed = parsePresetBody(await c.req.json().catch(() => null), false);
+  if ("error" in parsed) return c.json({ error: parsed.error }, 400);
+  try {
+    const preset = db.createPreset({
+      category: parsed.category!,
+      value: parsed.value!,
+      labelJa: parsed.labelJa!,
+    });
+    return c.json({ preset: presetJson(preset) }, 201);
+  } catch {
+    return c.json({ error: "同じカテゴリ・値のプリセットが既にあります" }, 409);
+  }
+});
+
+api.put("/presets/:id", async (c) => {
+  const id = Number(c.req.param("id"));
+  if (!Number.isInteger(id)) return c.json({ error: "不正な id です" }, 400);
+  const parsed = parsePresetBody(await c.req.json().catch(() => null), true);
+  if ("error" in parsed) return c.json({ error: parsed.error }, 400);
+  try {
+    const preset = db.updatePreset(id, parsed);
+    if (!preset) return c.json({ error: "プリセットが見つかりません" }, 404);
+    return c.json({ preset: presetJson(preset) });
+  } catch {
+    return c.json({ error: "同じカテゴリ・値のプリセットが既にあります" }, 409);
+  }
+});
+
+api.delete("/presets/:id", (c) => {
+  const id = Number(c.req.param("id"));
+  if (!Number.isInteger(id)) return c.json({ error: "不正な id です" }, 400);
+  if (!db.deletePreset(id)) return c.json({ error: "プリセットが見つかりません" }, 404);
+  return c.json({ ok: true });
+});
+
 // /api/* は X-API-Secret ヘッダ必須
 app.use("/api/*", async (c, next) => {
   if (!isValidApiSecret(c.req.header("x-api-secret"))) {
@@ -159,6 +242,12 @@ app.use(
     rewriteRequestPath: (p) => p.replace(/^\/admin/, ""),
   })
 );
+
+// 初期プリセット投入(空のときだけ。ユーザーが編集・削除した内容は再投入しない)
+if (db.countPresets() === 0) {
+  for (const p of SEED_PRESETS) db.createPreset(p);
+  console.log(`[presets] 初期プリセット ${SEED_PRESETS.length} 件を投入しました`);
+}
 
 serve({ fetch: app.fetch, port: PORT }, (info) => {
   console.log(`daily-ai-music admin: http://localhost:${info.port}/admin/`);

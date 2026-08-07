@@ -39,6 +39,20 @@
       <ul id="tracks" class="track-list"></ul>
       <p id="tracks-empty" class="empty">まだ楽曲がありません。上のフォームから生成してください。</p>
     </section>
+
+    <details class="panel">
+      <summary>プリセット管理</summary>
+      <div id="preset-groups"></div>
+      <form id="preset-form" class="preset-form">
+        <input id="preset-category" list="preset-category-list"
+          placeholder="カテゴリ (genre 等)" required>
+        <datalist id="preset-category-list"></datalist>
+        <input id="preset-value" placeholder="値(英語・プロンプト用)" required>
+        <input id="preset-label" placeholder="表示名(日本語)" required>
+        <button type="submit">追加</button>
+      </form>
+      <p id="preset-message" class="form-message" hidden></p>
+    </details>
   </main>
 
   <script src="/admin/app.js"></script>
