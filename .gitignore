@@ -5,9 +5,15 @@ vibeboard/node_modules/
 
 # ローカル設定・秘密情報
 .env*
+!.env.example
 .secrets/
 
 # 検証スクリプトの生成物
 output/
 data/
 node_modules/
+
+# iOS(xcodegen で project.yml から生成)
+ios/*.xcodeproj
+ios/build/
+ios/DerivedData/

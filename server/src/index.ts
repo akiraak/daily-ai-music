@@ -1,12 +1,35 @@
 // エントリポイント。API + 管理画面(静的ファイル)+ 保存済み音源の配信
+import crypto from "node:crypto";
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
-import { AUDIO_DIR, IMAGE_DIR, PORT, PUBLIC_DIR } from "./config.ts";
+import { API_SECRET, AUDIO_DIR, IMAGE_DIR, PORT, PUBLIC_DIR } from "./config.ts";
 import * as db from "./db.ts";
 import { startGeneration, startPoller, sunoClient } from "./generation.ts";
 
 const app = new Hono();
+
+function isValidApiSecret(provided: string | undefined): boolean {
+  if (!provided) return false;
+  // timing-safe 比較(長さ差で漏れないよう sha256 で固定長に揃える)
+  const providedHash = crypto.createHash("sha256").update(provided).digest();
+  const secretHash = crypto.createHash("sha256").update(API_SECRET).digest();
+  return crypto.timingSafeEqual(providedHash, secretHash);
+}
+
+app.get("/health", (c) => c.json({ status: "ok" }));
+
+// /api/* は X-API-Secret ヘッダ必須。/audio /images は当面無認証(ローカル LAN 運用。公開時に見直す)
+app.use("/api/*", async (c, next) => {
+  if (!isValidApiSecret(c.req.header("x-api-secret"))) {
+    console.warn(`[api] rejected (invalid X-API-Secret) ${c.req.method} ${c.req.path}`);
+    return c.json({ error: "unauthorized" }, 401);
+  }
+  await next();
+});
+
+// クライアントの接続テスト用(/api 配下なので X-API-Secret の一致確認になる)
+app.get("/api/ping", (c) => c.json({ ok: true }));
 
 function taskJson(t: db.TaskRow) {
   return {

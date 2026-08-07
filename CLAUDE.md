@@ -19,22 +19,51 @@ daily-ai-music は、Suno を使って音楽を生成し、iPhone から操作�
 
 ## 現状
 
-バックエンド + Web 管理画面(`server/`)が動く。ブラウザから生成リクエスト・進行状況の確認・楽曲の一覧と再生ができる。iOS アプリと自動生成スケジューラは未実装。
+バックエンド + Web 管理画面(`server/`)と iOS アプリ最小版(`ios/`)が動く。ブラウザ・iPhone から生成リクエスト・進行状況の確認・楽曲の一覧と再生ができる。自動生成スケジューラは未実装。
 
 ### コマンド
 
 ```bash
-./run-server.sh    # サーバー起動 → http://localhost:3014(PORT 環境変数で変更可)
-                   # 初回の npm install と、ポートを掴んでいる既存プロセスの停止も行う
+./run-server.sh        # サーバー起動 → http://localhost:3014(PORT 環境変数で変更可)
+                       # 初回の npm install と、ポートを掴んでいる既存プロセスの停止も行う
+./run-ios-device.sh    # iOS アプリを実機にインストール・起動(MacのLAN IP自動検出、.env の API_SECRET 注入)
 
 # 個別に実行する場合
 cd server
 npm run dev        # --watch 付き起動(開発用)
 npm run typecheck  # tsc --noEmit
+
+cd ios
+xcodegen generate  # project.yml から .xcodeproj を生成(gitignore 対象)
+xcodebuild -project DailyAIMusic.xcodeproj -scheme DailyAIMusic \
+  -destination 'platform=iOS Simulator,name=iPhone 17' build   # シミュレータビルド
+# UI テスト(要: サーバー起動 + BACKEND_API_SECRET=<.env の API_SECRET> を引数に付与)
+xcodebuild test -project DailyAIMusic.xcodeproj -scheme DailyAIMusic \
+  -destination 'platform=iOS Simulator,name=iPhone 17' BACKEND_API_SECRET=...
 ```
 
 - Node 24 の TS 直接実行(型ストリップ)を使うためビルドステップは無い。`erasableSyntaxOnly` な構文のみ使用可(enum・パラメータプロパティ不可)。import は `.ts` 拡張子付きで書く
-- API キーはリポジトリ直下の `.env`(`SUNOAPI_ORG_KEY` / `SUNOAPI_BASE_URL`)から読む
+- API キーはリポジトリ直下の `.env`(`SUNOAPI_ORG_KEY` / `SUNOAPI_BASE_URL` / `API_SECRET`)から読む。`.env.example` 参照
+
+### API 認証
+
+esl-learning-assistant と同方式。`/api/*` は `X-API-Secret` ヘッダ必須(`.env` の `API_SECRET`。16 文字以上 `[A-Za-z0-9_-]`、未設定はサーバーが起動時 fail-fast)。sha256 で固定長に揃えた timing-safe 比較。`/health` は無認証、`/api/ping` が接続テスト用。`/audio/*` `/images/*` は当面無認証(ローカル LAN 運用のため。公開時に見直し — TODO.md 将来課題)。Web 管理画面は localStorage に secret を保存し(初回 401 で入力を促す)、iOS アプリはビルド時注入(Info.plist)+ 設定画面で上書き。
+
+### バックエンド構成(`server/`)
+
+- **Hono + @hono/node-server**: API・静的配信(`public/` の管理画面、`/audio/*` `/images/*` は Range 対応で配信)
+- **node:sqlite**(`data/db.sqlite`): `tasks`(生成ジョブ)と `tracks`(完成楽曲)。`data/` は gitignore
+- **`src/suno/client.ts`**: Suno 連携の抽象化インターフェース。実装は `kieai.ts`(kie.ai / sunoapi.org 互換)。公式 API が出たらここを差し替える
+- **`src/generation.ts`**: 生成ジョブ管理。10 秒間隔のポーラーが未完了タスクを照会し、完了したら音源・カバー画像を即 `data/` へダウンロード(プロバイダの URL は一時ファイルのため)。サーバー再起動時も DB から未完了タスクを拾って自動再開
+- API: `POST /api/generate` / `GET /api/tasks` / `GET /api/tracks` / `GET /api/credits` / `GET /api/ping`
+
+### iOS アプリ構成(`ios/`)
+
+- **XcodeGen + SwiftUI**(iOS 17+、Swift 6)。`project.yml` が真実源で `.xcodeproj` は生成物(gitignore)。esl-learning-assistant と同じ構成
+- 画面: 楽曲一覧(AVPlayer ストリーミング再生・ミニプレイヤー・バックグラウンド再生対応)/ 生成(プロンプト送信 + 5 秒ポーリングの進行表示)/ 設定(サーバー URL・API Secret・接続テスト)
+- `Services/BackendAPI.swift`: `/api/*` 共通処理(UserDefaults → Info.plist 埋め込み値の順で URL/secret を解決、`X-API-Secret` 付与、os.Logger)
+- 接続先の既定はビルド時に Info.plist へ埋め込む(`run-ios-device.sh` が注入。空ならシミュレータ向けに `http://localhost:3014` へフォールバック)
+- UI テスト(`DailyAIMusicUITests`): 一覧 → タップ → 再生開始のスモークテスト
 
 ### バックエンド構成(`server/`)
 
@@ -49,7 +78,7 @@ npm run typecheck  # tsc --noEmit
 - ~~Suno との連携方式~~ — 調査・検証済み([docs/specs/suno-api.md](docs/specs/suno-api.md))。当面はサードパーティ API を抽象化レイヤ越しに使い、公式 API(早期アクセス応募中)が出たら差し替える方針。**kie.ai**(sunoapi.org と同一運営・同一 API 構造、Bearer 認証)で生成フローを検証済み(sunoapi.org は Google ログイン不可だったため kie.ai を採用)。検証スクリプト: `scripts/verify-sunoapi.mjs`
 - ~~バックエンドのフレームワーク~~ — Hono(Node.js 24)に決定。ホスティング先は未定(ランタイム可搬性の高い Hono を選んだのはこのため)
 - 音源ファイルの保存先 — 当面はローカル `data/`。オブジェクトストレージ(S3 等)への移行は未定
-- iOS アプリの UI フレームワーク(SwiftUI を想定)と API 認証方式
+- ~~iOS アプリの UI フレームワーク(SwiftUI を想定)と API 認証方式~~ — SwiftUI(XcodeGen、iOS 17+)と `X-API-Secret` ヘッダ認証に決定(上記「API 認証」参照)
 
 <!-- vibeboard:begin -->
 ## 開発管理画面 (vibeboard)

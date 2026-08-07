@@ -41,9 +41,19 @@ export const SUNO_API_KEY = process.env.SUNOAPI_ORG_KEY ?? "";
 export const SUNO_BASE_URL = process.env.SUNOAPI_BASE_URL ?? "https://api.kie.ai";
 export const SUNO_MODEL = process.env.SUNO_MODEL ?? "V5";
 
+export const API_SECRET = process.env.API_SECRET ?? "";
+
 if (!SUNO_API_KEY) {
   console.error(
     "SUNOAPI_ORG_KEY が見つかりません。リポジトリ直下の .env か環境変数で設定してください。"
+  );
+  process.exit(1);
+}
+
+// 公開運用時に意図せず無防備にならないよう fail-fast(ローカル開発でも .env に API_SECRET が必須)
+if (API_SECRET.length < 16 || !/^[A-Za-z0-9_-]+$/.test(API_SECRET)) {
+  console.error(
+    "API_SECRET が必要です(16 文字以上、[A-Za-z0-9_-] のみ。例: openssl rand -hex 16)。リポジトリ直下の .env で設定してください。"
   );
   process.exit(1);
 }

@@ -25,8 +25,23 @@ function formatDate(iso) {
   });
 }
 
-async function fetchJson(url, options) {
-  const res = await fetch(url, options);
+// /api/* の認証(X-API-Secret)。secret は localStorage に保存し、401 なら一度だけ入力を求める
+const SECRET_STORAGE_KEY = "apiSecret";
+let secretPrompted = false;
+
+async function fetchJson(url, options = {}) {
+  const secret = localStorage.getItem(SECRET_STORAGE_KEY);
+  const headers = { ...(options.headers ?? {}) };
+  if (secret) headers["X-API-Secret"] = secret;
+  const res = await fetch(url, { ...options, headers });
+  if (res.status === 401 && !secretPrompted) {
+    secretPrompted = true; // キャンセル時にポーリングのたび prompt が出ないよう、再表示はリロードまでしない
+    const input = prompt("API Secret を入力してください(.env の API_SECRET)");
+    if (input?.trim()) {
+      localStorage.setItem(SECRET_STORAGE_KEY, input.trim());
+      location.reload();
+    }
+  }
   const json = await res.json().catch(() => null);
   if (!res.ok) throw new Error(json?.error ?? `HTTP ${res.status}`);
   return json;
