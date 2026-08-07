@@ -62,19 +62,56 @@ api.get("/tasks", (c) => {
   return c.json({ tasks: db.listTasks().map(taskJson) });
 });
 
-api.get("/tracks", (c) => {
-  // 音源・画像 URL はマウント先(/api = secret 必須、/admin/api = Access 保護)と同じ認証帯を返す
-  const prefix = c.req.path.startsWith("/admin/") ? "/admin" : "/api";
-  const tracks = db.listTracks().map((t) => ({
+function trackJson(t: db.TrackRow, prefix: string) {
+  return {
     id: t.id,
     taskId: t.task_id,
     title: t.title,
     duration: t.duration,
     audioUrl: `${prefix}/audio/${t.audio_file}`,
     imageUrl: t.image_file ? `${prefix}/images/${t.image_file}` : null,
+    rating: t.rating,
+    favorite: t.favorite === 1,
     createdAt: t.created_at,
-  }));
-  return c.json({ tracks });
+  };
+}
+
+// 音源・画像 URL はマウント先(/api = secret 必須、/admin/api = Access 保護)と同じ認証帯を返す
+function urlPrefix(c: { req: { path: string } }): string {
+  return c.req.path.startsWith("/admin/") ? "/admin" : "/api";
+}
+
+api.get("/tracks", (c) => {
+  return c.json({ tracks: db.listTracks().map((t) => trackJson(t, urlPrefix(c))) });
+});
+
+// 👍/👎/★ の付与・解除。body は { rating?: 1 | -1 | null, favorite?: boolean } の部分更新
+api.post("/tracks/:id/rating", async (c) => {
+  const id = Number(c.req.param("id"));
+  if (!Number.isInteger(id)) return c.json({ error: "不正な id です" }, 400);
+  const body = await c.req.json().catch(() => null);
+  if (body === null || typeof body !== "object") {
+    return c.json({ error: "JSON body を指定してください" }, 400);
+  }
+  const input: { rating?: 1 | -1 | null; favorite?: boolean } = {};
+  if ("rating" in body) {
+    if (body.rating !== 1 && body.rating !== -1 && body.rating !== null) {
+      return c.json({ error: "rating は 1 / -1 / null のいずれかです" }, 400);
+    }
+    input.rating = body.rating;
+  }
+  if ("favorite" in body) {
+    if (typeof body.favorite !== "boolean") {
+      return c.json({ error: "favorite は boolean です" }, 400);
+    }
+    input.favorite = body.favorite;
+  }
+  if (input.rating === undefined && input.favorite === undefined) {
+    return c.json({ error: "rating か favorite を指定してください" }, 400);
+  }
+  const track = db.updateTrackRating(id, input);
+  if (!track) return c.json({ error: "楽曲が見つかりません" }, 404);
+  return c.json({ track: trackJson(track, urlPrefix(c)) });
 });
 
 api.get("/credits", async (c) => {

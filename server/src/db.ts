@@ -27,6 +27,8 @@ export interface TrackRow {
   duration: number;
   audio_file: string;
   image_file: string | null;
+  rating: number | null; // 1 = 👍, -1 = 👎, NULL = 未評価
+  favorite: number; // 0/1(★)
   created_at: string;
 }
 
@@ -54,9 +56,23 @@ db.exec(`
     duration REAL NOT NULL DEFAULT 0,
     audio_file TEXT NOT NULL,
     image_file TEXT,
+    rating INTEGER,
+    favorite INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
   );
 `);
+
+// 既存 DB への後方互換マイグレーション(カラムが無ければ追加)
+function addColumnIfMissing(table: string, column: string, ddl: string): void {
+  const cols = db
+    .prepare(`SELECT name FROM pragma_table_info(?)`)
+    .all(table) as unknown as { name: string }[];
+  if (!cols.some((c) => c.name === column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
+  }
+}
+addColumnIfMissing("tracks", "rating", "rating INTEGER");
+addColumnIfMissing("tracks", "favorite", "favorite INTEGER NOT NULL DEFAULT 0");
 
 export function createTask(input: {
   provider: string;
@@ -136,4 +152,31 @@ export function listTracks(limit = 200): TrackRow[] {
   return db
     .prepare(`SELECT * FROM tracks ORDER BY id DESC LIMIT ?`)
     .all(limit) as unknown as TrackRow[];
+}
+
+export function getTrack(id: number): TrackRow | undefined {
+  return db.prepare(`SELECT * FROM tracks WHERE id = ?`).get(id) as
+    | TrackRow
+    | undefined;
+}
+
+// 評価の部分更新。渡されたフィールドだけ書き換え、更新後の行を返す
+export function updateTrackRating(
+  id: number,
+  input: { rating?: 1 | -1 | null; favorite?: boolean }
+): TrackRow | undefined {
+  if (!getTrack(id)) return undefined;
+  if (input.rating !== undefined) {
+    db.prepare(`UPDATE tracks SET rating = ? WHERE id = ?`).run(
+      input.rating,
+      id
+    );
+  }
+  if (input.favorite !== undefined) {
+    db.prepare(`UPDATE tracks SET favorite = ? WHERE id = ?`).run(
+      input.favorite ? 1 : 0,
+      id
+    );
+  }
+  return getTrack(id);
 }
