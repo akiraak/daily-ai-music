@@ -116,6 +116,7 @@ function trackElement(t) {
     addSection("歌詞", t.lyrics, true);
     addSection("日本語訳", t.lyricsJa, true);
     addSection("スタイル", t.style);
+    addSection("スタイル(日本語訳)", t.styleJa);
     // 生成に使用したパラメータ(旧データで欠けている項目は出さない)
     const params = [
       ["モード", MODE_LABELS[t.mode] ?? t.mode],

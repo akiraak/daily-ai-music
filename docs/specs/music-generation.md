@@ -44,7 +44,7 @@ LLM(Claude API)が「好みプロファイル」とプリセットをもとに�
 
 ## データモデル(追加・変更)
 
-- `tasks` に追加: `mode`('daily' | 'daily_adventure' | 'manual')、`style`、`lyrics`(英語)、`lyrics_ja`、`title`、`intent`(LLM の狙い説明)、`llm_model`・`llm_prompt`(生成に使った LLM モデル名と入力全文。2026-08-07 追加、管理画面の楽曲詳細に生成パラメータとして表示)
+- `tasks` に追加: `mode`('daily' | 'daily_adventure' | 'manual')、`style`、`style_ja`(スタイルの日本語訳。2026-08-07 追加)、`lyrics`(英語)、`lyrics_ja`、`title`、`intent`(LLM の狙い説明)、`llm_model`・`llm_prompt`(生成に使った LLM モデル名と入力全文。2026-08-07 追加、管理画面の楽曲詳細に生成パラメータとして表示)
 - `tracks` に追加: `rating`(NULL / 1 / -1)
 - `presets`(新規): `category`(genre / instrument / mood など)、`value`(英語・プロンプト用)、`label_ja`(表示用)。初期セットはこちらで用意
 - `profile`(新規): プロファイル文書を版として積む(最新行が現行)。管理画面で閲覧可

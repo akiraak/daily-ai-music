@@ -21,6 +21,7 @@ export async function startGeneration(input: {
   mode: string;
   plan: {
     style: string;
+    styleJa: string;
     title: string;
     lyrics: string;
     lyricsJa: string;
@@ -45,6 +46,7 @@ export async function startGeneration(input: {
     model: SUNO_MODEL,
     mode: input.mode,
     style: input.plan.style,
+    styleJa: input.plan.styleJa || null,
     lyrics: input.plan.lyrics || null,
     lyricsJa: input.plan.lyricsJa || null,
     title: input.plan.title,

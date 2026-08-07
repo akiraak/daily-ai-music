@@ -10,6 +10,7 @@ export type GenerationMode = "manual" | "daily" | "daily_adventure";
 
 export interface SongPlan {
   style: string;
+  styleJa: string;
   title: string;
   lyrics: string;
   lyricsJa: string;
@@ -31,6 +32,10 @@ const SONG_PLAN_SCHEMA = {
       description:
         "Suno に渡す英語のスタイルプロンプト。ジャンル・楽器・ムード・テンポ・ボーカルスタイルをカンマ区切りで具体的に(500 文字以内)",
     },
+    styleJa: {
+      type: "string",
+      description: "style の自然な日本語訳(管理画面に表示する)",
+    },
     title: { type: "string", description: "曲のタイトル(英語、80 文字以内)" },
     lyrics: {
       type: "string",
@@ -47,7 +52,7 @@ const SONG_PLAN_SCHEMA = {
       description: "この曲の狙い・意図の説明(日本語、2〜3 文。管理画面に表示する)",
     },
   },
-  required: ["style", "title", "lyrics", "lyricsJa", "intent"],
+  required: ["style", "styleJa", "title", "lyrics", "lyricsJa", "intent"],
   additionalProperties: false,
 };
 

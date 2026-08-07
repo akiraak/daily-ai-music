@@ -17,6 +17,7 @@ export interface TaskRow {
   error: string | null;
   mode: string; // 'manual' | 'daily' | 'daily_adventure'
   style: string | null; // LLM が生成したスタイルプロンプト(英語)
+  style_ja: string | null; // スタイルプロンプトの日本語訳
   lyrics: string | null; // 英語歌詞
   lyrics_ja: string | null; // 日本語訳
   title: string | null; // LLM が付けた曲名
@@ -111,6 +112,7 @@ addColumnIfMissing("tracks", "rated_at", "rated_at TEXT"); // 最後に評価を
 }
 addColumnIfMissing("tasks", "mode", "mode TEXT NOT NULL DEFAULT 'manual'");
 addColumnIfMissing("tasks", "style", "style TEXT");
+addColumnIfMissing("tasks", "style_ja", "style_ja TEXT");
 addColumnIfMissing("tasks", "lyrics", "lyrics TEXT");
 addColumnIfMissing("tasks", "lyrics_ja", "lyrics_ja TEXT");
 addColumnIfMissing("tasks", "title", "title TEXT");
@@ -126,6 +128,7 @@ export function createTask(input: {
   model: string;
   mode: string;
   style?: string | null;
+  styleJa?: string | null;
   lyrics?: string | null;
   lyricsJa?: string | null;
   title?: string | null;
@@ -136,8 +139,8 @@ export function createTask(input: {
   const result = db
     .prepare(
       `INSERT INTO tasks (provider, provider_task_id, prompt, instrumental, model, status,
-                          mode, style, lyrics, lyrics_ja, title, intent, llm_model, llm_prompt)
-       VALUES (?, ?, ?, ?, ?, 'PENDING', ?, ?, ?, ?, ?, ?, ?, ?)`
+                          mode, style, style_ja, lyrics, lyrics_ja, title, intent, llm_model, llm_prompt)
+       VALUES (?, ?, ?, ?, ?, 'PENDING', ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       input.provider,
@@ -147,6 +150,7 @@ export function createTask(input: {
       input.model,
       input.mode,
       input.style ?? null,
+      input.styleJa ?? null,
       input.lyrics ?? null,
       input.lyricsJa ?? null,
       input.title ?? null,
@@ -216,6 +220,7 @@ export type TrackWithTaskRow = TrackRow & {
   instrumental: number;
   model: string;
   style: string | null;
+  style_ja: string | null;
   lyrics: string | null;
   lyrics_ja: string | null;
   intent: string | null;
@@ -224,7 +229,7 @@ export type TrackWithTaskRow = TrackRow & {
 };
 
 const TRACK_TASK_COLUMNS = `tracks.*, tasks.mode, tasks.prompt, tasks.instrumental, tasks.model,
-  tasks.style, tasks.lyrics, tasks.lyrics_ja, tasks.intent, tasks.llm_model, tasks.llm_prompt`;
+  tasks.style, tasks.style_ja, tasks.lyrics, tasks.lyrics_ja, tasks.intent, tasks.llm_model, tasks.llm_prompt`;
 
 export function listTracks(limit = 200): TrackWithTaskRow[] {
   return db
