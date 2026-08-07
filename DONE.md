@@ -1,5 +1,7 @@
 # DONE
 
+- [x] 2026-08-06 Web 管理画面を `/` 配信から `/admin` 配下へ移動する(Cloudflare Access をパス限定で掛けるため)— サーバ側は `/admin/*` マウント + `/` `/admin` → `/admin/` リダイレクト(7ff057e)で対応しデプロイ済み。Cloudflare Access は `music.chobi.me` の Path `admin` 1 アプリ(Google IdP のみ)に整理され、暫定のパス分割(`/api` `/audio` `/images` Bypass + root Allow)は解消。本番外形確認(2026-08-06): `/admin/*`(`/admin/api/*` 含む)が Access ログインへ 302(ログインページは Google のみ・OTP 無し)、`/` は Access 素通りでアプリが `/admin/` へ 302、secret 付き `/api/ping` 200・無しは 401、`/audio/*` `/images/*` は従来どおり配信。プラン: [docs/plans/archive/admin-path.md](docs/plans/archive/admin-path.md)
+
 - [x] 2026-08-06 Web 管理画面を API Secret なしで使えるようにする — API ルートをサブルーター化して `/api`(X-API-Secret 必須・iOS 向け)と `/admin/api`(アプリ層無認証・管理画面向け)の両方にマウントし、管理画面 JS から secret 付与・localStorage 保存・401 時の入力プロンプトを削除。本番はエッジの Cloudflare Access が `/admin` ごと保護する(ローカル LAN では `/admin/api/*` が無認証になる点は許容)。プラン: [docs/plans/archive/admin-no-secret.md](docs/plans/archive/admin-no-secret.md)
 
 - [x] 2026-08-06 サーバの接続先を https://music.chobi.me — `run-ios-device.sh` の既定接続先を本番 `https://music.chobi.me` に変更(`--local` で従来の Mac LAN IP 接続、ビルド前に `/api/ping` 疎通確認を追加)。実機ビルド・インストール・起動を確認。**注意**: ローカル `.env` の `API_SECRET` は本番と不一致(401)のため、`.env` を本番の値に更新するかアプリの設定画面で本番 Secret の入力が必要。プラン: [docs/plans/archive/backend-endpoint-music-chobi-me.md](docs/plans/archive/backend-endpoint-music-chobi-me.md)
