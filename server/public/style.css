@@ -30,28 +30,82 @@ body {
   line-height: 1.6;
 }
 
-header {
+/* 左サイドバー(メニュー)+ 右コンテンツの 2 ペイン構成 */
+.layout { display: flex; min-height: 100vh; }
+
+.sidebar {
+  flex: none;
+  width: 210px;
+  padding: 20px 12px;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+.app-title {
+  font-weight: 700;
+  font-size: 1.05rem;
+  letter-spacing: 0.02em;
+  padding: 0 10px;
+  margin-bottom: 20px;
+}
+.menu { display: flex; flex-direction: column; gap: 2px; }
+.menu a {
+  display: block;
+  padding: 8px 10px;
+  border-radius: 8px;
+  color: var(--text);
+  text-decoration: none;
+  font-size: 0.95rem;
+}
+.menu a:hover { background: var(--bg); }
+.menu a.active { background: var(--accent); color: #fff; }
+
+main {
+  flex: 1;
+  min-width: 0;
+  max-width: 760px;
+  padding: 20px 24px 64px;
+  display: grid;
+  gap: 16px;
+  align-content: start;
+}
+
+.page-header {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  max-width: 720px;
-  margin: 0 auto;
-  padding: 24px 16px 0;
+  gap: 12px;
+  flex-wrap: wrap;
 }
-header h1 { margin: 0; font-size: 1.3rem; letter-spacing: 0.02em; }
+.page-header h1 { margin: 0; font-size: 1.25rem; letter-spacing: 0.02em; }
 .header-credits { display: flex; align-items: baseline; gap: 10px; }
 .credits { color: var(--muted); font-size: 0.85rem; }
-.charge-link,
-.nav-link { color: var(--accent); font-size: 0.85rem; text-decoration: none; }
-.charge-link:hover,
-.nav-link:hover { text-decoration: underline; }
+.charge-link { color: var(--accent); font-size: 0.85rem; text-decoration: none; }
+.charge-link:hover { text-decoration: underline; }
 
-main {
-  max-width: 720px;
-  margin: 0 auto;
-  padding: 8px 16px 64px;
-  display: grid;
-  gap: 16px;
+/* 狭い画面(iPhone 等)ではサイドバーを上部の横並びナビにする */
+@media (max-width: 700px) {
+  .layout { display: block; }
+  .sidebar {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow-y: visible;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px;
+    padding: 10px 16px;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+  .app-title { margin: 0; padding: 0; font-size: 0.95rem; }
+  .menu { flex-direction: row; margin-left: auto; gap: 4px; }
+  .menu a { padding: 6px 10px; font-size: 0.9rem; white-space: nowrap; }
+  main { padding: 16px 16px 64px; }
 }
 
 .panel {

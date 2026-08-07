@@ -7,15 +7,20 @@
   <link rel="stylesheet" href="/admin/style.css">
 </head>
 <body>
-  <header>
-    <h1>設定</h1>
-    <div class="header-credits">
-      <a class="nav-link" href="/admin/">楽曲一覧</a>
-      <a class="nav-link" href="/admin/presets.html">パラメータ一覧</a>
-    </div>
-  </header>
+  <div class="layout">
+  <aside class="sidebar">
+    <div class="app-title">daily-ai-music</div>
+    <nav class="menu">
+      <a href="/admin/">楽曲一覧</a>
+      <a href="/admin/presets.html">パラメータ一覧</a>
+      <a href="/admin/settings.html" class="active">設定</a>
+    </nav>
+  </aside>
 
   <main>
+    <div class="page-header">
+      <h1>設定</h1>
+    </div>
     <section class="panel">
       <h2>今日のコンテキスト(外部ソース)</h2>
       <p class="empty">毎日の自動生成のプロンプトに、その日のニュース・天気を着想として注入します。変更は次の生成から反映されます。</p>
@@ -64,6 +69,7 @@
 
     <p id="settings-message" class="form-message" hidden></p>
   </main>
+  </div>
 
   <script src="/admin/settings.js"></script>
 </body>

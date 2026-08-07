@@ -7,18 +7,25 @@
   <link rel="stylesheet" href="/admin/style.css">
 </head>
 <body>
-  <header>
-    <h1>daily-ai-music</h1>
-    <div class="header-credits">
-      <a class="nav-link" href="/admin/presets.html">パラメータ一覧</a>
-      <a class="nav-link" href="/admin/settings.html">設定</a>
-      <div id="credits" class="credits" title="残クレジット"></div>
-      <a class="charge-link" href="https://kie.ai/billing" target="_blank" rel="noopener"
-        title="kie.ai のチャージ画面を開く">チャージ</a>
-    </div>
-  </header>
+  <div class="layout">
+  <aside class="sidebar">
+    <div class="app-title">daily-ai-music</div>
+    <nav class="menu">
+      <a href="/admin/" class="active">楽曲一覧</a>
+      <a href="/admin/presets.html">パラメータ一覧</a>
+      <a href="/admin/settings.html">設定</a>
+    </nav>
+  </aside>
 
   <main>
+    <div class="page-header">
+      <h1>楽曲一覧</h1>
+      <div class="header-credits">
+        <div id="credits" class="credits" title="残クレジット"></div>
+        <a class="charge-link" href="https://kie.ai/billing" target="_blank" rel="noopener"
+          title="kie.ai のチャージ画面を開く">チャージ</a>
+      </div>
+    </div>
     <section class="panel">
       <h2>音楽を生成</h2>
       <div class="form-row">
@@ -46,6 +53,7 @@
     </details>
 
   </main>
+  </div>
 
   <script src="/admin/app.js"></script>
 </body>

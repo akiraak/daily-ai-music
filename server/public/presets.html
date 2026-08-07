@@ -7,15 +7,20 @@
   <link rel="stylesheet" href="/admin/style.css">
 </head>
 <body>
-  <header>
-    <h1>パラメータ一覧</h1>
-    <div class="header-credits">
-      <a class="nav-link" href="/admin/">楽曲一覧</a>
-      <a class="nav-link" href="/admin/settings.html">設定</a>
-    </div>
-  </header>
+  <div class="layout">
+  <aside class="sidebar">
+    <div class="app-title">daily-ai-music</div>
+    <nav class="menu">
+      <a href="/admin/">楽曲一覧</a>
+      <a href="/admin/presets.html" class="active">パラメータ一覧</a>
+      <a href="/admin/settings.html">設定</a>
+    </nav>
+  </aside>
 
   <main>
+    <div class="page-header">
+      <h1>パラメータ一覧</h1>
+    </div>
     <section class="panel">
       <h2>リアルワード</h2>
       <p class="empty" id="words-note">直近に生成した曲の中心となった語。使い切ったワードは曲の中心に据えないよう AI に指示されます。</p>
@@ -42,6 +47,7 @@
       <p id="preset-message" class="form-message" hidden></p>
     </section>
   </main>
+  </div>
 
   <script src="/admin/presets.js"></script>
 </body>

@@ -1,5 +1,7 @@
 # DONE
 
+- [x] 2026-08-07 管理画面を一般的なレイアウト(左ペインメニュー)に変更 — 3 ページ(楽曲一覧・パラメータ一覧・設定)を、左サイドバー(アプリ名+縦並びメニュー、現在ページをアクセント背景でハイライト)+右コンテンツの 2 ペイン構成に変更。静的 3 ページなのでテンプレートは導入せずサイドバーは各 HTML に複製。残クレジット+チャージリンクは楽曲一覧のページヘッダーへ移動(`app.js` の id 不変で JS 3 本は無変更)。700px 以下はサイドバーを上部横並びナビに切替(折り返し許可で実機幅にも対応)。ヘッドレス Chrome でデスクトップ 1100px の 3 ページ+モバイル 500px を確認。プラン: [docs/plans/archive/admin-sidebar-layout.md](docs/plans/archive/admin-sidebar-layout.md)
+
 - [x] 2026-08-07 管理画面で評価ボタンを押したかどうか分からないので直す — 👍/👎 は未選択でも絵文字がフルカラーで背景差しか無く状態が判別しづらかったため、未選択を `filter: grayscale(1)` + `opacity: 0.55` で減光し、選択済み(フルカラー絵文字+アクセント背景)との差を強調(`style.css` の `.rate-btn` のみ。JS のトグルロジックは変更なし、iOS は対象外)。ヘッドレス Chrome で選択済み/未選択の見た目の差を確認。プラン: [docs/plans/archive/rating-button-visibility.md](docs/plans/archive/rating-button-visibility.md)
 
 - [x] 2026-08-07 管理画面の生成機能を毎日の自動生成と同じにする — 生成フォーム(プリセット選択チップ・自由テキスト・インストチェック)をボタンのみに置き換え、既存の `POST /admin/api/daily/run`(プロファイル更新 → 冒険日判定 → LLM 生成 → Suno 送信。`last_daily_date` は更新しないため当日のスケジュール実行は別途走る)を呼ぶ方式に変更。プリセット管理はパラメータ一覧ページ `/admin/presets.html`(新規 `presets.js`。一覧・追加・編集・削除)へ移動し、ヘッダーに相互リンクを追加。`POST /api/generate`(manual フロー)は iOS の生成画面が使うため存置。不要になったチップ・textarea・checkbox の CSS を削除。typecheck + ヘッドレス Chrome で両ページの表示確認済み(生成ボタンの実行はクレジット消費のため未実施)。プラン: [docs/plans/archive/admin-generate-daily-flow.md](docs/plans/archive/admin-generate-daily-flow.md)
