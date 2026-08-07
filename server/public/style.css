@@ -39,7 +39,10 @@ header {
   padding: 24px 16px 0;
 }
 header h1 { margin: 0; font-size: 1.3rem; letter-spacing: 0.02em; }
+.header-credits { display: flex; align-items: baseline; gap: 10px; }
 .credits { color: var(--muted); font-size: 0.85rem; }
+.charge-link { color: var(--accent); font-size: 0.85rem; text-decoration: none; }
+.charge-link:hover { text-decoration: underline; }
 
 main {
   max-width: 720px;
