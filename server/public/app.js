@@ -87,7 +87,6 @@ function trackElement(t) {
       <div class="rating">
         <button type="button" class="rate-btn" data-kind="up" title="好き">👍</button>
         <button type="button" class="rate-btn" data-kind="down" title="好みじゃない">👎</button>
-        <button type="button" class="rate-btn" data-kind="fav" title="お気に入り">★</button>
       </div>
     </div>`;
   li.querySelector(".track-title").textContent = t.title;
@@ -125,7 +124,7 @@ function trackElement(t) {
       const kind = btn.dataset.kind;
       btn.classList.toggle(
         "active",
-        kind === "up" ? t.rating === 1 : kind === "down" ? t.rating === -1 : t.favorite
+        kind === "up" ? t.rating === 1 : t.rating === -1
       );
     }
   };
@@ -137,9 +136,7 @@ function trackElement(t) {
       const payload =
         kind === "up"
           ? { rating: t.rating === 1 ? null : 1 }
-          : kind === "down"
-            ? { rating: t.rating === -1 ? null : -1 }
-            : { favorite: !t.favorite };
+          : { rating: t.rating === -1 ? null : -1 };
       for (const b of buttons) b.disabled = true;
       try {
         const { track } = await fetchJson(`/admin/api/tracks/${t.id}/rating`, {
@@ -148,7 +145,6 @@ function trackElement(t) {
           body: JSON.stringify(payload),
         });
         t.rating = track.rating;
-        t.favorite = track.favorite;
         syncRating();
       } catch (err) {
         console.warn("rating failed:", err);

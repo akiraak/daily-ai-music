@@ -34,7 +34,6 @@ export interface TrackRow {
   audio_file: string;
   image_file: string | null;
   rating: number | null; // 1 = 👍, -1 = 👎, NULL = 未評価
-  favorite: number; // 0/1(★)
   rated_at: string | null; // 最後に評価を変更した日時
   created_at: string;
 }
@@ -64,7 +63,6 @@ db.exec(`
     audio_file TEXT NOT NULL,
     image_file TEXT,
     rating INTEGER,
-    favorite INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
   );
   CREATE TABLE IF NOT EXISTS presets (
@@ -97,8 +95,18 @@ function addColumnIfMissing(table: string, column: string, ddl: string): void {
   }
 }
 addColumnIfMissing("tracks", "rating", "rating INTEGER");
-addColumnIfMissing("tracks", "favorite", "favorite INTEGER NOT NULL DEFAULT 0");
 addColumnIfMissing("tracks", "rated_at", "rated_at TEXT"); // 最後に評価を変更した日時(プロファイル更新の差分検出用)
+
+// ★(favorite)は廃止し 👍/👎 の 2 択に統一。旧 DB の ★ は 👍 に変換してカラムを削除
+{
+  const cols = db
+    .prepare(`SELECT name FROM pragma_table_info('tracks')`)
+    .all() as unknown as { name: string }[];
+  if (cols.some((c) => c.name === "favorite")) {
+    db.exec(`UPDATE tracks SET rating = 1 WHERE favorite = 1 AND rating IS NULL`);
+    db.exec(`ALTER TABLE tracks DROP COLUMN favorite`);
+  }
+}
 addColumnIfMissing("tasks", "mode", "mode TEXT NOT NULL DEFAULT 'manual'");
 addColumnIfMissing("tasks", "style", "style TEXT");
 addColumnIfMissing("tasks", "lyrics", "lyrics TEXT");
@@ -251,7 +259,7 @@ export function listRatedTracks(sinceIso?: string): TrackWithTaskRow[] {
     .prepare(
       `SELECT tracks.*, tasks.mode, tasks.style, tasks.lyrics, tasks.lyrics_ja, tasks.intent
        FROM tracks JOIN tasks ON tasks.id = tracks.task_id
-       WHERE (tracks.rating IS NOT NULL OR tracks.favorite = 1)
+       WHERE tracks.rating IS NOT NULL
          AND tracks.rated_at IS NOT NULL AND tracks.rated_at > ?
        ORDER BY tracks.id`
     )
@@ -345,21 +353,14 @@ export function deletePreset(id: number): boolean {
   return db.prepare(`DELETE FROM presets WHERE id = ?`).run(id).changes > 0;
 }
 
-// 評価の部分更新。渡されたフィールドだけ書き換え、更新後の行を返す
+// 評価の更新。更新後の行を返す
 export function updateTrackRating(
   id: number,
-  input: { rating?: 1 | -1 | null; favorite?: boolean }
+  rating: 1 | -1 | null
 ): TrackWithTaskRow | undefined {
   if (!getTrack(id)) return undefined;
-  if (input.rating !== undefined) {
-    db.prepare(
-      `UPDATE tracks SET rating = ?, rated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?`
-    ).run(input.rating, id);
-  }
-  if (input.favorite !== undefined) {
-    db.prepare(
-      `UPDATE tracks SET favorite = ?, rated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?`
-    ).run(input.favorite ? 1 : 0, id);
-  }
+  db.prepare(
+    `UPDATE tracks SET rating = ?, rated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?`
+  ).run(rating, id);
   return getTrack(id);
 }

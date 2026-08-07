@@ -126,26 +126,20 @@ export async function generateSongPlan(input: {
   return plan;
 }
 
-// 評価(👍/👎/★)を好みプロファイル文書に反映し、更新後の文書全文を返す
+// 評価(👍/👎)を好みプロファイル文書に反映し、更新後の文書全文を返す
 export async function updateProfile(input: {
   currentProfile: string | null;
   ratedTracks: {
     title: string;
     style: string | null;
     rating: number | null;
-    favorite: boolean;
   }[];
 }): Promise<string> {
   const trackLines = input.ratedTracks
-    .map((t) => {
-      const marks = [
-        t.rating === 1 ? "👍" : t.rating === -1 ? "👎" : null,
-        t.favorite ? "★" : null,
-      ]
-        .filter(Boolean)
-        .join(" ");
-      return `- ${marks} "${t.title}" — style: ${t.style ?? "(不明)"}`;
-    })
+    .map(
+      (t) =>
+        `- ${t.rating === 1 ? "👍" : "👎"} "${t.title}" — style: ${t.style ?? "(不明)"}`
+    )
     .join("\n");
 
   const message = await client.messages.create({
@@ -159,7 +153,7 @@ export async function updateProfile(input: {
         role: "user",
         content: [
           `## 現在のプロファイル\n${input.currentProfile ?? "(まだ無い。今回の評価から新規作成する)"}`,
-          `## 新しい評価(👍=好き、👎=好みじゃない、★=お気に入り)\n${trackLines}`,
+          `## 新しい評価(👍=好き、👎=好みじゃない)\n${trackLines}`,
         ].join("\n\n"),
       },
     ],

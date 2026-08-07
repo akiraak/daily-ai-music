@@ -1,5 +1,7 @@
 # DONE
 
+- [x] 2026-08-07 評価を良い悪いの２択にする — ★(お気に入り)を廃止し 👍/👎 の 2 択に統一。起動時マイグレーションで `tracks.favorite` を DROP(★のみで未評価の曲は 👍 に変換。実 DB で確認)。`POST /api/tracks/:id/rating` は `{ rating: 1 | -1 | null }` のみ受付(favorite 送信は 400)、tracks API レスポンス・プロファイル更新 LLM 入力・管理画面の ★ ボタンも削除。プラン: [docs/plans/archive/rating-two-choice.md](docs/plans/archive/rating-two-choice.md)
+
 - [x] 2026-08-07 管理画面からポイントチャージする画面へリンクをつける — ヘッダーの残クレジット表示の隣に kie.ai のチャージ画面(`https://kie.ai/billing`)を別タブで開く「チャージ」リンクを常時表示で追加。プラン: [docs/plans/archive/admin-credits-charge-link.md](docs/plans/archive/admin-credits-charge-link.md)
 
 - [x] 2026-08-07 音楽生成エンジンの実装 — 全 4 Phase 完了。①評価基盤(`tracks` に rating/favorite、`POST /api/tracks/:id/rating`、管理画面の 👍/👎/★ トグル)②プリセット管理(`presets` テーブル・CRUD API・初期 37 件 seed・管理画面 UI)③LLM 生成パイプライン(`src/llm.ts`: Claude API `claude-sonnet-5` の構造化出力でスタイル・英語歌詞・日本語訳・タイトル・狙いを生成し Suno へ `customMode: true` 送信。`profile` テーブル、`GET /api/profile`、管理画面の生成フォームをプリセットチップ選択化+楽曲に歌詞・狙い表示)④毎日の自動生成(`src/scheduler.ts`: settings テーブル+`GET/PUT /api/settings`、1 分間隔で PT 6:00 判定・停止中跨ぎは起動時追い生成・初回起動は当日を生成済み扱い、冒険日判定 20%、`POST /api/daily/run`)。実生成 E2E 2 回で検証(customMode で歌詞どおりの曲・評価→プロファイル更新→好みを反映した自動生成を確認)。時刻判定は DST 切替含む 10 ケースをテスト。仕様: [docs/specs/music-generation.md](docs/specs/music-generation.md)、プラン: [docs/plans/archive/music-generation-engine.md](docs/plans/archive/music-generation-engine.md)

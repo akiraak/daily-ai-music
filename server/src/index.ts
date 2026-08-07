@@ -182,7 +182,6 @@ function trackJson(t: db.TrackWithTaskRow, prefix: string) {
     audioUrl: `${prefix}/audio/${t.audio_file}`,
     imageUrl: t.image_file ? `${prefix}/images/${t.image_file}` : null,
     rating: t.rating,
-    favorite: t.favorite === 1,
     mode: t.mode,
     style: t.style,
     lyrics: t.lyrics,
@@ -201,31 +200,18 @@ api.get("/tracks", (c) => {
   return c.json({ tracks: db.listTracks().map((t) => trackJson(t, urlPrefix(c))) });
 });
 
-// 👍/👎/★ の付与・解除。body は { rating?: 1 | -1 | null, favorite?: boolean } の部分更新
+// 👍/👎 の付与・解除。body は { rating: 1 | -1 | null }(null で解除)
 api.post("/tracks/:id/rating", async (c) => {
   const id = Number(c.req.param("id"));
   if (!Number.isInteger(id)) return c.json({ error: "不正な id です" }, 400);
   const body = await c.req.json().catch(() => null);
-  if (body === null || typeof body !== "object") {
-    return c.json({ error: "JSON body を指定してください" }, 400);
+  if (body === null || typeof body !== "object" || !("rating" in body)) {
+    return c.json({ error: "rating を指定してください" }, 400);
   }
-  const input: { rating?: 1 | -1 | null; favorite?: boolean } = {};
-  if ("rating" in body) {
-    if (body.rating !== 1 && body.rating !== -1 && body.rating !== null) {
-      return c.json({ error: "rating は 1 / -1 / null のいずれかです" }, 400);
-    }
-    input.rating = body.rating;
+  if (body.rating !== 1 && body.rating !== -1 && body.rating !== null) {
+    return c.json({ error: "rating は 1 / -1 / null のいずれかです" }, 400);
   }
-  if ("favorite" in body) {
-    if (typeof body.favorite !== "boolean") {
-      return c.json({ error: "favorite は boolean です" }, 400);
-    }
-    input.favorite = body.favorite;
-  }
-  if (input.rating === undefined && input.favorite === undefined) {
-    return c.json({ error: "rating か favorite を指定してください" }, 400);
-  }
-  const track = db.updateTrackRating(id, input);
+  const track = db.updateTrackRating(id, body.rating);
   if (!track) return c.json({ error: "楽曲が見つかりません" }, 404);
   return c.json({ track: trackJson(track, urlPrefix(c)) });
 });

@@ -107,7 +107,6 @@ export async function runDaily(): Promise<{
         title: t.title,
         style: t.style,
         rating: t.rating,
-        favorite: t.favorite === 1,
       })),
     });
     db.insertProfile(content);

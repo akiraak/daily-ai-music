@@ -4,10 +4,10 @@
 
 ## 全体像
 
-LLM(Claude API)が「好みプロファイル」とプリセットをもとに、毎回スタイルプロンプト+英語歌詞+日本語訳を生成し、Suno に `customMode: true` で渡す。ユーザーの評価(👍/👎/★)がプロファイルに反映され、毎日良くなっていく。
+LLM(Claude API)が「好みプロファイル」とプリセットをもとに、毎回スタイルプロンプト+英語歌詞+日本語訳を生成し、Suno に `customMode: true` で渡す。ユーザーの評価(👍/👎)がプロファイルに反映され、毎日良くなっていく。
 
 ```
-評価(👍/👎/★) ──→ 好みプロファイル(LLM が更新・DB 保持)
+評価(👍/👎) ────→ 好みプロファイル(LLM が更新・DB 保持)
                         │
 プリセット(DB) ──→ LLM(Sonnet 5)──→ スタイル + 英語歌詞 + 日本語訳 + タイトル
 冒険日判定(20%) ─→                          │
@@ -22,7 +22,7 @@ LLM(Claude API)が「好みプロファイル」とプリセットをもとに�
 |---|---|
 | プロンプトを組み立てる頭脳 | LLM(Claude API、`claude-sonnet-5`) |
 | 歌詞 | LLM が英語で作詞し `customMode: true` で Suno に渡す。日本語訳も同時に生成し、両方保存 |
-| 評価 | 曲ごとに 👍/👎 の 2 値 + ★(お気に入り)。未評価は「普通」扱い |
+| 評価 | 曲ごとに 👍/👎 の 2 択。未評価は「普通」扱い(当初あった ★ お気に入りは 2026-08-07 に廃止、既存の ★ は 👍 に変換) |
 | 評価の反映 | 「好みプロファイル」文書を LLM が育てる方式。生成時はプロファイル+直近数曲のみ渡す(履歴が増えてもコンテキストが肥大しない) |
 | プリセット | ジャンル・楽器・ムード等を DB で管理し管理画面から編集。毎日の自動生成では全プールから LLM が評価を踏まえて自由に選ぶ。手動リクエスト時はユーザーが選択 |
 | ランダム要素 | 毎日「1 要素は普段と違うものを入れる」+ 確率 20%(設定変更可)で「冒険日」として大きく外す |
@@ -45,14 +45,14 @@ LLM(Claude API)が「好みプロファイル」とプリセットをもとに�
 ## データモデル(追加・変更)
 
 - `tasks` に追加: `mode`('daily' | 'daily_adventure' | 'manual')、`style`、`lyrics`(英語)、`lyrics_ja`、`title`、`intent`(LLM の狙い説明)
-- `tracks` に追加: `rating`(NULL / 1 / -1)、`favorite`(0/1)
+- `tracks` に追加: `rating`(NULL / 1 / -1)
 - `presets`(新規): `category`(genre / instrument / mood など)、`value`(英語・プロンプト用)、`label_ja`(表示用)。初期セットはこちらで用意
 - `profile`(新規): プロファイル文書を版として積む(最新行が現行)。管理画面で閲覧可
 - `settings`(新規): key-value(`adventure_probability`、`daily_enabled`、実行時刻・タイムゾーン等)。将来 iPhone から変更できるように DB 持ち
 
 ## API(追加)
 
-- `POST /api/tracks/:id/rating` — 👍/👎/★ の付与・解除
+- `POST /api/tracks/:id/rating` — 👍/👎 の付与・解除
 - `GET/POST/PUT/DELETE /api/presets` — プリセット管理
 - `GET /api/profile` — 現行プロファイルの閲覧
 - `GET/PUT /api/settings` — 設定
