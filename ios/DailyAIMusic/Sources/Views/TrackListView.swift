@@ -65,16 +65,9 @@ private struct TrackRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            AsyncImage(url: track.imageUrl.flatMap { BackendAPI.absoluteURL(forServerPath: $0) }) { image in
-                image.resizable().aspectRatio(contentMode: .fill)
-            } placeholder: {
-                Image(systemName: "music.note")
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Color(.systemGray5))
-            }
-            .frame(width: 56, height: 56)
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            CoverImageView(path: track.imageUrl)
+                .frame(width: 56, height: 56)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(track.title)

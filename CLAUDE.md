@@ -48,11 +48,11 @@ xcodebuild test -project DailyAIMusic.xcodeproj -scheme DailyAIMusic \
 
 ### API 認証
 
-esl-learning-assistant と同方式。`/api/*` は `X-API-Secret` ヘッダ必須(`.env` の `API_SECRET`。16 文字以上 `[A-Za-z0-9_-]`、未設定はサーバーが起動時 fail-fast)。sha256 で固定長に揃えた timing-safe 比較。`/health` は無認証、`/api/ping` が接続テスト用。`/audio/*` `/images/*` は当面無認証(ローカル LAN 運用のため。公開時に見直し — TODO.md 将来課題)。Web 管理画面は secret 不要 — 同居サーバーの `/admin/api/*`(同じ API ルートをアプリ層無認証でマウント。本番はエッジの Cloudflare Access が `/admin` ごと保護)を使う。iOS アプリはビルド時注入(Info.plist)+ 設定画面で上書き。
+esl-learning-assistant と同方式。`/api/*` は `X-API-Secret` ヘッダ必須(`.env` の `API_SECRET`。16 文字以上 `[A-Za-z0-9_-]`、未設定はサーバーが起動時 fail-fast)。sha256 で固定長に揃えた timing-safe 比較。`/health` は無認証(唯一の無認証経路)、`/api/ping` が接続テスト用。音源・カバー画像も API と同じ二重マウントで認証付き配信 — iOS は `/api/audio/*` `/api/images/*`(secret 必須。AVPlayer は `AVURLAsset` のヘッダ注入、画像は `CoverImageView` の自前ローダー)、管理画面は `/admin/audio/*` `/admin/images/*`(`<audio>/<img>` タグは Cookie 自動送信なので Access の認証 Cookie が効く)。`/api/tracks` の `audioUrl`/`imageUrl` はマウント先に応じたプレフィックス付きで返る。Web 管理画面は secret 不要 — 同居サーバーの `/admin/api/*`(同じ API ルートをアプリ層無認証でマウント。本番はエッジの Cloudflare Access が `/admin` ごと保護)を使う。iOS アプリはビルド時注入(Info.plist)+ 設定画面で上書き。
 
 ### バックエンド構成(`server/`)
 
-- **Hono + @hono/node-server**: API・静的配信(`public/` の管理画面は `/admin` 配下。本番で Cloudflare Access をこのパスだけに掛けるため。`/` は `/admin/` へリダイレクト。`/audio/*` `/images/*` は Range 対応で配信)
+- **Hono + @hono/node-server**: API・静的配信(`public/` の管理画面は `/admin` 配下。本番で Cloudflare Access をこのパスだけに掛けるため。`/` は `/admin/` へリダイレクト。音源・画像は `/api/audio/*` 等 + `/admin/audio/*` 等の二重マウントで Range 対応配信 — 上記「API 認証」参照)
 - **node:sqlite**(`data/db.sqlite`): `tasks`(生成ジョブ)と `tracks`(完成楽曲)。`data/` は gitignore
 - **`src/suno/client.ts`**: Suno 連携の抽象化インターフェース。実装は `kieai.ts`(kie.ai / sunoapi.org 互換)。公式 API が出たらここを差し替える
 - **`src/generation.ts`**: 生成ジョブ管理。10 秒間隔のポーラーが未完了タスクを照会し、完了したら音源・カバー画像を即 `data/` へダウンロード(プロバイダの URL は一時ファイルのため)。サーバー再起動時も DB から未完了タスクを拾って自動再開

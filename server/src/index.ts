@@ -63,13 +63,15 @@ api.get("/tasks", (c) => {
 });
 
 api.get("/tracks", (c) => {
+  // 音源・画像 URL はマウント先(/api = secret 必須、/admin/api = Access 保護)と同じ認証帯を返す
+  const prefix = c.req.path.startsWith("/admin/") ? "/admin" : "/api";
   const tracks = db.listTracks().map((t) => ({
     id: t.id,
     taskId: t.task_id,
     title: t.title,
     duration: t.duration,
-    audioUrl: `/audio/${t.audio_file}`,
-    imageUrl: t.image_file ? `/images/${t.image_file}` : null,
+    audioUrl: `${prefix}/audio/${t.audio_file}`,
+    imageUrl: t.image_file ? `${prefix}/images/${t.image_file}` : null,
     createdAt: t.created_at,
   }));
   return c.json({ tracks });
@@ -79,7 +81,7 @@ api.get("/credits", async (c) => {
   return c.json({ credits: await sunoClient.getCredits() });
 });
 
-// /api/* は X-API-Secret ヘッダ必須。/audio /images は当面無認証(ローカル LAN 運用。公開時に見直す)
+// /api/* は X-API-Secret ヘッダ必須
 app.use("/api/*", async (c, next) => {
   if (!isValidApiSecret(c.req.header("x-api-secret"))) {
     console.warn(`[api] rejected (invalid X-API-Secret) ${c.req.method} ${c.req.path}`);
@@ -90,20 +92,25 @@ app.use("/api/*", async (c, next) => {
 app.route("/api", api);
 app.route("/admin/api", api);
 
-app.use(
-  "/audio/*",
-  serveStatic({
-    root: AUDIO_DIR,
-    rewriteRequestPath: (p) => p.replace(/^\/audio/, ""),
-  })
-);
-app.use(
-  "/images/*",
-  serveStatic({
-    root: IMAGE_DIR,
-    rewriteRequestPath: (p) => p.replace(/^\/images/, ""),
-  })
-);
+// 音源・カバー画像も API と同じ二重マウント(/api = X-API-Secret 必須、/admin = 本番はエッジの Cloudflare Access)。
+// <audio>/<img> タグはヘッダを付けられないが Cookie は自動送信されるため管理画面は /admin 側を、
+// AVPlayer は AVURLAsset のヘッダ注入で /api 側を使う
+for (const prefix of ["/api", "/admin"]) {
+  app.use(
+    `${prefix}/audio/*`,
+    serveStatic({
+      root: AUDIO_DIR,
+      rewriteRequestPath: (p) => p.slice(`${prefix}/audio`.length),
+    })
+  );
+  app.use(
+    `${prefix}/images/*`,
+    serveStatic({
+      root: IMAGE_DIR,
+      rewriteRequestPath: (p) => p.slice(`${prefix}/images`.length),
+    })
+  );
+}
 
 // 管理画面は /admin 配下(本番で Cloudflare Access をこのパスだけに掛けるため)
 app.get("/", (c) => c.redirect("/admin/"));

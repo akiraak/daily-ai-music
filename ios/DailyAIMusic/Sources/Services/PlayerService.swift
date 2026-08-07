@@ -42,7 +42,12 @@ final class PlayerService: ObservableObject {
     func play(_ track: Track) {
         guard let url = BackendAPI.absoluteURL(forServerPath: track.audioUrl) else { return }
         if currentTrack?.id != track.id {
-            player.replaceCurrentItem(with: AVPlayerItem(url: url))
+            // /api/audio/* は X-API-Secret 必須。AVPlayer は URLRequest を使えないため
+            // AVURLAsset のオプションでヘッダを注入する
+            let asset = AVURLAsset(url: url, options: [
+                "AVURLAssetHTTPHeaderFieldsKey": BackendAPI.mediaRequestHeaders,
+            ])
+            player.replaceCurrentItem(with: AVPlayerItem(asset: asset))
             currentTrack = track
             currentTime = 0
         }

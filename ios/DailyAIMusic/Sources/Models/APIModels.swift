@@ -1,6 +1,6 @@
 import Foundation
 
-/// GET /api/tracks の楽曲。audioUrl / imageUrl はサーバーからの相対パス(例: /audio/xxx.mp3)
+/// GET /api/tracks の楽曲。audioUrl / imageUrl はサーバーからの相対パス(例: /api/audio/xxx.mp3。X-API-Secret 必須)
 struct Track: Identifiable, Decodable, Equatable {
     let id: Int
     let taskId: Int

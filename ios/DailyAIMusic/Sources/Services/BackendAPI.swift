@@ -48,10 +48,15 @@ enum BackendAPI {
         return AppSettingsKeys.defaultAPISecret
     }
 
-    /// API レスポンス内の相対パス(/audio/... /images/...)から絶対 URL を作る(再生・カバー画像用)
+    /// API レスポンス内の相対パス(/api/audio/... /api/images/...)から絶対 URL を作る(再生・カバー画像用)
     static func absoluteURL(forServerPath path: String) -> URL? {
         guard let base = URL(string: baseURLString) else { return nil }
         return URL(string: path, relativeTo: base)?.absoluteURL
+    }
+
+    /// AVURLAsset など URLRequest を使えない経路でメディア(/api/audio/*)を取得するためのヘッダ
+    static var mediaRequestHeaders: [String: String] {
+        secret.isEmpty ? [:] : ["X-API-Secret": secret]
     }
 
     /// created_at 等の ISO8601(ミリ秒付き。SQLite の strftime('%Y-%m-%dT%H:%M:%fZ'))対応のデコーダ
@@ -68,6 +73,12 @@ enum BackendAPI {
             throw DecodingError.dataCorruptedError(in: container, debugDescription: "invalid date: \(s)")
         }
         return decoder
+    }
+
+    /// カバー画像など JSON でないデータの取得(X-API-Secret 付き)
+    static func getData(path: String) async throws -> Data {
+        let request = try makeRequest(path: path, method: "GET")
+        return try await send(request, path: path)
     }
 
     static func getJSON<T: Decodable>(_ type: T.Type, path: String) async throws -> T {
