@@ -56,7 +56,8 @@ esl-learning-assistant と同方式。`/api/*` は `X-API-Secret` ヘッダ必�
 - **node:sqlite**(`data/db.sqlite`): `tasks`(生成ジョブ)と `tracks`(完成楽曲)。`data/` は gitignore
 - **`src/suno/client.ts`**: Suno 連携の抽象化インターフェース。実装は `kieai.ts`(kie.ai / sunoapi.org 互換)。公式 API が出たらここを差し替える
 - **`src/generation.ts`**: 生成ジョブ管理。10 秒間隔のポーラーが未完了タスクを照会し、完了したら音源・カバー画像を即 `data/` へダウンロード(プロバイダの URL は一時ファイルのため)。サーバー再起動時も DB から未完了タスクを拾って自動再開
-- API: `POST /api/generate` / `GET /api/tasks` / `GET /api/tracks` / `GET /api/credits` / `GET /api/ping`(同じルートを `/admin/api/*` にも無認証でマウント — 管理画面用)
+- **`src/llm.ts`**: Claude API(既定 `claude-sonnet-5`、`.env` の `LLM_MODEL` で変更可)。生成リクエストからスタイル・英語歌詞・日本語訳・タイトル・狙いを構造化出力で生成し、Suno へ `customMode: true` で送信する。評価(👍/👎/★)を好みプロファイル文書(`profile` テーブル、版を積む)へ反映する関数も持つ。`.env` に `ANTHROPIC_API_KEY` 必須(起動時 fail-fast)
+- API: `POST /api/generate`(プリセット選択+自由テキスト → LLM 経由で生成)/ `GET /api/tasks` / `GET /api/tracks` / `POST /api/tracks/:id/rating` / `GET|POST|PUT|DELETE /api/presets` / `GET /api/profile` / `GET /api/credits` / `GET /api/ping`(同じルートを `/admin/api/*` にも無認証でマウント — 管理画面用)
 
 ### iOS アプリ構成(`ios/`)
 

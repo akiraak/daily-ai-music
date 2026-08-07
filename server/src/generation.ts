@@ -13,12 +13,25 @@ const TASK_TIMEOUT_MS = 30 * 60_000;
 
 export const sunoClient: SunoClient = new KieAiClient(SUNO_API_KEY, SUNO_BASE_URL);
 
+// LLM が生成したプラン(customMode)で Suno に送信し、タスクを記録する。
+// prompt にはユーザーのリクエスト内容(表示用)を渡す
 export async function startGeneration(input: {
   prompt: string;
   instrumental: boolean;
+  mode: string;
+  plan: {
+    style: string;
+    title: string;
+    lyrics: string;
+    lyricsJa: string;
+    intent: string;
+  };
 }): Promise<db.TaskRow> {
   const providerTaskId = await sunoClient.createTask({
-    prompt: input.prompt,
+    customMode: true,
+    style: input.plan.style,
+    title: input.plan.title,
+    prompt: input.plan.lyrics,
     instrumental: input.instrumental,
     model: SUNO_MODEL,
   });
@@ -28,6 +41,12 @@ export async function startGeneration(input: {
     prompt: input.prompt,
     instrumental: input.instrumental,
     model: SUNO_MODEL,
+    mode: input.mode,
+    style: input.plan.style,
+    lyrics: input.plan.lyrics || null,
+    lyricsJa: input.plan.lyricsJa || null,
+    title: input.plan.title,
+    intent: input.plan.intent,
   });
   console.log(`[generation] task ${task.id} 作成 (provider taskId=${providerTaskId})`);
   return task;

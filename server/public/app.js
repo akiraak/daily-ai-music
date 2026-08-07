@@ -58,6 +58,7 @@ function renderTasks(tasks) {
       li.innerHTML = `
         ${spinner}
         <div class="task-body">
+          ${t.title ? '<div class="task-song-title"></div>' : ""}
           <div class="task-prompt"></div>
           <div class="task-meta">
             <span class="badge">${STATUS_LABELS[t.status] ?? t.status}</span>
@@ -66,6 +67,7 @@ function renderTasks(tasks) {
           </div>
           ${t.error ? `<div class="task-error"></div>` : ""}
         </div>`;
+      if (t.title) li.querySelector(".task-song-title").textContent = `♪ ${t.title}`;
       li.querySelector(".task-prompt").textContent = t.prompt;
       if (t.error) li.querySelector(".task-error").textContent = t.error;
       return li;
@@ -89,6 +91,27 @@ function trackElement(t) {
       </div>
     </div>`;
   li.querySelector(".track-title").textContent = t.title;
+  if (t.intent || t.lyrics || t.style) {
+    const details = document.createElement("details");
+    details.className = "track-details";
+    const summary = document.createElement("summary");
+    summary.textContent = "歌詞・狙い";
+    details.append(summary);
+    const addSection = (label, text, pre = false) => {
+      if (!text) return;
+      const h = document.createElement("h4");
+      h.textContent = label;
+      const body = document.createElement(pre ? "pre" : "p");
+      body.className = "detail-text";
+      body.textContent = text;
+      details.append(h, body);
+    };
+    addSection("狙い", t.intent);
+    addSection("歌詞", t.lyrics, true);
+    addSection("日本語訳", t.lyricsJa, true);
+    addSection("スタイル", t.style);
+    li.querySelector(".track-body").append(details);
+  }
   const audio = li.querySelector("audio");
   audio.addEventListener("play", () => {
     for (const other of document.querySelectorAll("audio")) {
@@ -166,22 +189,39 @@ async function refresh() {
   }
 }
 
+// 生成フォームで選択中のプリセット id
+const selectedPresetIds = new Set();
+
 $("generate-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const button = $("generate-button");
   const message = $("form-message");
+  const freeText = $("prompt").value.trim();
+  if (!freeText && selectedPresetIds.size === 0) {
+    message.textContent = "プリセットを選ぶか、自由リクエストを入力してください";
+    message.hidden = false;
+    return;
+  }
   button.disabled = true;
-  message.hidden = true;
+  message.classList.add("info");
+  message.textContent = "AI がスタイルと歌詞を考えています…(1 分ほどかかります)";
+  message.hidden = false;
   try {
     await fetchJson("/admin/api/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        prompt: $("prompt").value,
+        prompt: freeText,
+        presetIds: [...selectedPresetIds],
         instrumental: $("instrumental").checked,
       }),
     });
     $("prompt").value = "";
+    selectedPresetIds.clear();
+    for (const chip of document.querySelectorAll("#generate-presets .chip")) {
+      chip.classList.remove("active");
+    }
+    message.hidden = true;
     hadActiveTasks = true;
     await refresh();
     refreshCredits();
@@ -189,6 +229,7 @@ $("generate-form").addEventListener("submit", async (e) => {
     message.textContent = err.message;
     message.hidden = false;
   } finally {
+    message.classList.remove("info");
     button.disabled = false;
   }
 });
@@ -293,9 +334,45 @@ async function loadPresets() {
         return opt;
       })
     );
+    renderGeneratePresets(groups);
   } catch (err) {
     showPresetMessage(err.message);
   }
+}
+
+// 生成フォームのプリセット選択チップ(トグル式)
+function renderGeneratePresets(groups) {
+  selectedPresetIds.clear();
+  $("generate-presets").replaceChildren(
+    ...[...groups.entries()].map(([category, items]) => {
+      const row = document.createElement("div");
+      row.className = "chip-row";
+      const label = document.createElement("span");
+      label.className = "chip-cat";
+      label.textContent = categoryLabels[category] ?? category;
+      row.append(
+        label,
+        ...items.map((p) => {
+          const chip = document.createElement("button");
+          chip.type = "button";
+          chip.className = "chip";
+          chip.textContent = p.labelJa;
+          chip.title = p.value;
+          chip.addEventListener("click", () => {
+            if (selectedPresetIds.has(p.id)) {
+              selectedPresetIds.delete(p.id);
+              chip.classList.remove("active");
+            } else {
+              selectedPresetIds.add(p.id);
+              chip.classList.add("active");
+            }
+          });
+          return chip;
+        })
+      );
+      return row;
+    })
+  );
 }
 
 $("preset-form").addEventListener("submit", async (e) => {

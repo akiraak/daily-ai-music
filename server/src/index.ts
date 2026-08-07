@@ -6,6 +6,7 @@ import { Hono } from "hono";
 import { API_SECRET, AUDIO_DIR, IMAGE_DIR, PORT, PUBLIC_DIR } from "./config.ts";
 import * as db from "./db.ts";
 import { startGeneration, startPoller, sunoClient } from "./generation.ts";
+import { generateSongPlan } from "./llm.ts";
 import { CATEGORY_LABELS, SEED_PRESETS } from "./presets.ts";
 
 const app = new Hono();
@@ -35,23 +36,59 @@ function taskJson(t: db.TaskRow) {
     model: t.model,
     status: t.status,
     error: t.error,
+    mode: t.mode,
+    title: t.title,
+    style: t.style,
+    lyrics: t.lyrics,
+    lyricsJa: t.lyrics_ja,
+    intent: t.intent,
     createdAt: t.created_at,
     updatedAt: t.updated_at,
   };
 }
 
+// LLM 経由の生成フロー: プリセット選択 + 自由テキスト → LLM がスタイル・歌詞を生成 → Suno へ customMode で送信
 api.post("/generate", async (c) => {
   const body = await c.req.json().catch(() => null);
-  const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
+  const freeText = typeof body?.prompt === "string" ? body.prompt.trim() : "";
+  const presetIds: number[] = Array.isArray(body?.presetIds)
+    ? body.presetIds.filter((id: unknown) => Number.isInteger(id))
+    : [];
   const instrumental = body?.instrumental === true;
-  if (!prompt) {
-    return c.json({ error: "prompt を入力してください" }, 400);
+  if (!freeText && presetIds.length === 0) {
+    return c.json({ error: "プリセットか自由テキストを指定してください" }, 400);
   }
-  if (prompt.length > 2000) {
-    return c.json({ error: "prompt が長すぎます(2000 文字以内)" }, 400);
+  if (freeText.length > 2000) {
+    return c.json({ error: "自由テキストが長すぎます(2000 文字以内)" }, 400);
   }
+  const selectedPresets = presetIds
+    .map((id) => db.getPreset(id))
+    .filter((p): p is db.PresetRow => p !== undefined);
+
+  // タスク一覧に出す表示用のリクエスト内容
+  const promptParts: string[] = [];
+  if (freeText) promptParts.push(freeText);
+  if (selectedPresets.length > 0) {
+    promptParts.push(`プリセット: ${selectedPresets.map((p) => p.label_ja).join("、")}`);
+  }
+  const displayPrompt = promptParts.join(" / ");
+
   try {
-    const task = await startGeneration({ prompt, instrumental });
+    const plan = await generateSongPlan({
+      mode: "manual",
+      instrumental,
+      profile: db.getLatestProfile()?.content ?? null,
+      selectedPresets,
+      presetPool: db.listPresets(),
+      freeText,
+      recentStyles: db.listRecentStyles(),
+    });
+    const task = await startGeneration({
+      prompt: displayPrompt,
+      instrumental,
+      mode: "manual",
+      plan,
+    });
     return c.json({ task: taskJson(task) }, 201);
   } catch (err) {
     console.error(`[api] 生成リクエスト失敗: ${err}`);
@@ -59,11 +96,21 @@ api.post("/generate", async (c) => {
   }
 });
 
+// 現行の好みプロファイル(まだ無ければ null)
+api.get("/profile", (c) => {
+  const profile = db.getLatestProfile();
+  return c.json({
+    profile: profile
+      ? { content: profile.content, createdAt: profile.created_at }
+      : null,
+  });
+});
+
 api.get("/tasks", (c) => {
   return c.json({ tasks: db.listTasks().map(taskJson) });
 });
 
-function trackJson(t: db.TrackRow, prefix: string) {
+function trackJson(t: db.TrackWithTaskRow, prefix: string) {
   return {
     id: t.id,
     taskId: t.task_id,
@@ -73,6 +120,11 @@ function trackJson(t: db.TrackRow, prefix: string) {
     imageUrl: t.image_file ? `${prefix}/images/${t.image_file}` : null,
     rating: t.rating,
     favorite: t.favorite === 1,
+    mode: t.mode,
+    style: t.style,
+    lyrics: t.lyrics,
+    lyricsJa: t.lyrics_ja,
+    intent: t.intent,
     createdAt: t.created_at,
   };
 }

@@ -15,6 +15,12 @@ export interface TaskRow {
   model: string;
   status: string;
   error: string | null;
+  mode: string; // 'manual' | 'daily' | 'daily_adventure'
+  style: string | null; // LLM が生成したスタイルプロンプト(英語)
+  lyrics: string | null; // 英語歌詞
+  lyrics_ja: string | null; // 日本語訳
+  title: string | null; // LLM が付けた曲名
+  intent: string | null; // 狙いの説明(日本語)
   created_at: string;
   updated_at: string;
 }
@@ -68,6 +74,11 @@ db.exec(`
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     UNIQUE (category, value)
   );
+  CREATE TABLE IF NOT EXISTS profile (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    content TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+  );
 `);
 
 // 既存 DB への後方互換マイグレーション(カラムが無ければ追加)
@@ -81,6 +92,12 @@ function addColumnIfMissing(table: string, column: string, ddl: string): void {
 }
 addColumnIfMissing("tracks", "rating", "rating INTEGER");
 addColumnIfMissing("tracks", "favorite", "favorite INTEGER NOT NULL DEFAULT 0");
+addColumnIfMissing("tasks", "mode", "mode TEXT NOT NULL DEFAULT 'manual'");
+addColumnIfMissing("tasks", "style", "style TEXT");
+addColumnIfMissing("tasks", "lyrics", "lyrics TEXT");
+addColumnIfMissing("tasks", "lyrics_ja", "lyrics_ja TEXT");
+addColumnIfMissing("tasks", "title", "title TEXT");
+addColumnIfMissing("tasks", "intent", "intent TEXT");
 
 export function createTask(input: {
   provider: string;
@@ -88,18 +105,31 @@ export function createTask(input: {
   prompt: string;
   instrumental: boolean;
   model: string;
+  mode: string;
+  style?: string | null;
+  lyrics?: string | null;
+  lyricsJa?: string | null;
+  title?: string | null;
+  intent?: string | null;
 }): TaskRow {
   const result = db
     .prepare(
-      `INSERT INTO tasks (provider, provider_task_id, prompt, instrumental, model, status)
-       VALUES (?, ?, ?, ?, ?, 'PENDING')`
+      `INSERT INTO tasks (provider, provider_task_id, prompt, instrumental, model, status,
+                          mode, style, lyrics, lyrics_ja, title, intent)
+       VALUES (?, ?, ?, ?, ?, 'PENDING', ?, ?, ?, ?, ?, ?)`
     )
     .run(
       input.provider,
       input.providerTaskId,
       input.prompt,
       input.instrumental ? 1 : 0,
-      input.model
+      input.model,
+      input.mode,
+      input.style ?? null,
+      input.lyrics ?? null,
+      input.lyricsJa ?? null,
+      input.title ?? null,
+      input.intent ?? null
     );
   return getTask(Number(result.lastInsertRowid))!;
 }
@@ -156,16 +186,79 @@ export function insertTrack(input: {
   );
 }
 
-export function listTracks(limit = 200): TrackRow[] {
+// 楽曲一覧には生成時の情報(スタイル・歌詞・訳・狙い)も添える
+export type TrackWithTaskRow = TrackRow & {
+  mode: string;
+  style: string | null;
+  lyrics: string | null;
+  lyrics_ja: string | null;
+  intent: string | null;
+};
+
+export function listTracks(limit = 200): TrackWithTaskRow[] {
   return db
-    .prepare(`SELECT * FROM tracks ORDER BY id DESC LIMIT ?`)
-    .all(limit) as unknown as TrackRow[];
+    .prepare(
+      `SELECT tracks.*, tasks.mode, tasks.style, tasks.lyrics, tasks.lyrics_ja, tasks.intent
+       FROM tracks JOIN tasks ON tasks.id = tracks.task_id
+       ORDER BY tracks.id DESC LIMIT ?`
+    )
+    .all(limit) as unknown as TrackWithTaskRow[];
 }
 
-export function getTrack(id: number): TrackRow | undefined {
-  return db.prepare(`SELECT * FROM tracks WHERE id = ?`).get(id) as
-    | TrackRow
+// --- 好みプロファイル(版を積む。最新行が現行) ---
+
+export interface ProfileRow {
+  id: number;
+  content: string;
+  created_at: string;
+}
+
+export function getLatestProfile(): ProfileRow | undefined {
+  return db.prepare(`SELECT * FROM profile ORDER BY id DESC LIMIT 1`).get() as
+    | ProfileRow
     | undefined;
+}
+
+export function insertProfile(content: string): ProfileRow {
+  const result = db
+    .prepare(`INSERT INTO profile (content) VALUES (?)`)
+    .run(content);
+  return db
+    .prepare(`SELECT * FROM profile WHERE id = ?`)
+    .get(Number(result.lastInsertRowid)) as unknown as ProfileRow;
+}
+
+// 直近の生成スタイル(LLM の重複回避用)
+export function listRecentStyles(limit = 5): string[] {
+  const rows = db
+    .prepare(
+      `SELECT style FROM tasks WHERE style IS NOT NULL ORDER BY id DESC LIMIT ?`
+    )
+    .all(limit) as unknown as { style: string }[];
+  return rows.map((r) => r.style);
+}
+
+// 評価済みの楽曲(プロファイル更新用)。since 以降に作成された評価付き楽曲を返す
+export function listRatedTracks(sinceIso?: string): TrackWithTaskRow[] {
+  return db
+    .prepare(
+      `SELECT tracks.*, tasks.mode, tasks.style, tasks.lyrics, tasks.lyrics_ja, tasks.intent
+       FROM tracks JOIN tasks ON tasks.id = tracks.task_id
+       WHERE (tracks.rating IS NOT NULL OR tracks.favorite = 1)
+         AND tracks.created_at > ?
+       ORDER BY tracks.id`
+    )
+    .all(sinceIso ?? "") as unknown as TrackWithTaskRow[];
+}
+
+export function getTrack(id: number): TrackWithTaskRow | undefined {
+  return db
+    .prepare(
+      `SELECT tracks.*, tasks.mode, tasks.style, tasks.lyrics, tasks.lyrics_ja, tasks.intent
+       FROM tracks JOIN tasks ON tasks.id = tracks.task_id
+       WHERE tracks.id = ?`
+    )
+    .get(id) as TrackWithTaskRow | undefined;
 }
 
 export interface PresetRow {
@@ -232,7 +325,7 @@ export function deletePreset(id: number): boolean {
 export function updateTrackRating(
   id: number,
   input: { rating?: 1 | -1 | null; favorite?: boolean }
-): TrackRow | undefined {
+): TrackWithTaskRow | undefined {
   if (!getTrack(id)) return undefined;
   if (input.rating !== undefined) {
     db.prepare(`UPDATE tracks SET rating = ? WHERE id = ?`).run(

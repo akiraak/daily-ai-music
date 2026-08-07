@@ -65,13 +65,23 @@ export class KieAiClient implements SunoClient {
   }
 
   async createTask(params: GenerateParams): Promise<string> {
-    const data = (await this.api("POST", "/api/v1/generate", {
-      customMode: false,
+    const body: Record<string, unknown> = {
+      customMode: params.customMode,
       instrumental: params.instrumental,
       model: params.model,
-      prompt: params.prompt,
       callBackUrl: PLACEHOLDER_CALLBACK,
-    })) as { taskId: string };
+    };
+    if (params.customMode) {
+      // customMode では style / title 必須。prompt は歌詞(インスト時は不要)
+      body.style = params.style;
+      body.title = params.title;
+      if (!params.instrumental) body.prompt = params.prompt;
+    } else {
+      body.prompt = params.prompt;
+    }
+    const data = (await this.api("POST", "/api/v1/generate", body)) as {
+      taskId: string;
+    };
     return data.taskId;
   }
 
