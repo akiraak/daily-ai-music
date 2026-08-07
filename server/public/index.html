@@ -10,6 +10,7 @@
   <header>
     <h1>daily-ai-music</h1>
     <div class="header-credits">
+      <a class="nav-link" href="/admin/presets.html">パラメータ一覧</a>
       <div id="credits" class="credits" title="残クレジット"></div>
       <a class="charge-link" href="https://kie.ai/billing" target="_blank" rel="noopener"
         title="kie.ai のチャージ画面を開く">チャージ</a>
@@ -19,18 +20,11 @@
   <main>
     <section class="panel">
       <h2>音楽を生成</h2>
-      <form id="generate-form">
-        <div id="generate-presets" class="generate-presets"></div>
-        <textarea id="prompt" rows="2" maxlength="2000"
-          placeholder="自由リクエスト(任意)例: 雨の日の朝に合う静かな曲"></textarea>
-        <div class="form-row">
-          <label class="checkbox">
-            <input type="checkbox" id="instrumental"> インストゥルメンタル(ボーカルなし)
-          </label>
-          <button type="submit" id="generate-button">生成する</button>
-        </div>
-        <p id="form-message" class="form-message" hidden></p>
-      </form>
+      <div class="form-row">
+        <p class="empty">毎日の自動生成と同じフローで 1 曲つくります(プロファイル更新 → 冒険日判定 → AI 作曲)</p>
+        <button type="button" id="generate-button">生成する</button>
+      </div>
+      <p id="form-message" class="form-message" hidden></p>
     </section>
 
     <section class="panel" id="active-panel" hidden>
@@ -41,7 +35,7 @@
     <section class="panel">
       <h2>楽曲一覧</h2>
       <ul id="tracks" class="track-list"></ul>
-      <p id="tracks-empty" class="empty">まだ楽曲がありません。上のフォームから生成してください。</p>
+      <p id="tracks-empty" class="empty">まだ楽曲がありません。上のボタンから生成してください。</p>
     </section>
 
     <details class="panel" id="profile-panel">
@@ -50,19 +44,6 @@
       <pre id="profile-content" class="detail-text"></pre>
     </details>
 
-    <details class="panel">
-      <summary>プリセット管理</summary>
-      <div id="preset-groups"></div>
-      <form id="preset-form" class="preset-form">
-        <input id="preset-category" list="preset-category-list"
-          placeholder="カテゴリ (genre 等)" required>
-        <datalist id="preset-category-list"></datalist>
-        <input id="preset-value" placeholder="値(英語・プロンプト用)" required>
-        <input id="preset-label" placeholder="表示名(日本語)" required>
-        <button type="submit">追加</button>
-      </form>
-      <p id="preset-message" class="form-message" hidden></p>
-    </details>
   </main>
 
   <script src="/admin/app.js"></script>

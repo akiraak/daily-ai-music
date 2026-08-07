@@ -58,7 +58,7 @@ esl-learning-assistant と同方式。`/api/*` は `X-API-Secret` ヘッダ必�
 - **`src/generation.ts`**: 生成ジョブ管理。10 秒間隔のポーラーが未完了タスクを照会し、完了したら音源・カバー画像を即 `data/` へダウンロード(プロバイダの URL は一時ファイルのため)。サーバー再起動時も DB から未完了タスクを拾って自動再開
 - **`src/llm.ts`**: Claude API(既定 `claude-sonnet-5`、`.env` の `LLM_MODEL` で変更可)。生成リクエストからスタイル・英語歌詞・日本語訳・タイトル・狙いを構造化出力で生成し、Suno へ `customMode: true` で送信する。評価(👍/👎)を好みプロファイル文書(`profile` テーブル、版を積む)へ反映する関数も持つ。`.env` に `ANTHROPIC_API_KEY` 必須(起動時 fail-fast)
 - **`src/scheduler.ts`**: 毎日の自動生成。1 分間隔で設定タイムゾーン(既定 America/Los_Angeles)の現在時刻をチェックし、当日の実行時刻(既定 6 時)以降で未生成なら「プロファイル更新 → 冒険日判定(既定 20%)→ LLM 生成 → Suno 送信」を実行。最終生成日は `settings` に記録し、停止中に跨いだ場合は起動時に追い生成(初回起動は当日を生成済み扱い)。失敗時は 30 分後に再試行。設定は `settings` テーブル(key-value)で `GET/PUT /api/settings` から変更可
-- API: `POST /api/generate`(プリセット選択+自由テキスト → LLM 経由で生成)/ `GET /api/tasks` / `GET /api/tracks` / `POST /api/tracks/:id/rating` / `GET|POST|PUT|DELETE /api/presets` / `GET /api/profile` / `GET|PUT /api/settings` / `POST /api/daily/run`(自動生成の手動トリガ。`last_daily_date` は更新しない)/ `GET /api/credits` / `GET /api/ping`(同じルートを `/admin/api/*` にも無認証でマウント — 管理画面用)
+- API: `POST /api/generate`(プリセット選択+自由テキスト → LLM 経由で生成。iOS の生成画面用 — 管理画面は `/daily/run` を使う)/ `GET /api/tasks` / `GET /api/tracks` / `POST /api/tracks/:id/rating` / `GET|POST|PUT|DELETE /api/presets` / `GET /api/profile` / `GET|PUT /api/settings` / `POST /api/daily/run`(自動生成の手動トリガ。管理画面の生成ボタンが使用。`last_daily_date` は更新しない)/ `GET /api/credits` / `GET /api/ping`(同じルートを `/admin/api/*` にも無認証でマウント — 管理画面用)
 
 ### iOS アプリ構成(`ios/`)
 

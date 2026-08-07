@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>パラメータ一覧 - daily-ai-music</title>
+  <link rel="stylesheet" href="/admin/style.css">
+</head>
+<body>
+  <header>
+    <h1>パラメータ一覧</h1>
+    <a class="nav-link" href="/admin/">← 楽曲一覧へ戻る</a>
+  </header>
+
+  <main>
+    <section class="panel">
+      <p class="empty">毎日の自動生成では、AI がこの一覧から好みプロファイルを踏まえて要素を選んで作曲します。</p>
+      <div id="preset-groups"></div>
+      <form id="preset-form" class="preset-form">
+        <input id="preset-category" list="preset-category-list"
+          placeholder="カテゴリ (genre 等)" required>
+        <datalist id="preset-category-list"></datalist>
+        <input id="preset-value" placeholder="値(英語・プロンプト用)" required>
+        <input id="preset-label" placeholder="表示名(日本語)" required>
+        <button type="submit">追加</button>
+      </form>
+      <p id="preset-message" class="form-message" hidden></p>
+    </section>
+  </main>
+
+  <script src="/admin/presets.js"></script>
+</body>
+</html>

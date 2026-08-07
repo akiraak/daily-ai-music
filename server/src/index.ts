@@ -163,7 +163,8 @@ api.put("/settings", async (c) => {
   return c.json({ settings: getDailySettings() });
 });
 
-// 自動生成の手動トリガ(検証・デバッグ用)。last_daily_date は更新しない
+// 自動生成の手動トリガ(管理画面の生成ボタンが使用)。last_daily_date は更新しないため
+// その日のスケジュール実行は別途行われる
 api.post("/daily/run", async (c) => {
   try {
     const { task, adventure, profileUpdated } = await runDaily();

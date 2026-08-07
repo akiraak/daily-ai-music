@@ -1,5 +1,7 @@
 # DONE
 
+- [x] 2026-08-07 管理画面の生成機能を毎日の自動生成と同じにする — 生成フォーム(プリセット選択チップ・自由テキスト・インストチェック)をボタンのみに置き換え、既存の `POST /admin/api/daily/run`(プロファイル更新 → 冒険日判定 → LLM 生成 → Suno 送信。`last_daily_date` は更新しないため当日のスケジュール実行は別途走る)を呼ぶ方式に変更。プリセット管理はパラメータ一覧ページ `/admin/presets.html`(新規 `presets.js`。一覧・追加・編集・削除)へ移動し、ヘッダーに相互リンクを追加。`POST /api/generate`(manual フロー)は iOS の生成画面が使うため存置。不要になったチップ・textarea・checkbox の CSS を削除。typecheck + ヘッドレス Chrome で両ページの表示確認済み(生成ボタンの実行はクレジット消費のため未実施)。プラン: [docs/plans/archive/admin-generate-daily-flow.md](docs/plans/archive/admin-generate-daily-flow.md)
+
 - [x] 2026-08-07 管理画面の音楽生成の上部のパラメータの選択が見ずらいので修正 — プリセット選択チップをラベル列(4.5em 固定)+チップ列の 2 カラム構造に変更(`app.js` でチップ群を `.chips` コンテナに包み、折り返してもチップ列内で整列)。カテゴリ間の余白を 6→12px に拡大しグループ境界を明確化、ラベル 0.75→0.8rem・チップ上下パディングも微増。ヘッドレス Chrome のビフォー/アフター比較で確認。※検証中に見えたスマホ幅の右はみ出しはヘッドレス Chrome の最小ウィンドウ幅 500px による artifact で、実際のはみ出しは無し(実測 scrollWidth == viewport)。プラン: [docs/plans/archive/generate-presets-legibility.md](docs/plans/archive/generate-presets-legibility.md)
 
 - [x] 2026-08-07 音楽生成のプロンプトの日本語訳を管理画面に表示 — `SongPlan` に `styleJa`(スタイルプロンプトの日本語訳)を追加し LLM がスタイルと同時に生成(追加コールなし)。`tasks.style_ja` を後方互換マイグレーションで追加して保存、tracks/tasks API に `styleJa` を追加し、管理画面の楽曲詳細で「スタイル」の下に「スタイル(日本語訳)」を表示(旧データは NULL → 非表示)。隔離 DB で保存・取得を検証、実 DB マイグレーション・API 出力確認済み(訳は次回生成分から入る)。プラン: [docs/plans/archive/style-ja-display.md](docs/plans/archive/style-ja-display.md)
