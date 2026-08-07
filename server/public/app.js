@@ -367,8 +367,10 @@ function renderGeneratePresets(groups) {
       const label = document.createElement("span");
       label.className = "chip-cat";
       label.textContent = categoryLabels[category] ?? category;
-      row.append(
-        label,
+      // チップ群をラベルと別の列に分け、折り返してもチップ列の中で揃うようにする
+      const chips = document.createElement("div");
+      chips.className = "chips";
+      chips.append(
         ...items.map((p) => {
           const chip = document.createElement("button");
           chip.type = "button";
@@ -387,6 +389,7 @@ function renderGeneratePresets(groups) {
           return chip;
         })
       );
+      row.append(label, chips);
       return row;
     })
   );

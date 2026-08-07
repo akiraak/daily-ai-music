@@ -1,5 +1,7 @@
 # DONE
 
+- [x] 2026-08-07 管理画面の音楽生成の上部のパラメータの選択が見ずらいので修正 — プリセット選択チップをラベル列(4.5em 固定)+チップ列の 2 カラム構造に変更(`app.js` でチップ群を `.chips` コンテナに包み、折り返してもチップ列内で整列)。カテゴリ間の余白を 6→12px に拡大しグループ境界を明確化、ラベル 0.75→0.8rem・チップ上下パディングも微増。ヘッドレス Chrome のビフォー/アフター比較で確認。※検証中に見えたスマホ幅の右はみ出しはヘッドレス Chrome の最小ウィンドウ幅 500px による artifact で、実際のはみ出しは無し(実測 scrollWidth == viewport)。プラン: [docs/plans/archive/generate-presets-legibility.md](docs/plans/archive/generate-presets-legibility.md)
+
 - [x] 2026-08-07 音楽生成のプロンプトの日本語訳を管理画面に表示 — `SongPlan` に `styleJa`(スタイルプロンプトの日本語訳)を追加し LLM がスタイルと同時に生成(追加コールなし)。`tasks.style_ja` を後方互換マイグレーションで追加して保存、tracks/tasks API に `styleJa` を追加し、管理画面の楽曲詳細で「スタイル」の下に「スタイル(日本語訳)」を表示(旧データは NULL → 非表示)。隔離 DB で保存・取得を検証、実 DB マイグレーション・API 出力確認済み(訳は次回生成分から入る)。プラン: [docs/plans/archive/style-ja-display.md](docs/plans/archive/style-ja-display.md)
 
 - [x] 2026-08-07 生成に使用しているパラメータを全て管理画面に表示する — `tasks` に `llm_model` / `llm_prompt`(LLM に送った入力全文 = プロファイル・プリセット・直近スタイル・モード指示)を後方互換マイグレーションで追加し、`generateSongPlan` の戻り値 `{ plan, llmModel, llmPrompt }` 経由で保存。tracks/tasks API に `prompt` / `instrumental` / `sunoModel` / `llmModel` / `llmPrompt` を追加し、管理画面の楽曲詳細(「歌詞・生成パラメータ」)にモード・リクエスト・インスト・Suno モデル・LLM モデル・LLM 入力全文を表示(旧データの欠落項目は非表示)。生成中タスクに毎日/冒険日バッジ。隔離 DB で保存・取得を検証、実 DB マイグレーション・API 出力確認済み(`llm_model` 等は次回生成分から入る)。プラン: [docs/plans/archive/admin-show-generation-params.md](docs/plans/archive/admin-show-generation-params.md)

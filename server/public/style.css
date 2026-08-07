@@ -97,11 +97,12 @@ button:disabled { opacity: 0.5; cursor: default; }
 .form-message { color: var(--error); font-size: 0.9rem; margin: 8px 0 0; }
 .form-message.info { color: var(--muted); }
 
-.generate-presets { display: grid; gap: 6px; margin-bottom: 10px; }
-.chip-row { display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
-.chip-cat { color: var(--muted); font-size: 0.75rem; flex: none; width: 4.5em; }
+.generate-presets { display: grid; gap: 12px; margin-bottom: 12px; }
+.chip-row { display: flex; gap: 8px; align-items: baseline; }
+.chip-cat { color: var(--muted); font-size: 0.8rem; flex: none; width: 4.5em; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; min-width: 0; }
 .chip {
-  padding: 2px 12px;
+  padding: 3px 12px;
   background: transparent;
   border: 1px solid var(--border);
   border-radius: 999px;
