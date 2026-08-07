@@ -9,10 +9,25 @@
 <body>
   <header>
     <h1>パラメータ一覧</h1>
-    <a class="nav-link" href="/admin/">← 楽曲一覧へ戻る</a>
+    <div class="header-credits">
+      <a class="nav-link" href="/admin/">楽曲一覧</a>
+      <a class="nav-link" href="/admin/settings.html">設定</a>
+    </div>
   </header>
 
   <main>
+    <section class="panel">
+      <h2>リアルワード</h2>
+      <p class="empty" id="words-note">直近に生成した曲の中心となった語。使い切ったワードは曲の中心に据えないよう AI に指示されます。</p>
+      <table class="word-table" id="word-table" hidden>
+        <thead>
+          <tr><th>ワード</th><th>使用回数</th><th>残り回数</th><th>最終使用</th></tr>
+        </thead>
+        <tbody id="word-rows"></tbody>
+      </table>
+      <p class="empty" id="words-empty" hidden>まだリアルワードがありません。生成すると記録されます。</p>
+    </section>
+
     <section class="panel">
       <p class="empty">毎日の自動生成では、AI がこの一覧から好みプロファイルを踏まえて要素を選んで作曲します。</p>
       <div id="preset-groups"></div>

@@ -4,6 +4,7 @@ import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
 import { API_SECRET, AUDIO_DIR, IMAGE_DIR, PORT, PUBLIC_DIR } from "./config.ts";
+import { getContextSettings } from "./context.ts";
 import * as db from "./db.ts";
 import { startGeneration, startPoller, sunoClient } from "./generation.ts";
 import { generateSongPlan } from "./llm.ts";
@@ -51,6 +52,7 @@ function taskJson(t: db.TaskRow) {
     intent: t.intent,
     llmModel: t.llm_model,
     llmPrompt: t.llm_prompt,
+    realWorldWords: db.listRealWorldWords(t.id),
     createdAt: t.created_at,
     updatedAt: t.updated_at,
   };
@@ -119,11 +121,21 @@ api.get("/profile", (c) => {
 
 // --- 毎日の自動生成の設定・手動トリガ ---
 
+// 毎日の自動生成+外部コンテキスト+リアルワード制限の設定をまとめて返す
+function allSettings() {
+  return {
+    ...getDailySettings(),
+    ...getContextSettings(),
+    ...db.getWordLimitSettings(),
+  };
+}
+
 api.get("/settings", (c) => {
-  return c.json({ settings: getDailySettings() });
+  return c.json({ settings: allSettings() });
 });
 
-// 部分更新: { dailyEnabled?, adventureProbability?, dailyHour?, dailyTimezone? }
+// 部分更新: { dailyEnabled?, adventureProbability?, dailyHour?, dailyTimezone?,
+//            contextNews?, contextWeather?, weatherLat?, weatherLon?, wordMaxUses?, wordWindowDays? }
 api.put("/settings", async (c) => {
   const body = await c.req.json().catch(() => null);
   if (body === null || typeof body !== "object") {
@@ -156,11 +168,60 @@ api.put("/settings", async (c) => {
     }
     updates.push(["daily_timezone", body.dailyTimezone]);
   }
+  for (const [field, key] of [
+    ["contextNews", "context_news"],
+    ["contextWeather", "context_weather"],
+  ] as const) {
+    if (field in body) {
+      if (typeof body[field] !== "boolean") {
+        return c.json({ error: `${field} は boolean です` }, 400);
+      }
+      updates.push([key, String(body[field])]);
+    }
+  }
+  if ("weatherLat" in body) {
+    const v = body.weatherLat;
+    if (typeof v !== "number" || !(v >= -90 && v <= 90)) {
+      return c.json({ error: "weatherLat は -90〜90 の数値です" }, 400);
+    }
+    updates.push(["weather_lat", String(v)]);
+  }
+  if ("weatherLon" in body) {
+    const v = body.weatherLon;
+    if (typeof v !== "number" || !(v >= -180 && v <= 180)) {
+      return c.json({ error: "weatherLon は -180〜180 の数値です" }, 400);
+    }
+    updates.push(["weather_lon", String(v)]);
+  }
+  if ("wordMaxUses" in body) {
+    const v = body.wordMaxUses;
+    if (!Number.isInteger(v) || v < 1 || v > 100) {
+      return c.json({ error: "wordMaxUses は 1〜100 の整数です" }, 400);
+    }
+    updates.push(["word_max_uses", String(v)]);
+  }
+  if ("wordWindowDays" in body) {
+    const v = body.wordWindowDays;
+    if (!Number.isInteger(v) || v < 1 || v > 365) {
+      return c.json({ error: "wordWindowDays は 1〜365 の整数です" }, 400);
+    }
+    updates.push(["word_window_days", String(v)]);
+  }
   if (updates.length === 0) {
     return c.json({ error: "更新するフィールドを指定してください" }, 400);
   }
   for (const [key, value] of updates) db.setSetting(key, value);
-  return c.json({ settings: getDailySettings() });
+  return c.json({ settings: allSettings() });
+});
+
+// 直近ウィンドウ内のリアルワード使用状況(パラメータ一覧ページの表示用)
+api.get("/real-world-words", (c) => {
+  const { wordMaxUses, wordWindowDays } = db.getWordLimitSettings();
+  return c.json({
+    wordMaxUses,
+    wordWindowDays,
+    words: db.countRealWorldWordUses(wordWindowDays),
+  });
 });
 
 // 自動生成の手動トリガ(管理画面の生成ボタンが使用)。last_daily_date は更新しないため
@@ -199,6 +260,7 @@ function trackJson(t: db.TrackWithTaskRow, prefix: string) {
     intent: t.intent,
     llmModel: t.llm_model,
     llmPrompt: t.llm_prompt,
+    realWorldWords: db.listRealWorldWords(t.task_id),
     createdAt: t.created_at,
   };
 }

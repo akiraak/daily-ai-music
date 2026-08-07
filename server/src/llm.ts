@@ -2,6 +2,7 @@
 // モデルは claude-sonnet-5(.env の LLM_MODEL で変更可)。構造化出力(output_config.format)で JSON を受け取る
 import Anthropic from "@anthropic-ai/sdk";
 import { ANTHROPIC_API_KEY, LLM_MODEL } from "./config.ts";
+import * as db from "./db.ts";
 import type { PresetRow } from "./db.ts";
 
 const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
@@ -15,6 +16,7 @@ export interface SongPlan {
   lyrics: string;
   lyricsJa: string;
   intent: string;
+  realWorldWords: string[]; // この曲の中心となった語(保存して使用回数を制限する)
 }
 
 // 生成結果と、生成に使用したパラメータ(記録・管理画面表示用)
@@ -51,8 +53,14 @@ const SONG_PLAN_SCHEMA = {
       type: "string",
       description: "この曲の狙い・意図の説明(日本語、2〜3 文。管理画面に表示する)",
     },
+    realWorldWords: {
+      type: "array",
+      items: { type: "string" },
+      description:
+        "この曲の中心となった語(リアルワード)。今日のコンテキストから採ったテーマ語と、曲の中心要素(ジャンル・ムード・情景など)を英語小文字で 5〜8 個",
+    },
   },
-  required: ["style", "styleJa", "title", "lyrics", "lyricsJa", "intent"],
+  required: ["style", "styleJa", "title", "lyrics", "lyricsJa", "intent", "realWorldWords"],
   additionalProperties: false,
 };
 
@@ -73,9 +81,7 @@ function firstText(message: Anthropic.Message): string {
   return block.text;
 }
 
-// スタイル+歌詞+訳+タイトル+狙いを生成する。manual はユーザー指定の要素を尊重し、
-// daily はプール全体から評価を踏まえて選ぶ(1 要素は普段と違うもの)。daily_adventure は大きく外す
-export async function generateSongPlan(input: {
+export interface SongPlanInput {
   mode: GenerationMode;
   instrumental: boolean;
   profile: string | null;
@@ -83,7 +89,26 @@ export async function generateSongPlan(input: {
   presetPool: PresetRow[];
   freeText: string;
   recentStyles: string[];
-}): Promise<SongPlanResult> {
+  extraContext?: string; // 「今日のコンテキスト」(ニュース・天気。毎日の自動生成のみ)
+}
+
+// リアルワードの使用制限(ウィンドウ内の使用回数から算出。テスト用に注入可能)
+export interface WordLimits {
+  banned: string[]; // 使用上限に達した(中心に据えない)
+  lastChance: string[]; // 残り 1 回(できれば別のアイデアを優先)
+}
+
+export function currentWordLimits(): WordLimits {
+  const { wordMaxUses, wordWindowDays } = db.getWordLimitSettings();
+  const usage = db.countRealWorldWordUses(wordWindowDays);
+  return {
+    banned: usage.filter((u) => u.uses >= wordMaxUses).map((u) => u.word),
+    lastChance: usage.filter((u) => u.uses === wordMaxUses - 1).map((u) => u.word),
+  };
+}
+
+// LLM に送る user メッセージを組み立てる(純関数。テストで直接検証できるよう分離)
+export function buildSongPlanPrompt(input: SongPlanInput, limits: WordLimits): string {
   const sections: string[] = [];
 
   if (input.profile) {
@@ -112,16 +137,39 @@ export async function generateSongPlan(input: {
       );
     }
   }
+  if (input.extraContext) {
+    sections.push(
+      `## 今日のコンテキスト(歌詞・曲調の着想に使う。ニュースの報告ではなく、雰囲気やテーマとしてさりげなく織り込む)\n${input.extraContext}`
+    );
+  }
   if (input.recentStyles.length > 0) {
     sections.push(
       `## 直近の生成スタイル(重複を避ける)\n${input.recentStyles.map((s) => `- ${s}`).join("\n")}`
     );
   }
+  if (limits.banned.length > 0) {
+    // manual はユーザーの指定・リクエストが最優先(禁止ワードと衝突したらユーザー指定が勝つ)
+    const note =
+      input.mode === "manual"
+        ? "。ただしユーザーが選んだ要素・自由リクエストと衝突する場合はユーザー指定を優先する"
+        : "";
+    sections.push(
+      `## 使用禁止ワード(直近で使いすぎ。テーマ・スタイル・歌詞の中心に据えず、realWorldWords にも含めない${note})\n${limits.banned.map((w) => `- ${w}`).join("\n")}`
+    );
+  }
+  if (limits.lastChance.length > 0) {
+    sections.push(
+      `## 残り 1 回のワード(できれば別のアイデアを優先する)\n${limits.lastChance.map((w) => `- ${w}`).join("\n")}`
+    );
+  }
   sections.push(
-    `## 出力条件\n- インストゥルメンタル: ${input.instrumental ? "はい(lyrics / lyricsJa は空文字列)" : "いいえ(歌詞を書く)"}`
+    `## 出力条件\n- インストゥルメンタル: ${input.instrumental ? "はい(lyrics / lyricsJa は空文字列)" : "いいえ(歌詞を書く)"}\n- realWorldWords: この曲の中心となった語(今日のコンテキストから採ったテーマ語+ジャンル・ムード・情景など)を英語小文字で 5〜8 個`
   );
 
-  const llmPrompt = sections.join("\n\n");
+  return sections.join("\n\n");
+}
+
+async function requestSongPlan(llmPrompt: string): Promise<SongPlan> {
   const message = await client.messages.create({
     model: LLM_MODEL,
     max_tokens: 16000,
@@ -133,8 +181,41 @@ export async function generateSongPlan(input: {
       format: { type: "json_schema", schema: SONG_PLAN_SCHEMA },
     },
   });
+  return JSON.parse(firstText(message)) as SongPlan;
+}
 
-  const plan = JSON.parse(firstText(message)) as SongPlan;
+function bannedWordsIn(plan: SongPlan, banned: string[]): string[] {
+  const words = plan.realWorldWords.map((w) => w.trim().toLowerCase());
+  return banned.filter((b) => words.includes(b));
+}
+
+// スタイル+歌詞+訳+タイトル+狙い+リアルワードを生成する。manual はユーザー指定の要素を尊重し、
+// daily はプール全体から評価を踏まえて選ぶ(1 要素は普段と違うもの)。daily_adventure は大きく外す。
+// リアルワードの使用制限は全モード共通でここで一元処理する
+export async function generateSongPlan(input: SongPlanInput): Promise<SongPlanResult> {
+  const limits = currentWordLimits();
+  let llmPrompt = buildSongPlanPrompt(input, limits);
+  let plan = await requestSongPlan(llmPrompt);
+
+  // 検証リトライ: 禁止ワードが中心要素に残っていたら、指示を強めて 1 回だけ再生成する
+  const violations = bannedWordsIn(plan, limits.banned);
+  if (violations.length > 0) {
+    console.warn(
+      `[llm] 禁止ワード(${violations.join(", ")})が含まれたため再生成します`
+    );
+    llmPrompt +=
+      `\n\n## 再生成の指示(厳守)\n前回の出力には使用禁止ワード(${violations.join(", ")})が中心要素として含まれていた。` +
+      `これらのワードをテーマ・スタイル・歌詞・realWorldWords のいずれにも使わず、別の発想で作り直すこと。`;
+    plan = await requestSongPlan(llmPrompt);
+    const still = bannedWordsIn(plan, limits.banned);
+    if (still.length > 0) {
+      // 生成は止めない(警告のみ)
+      console.warn(
+        `[llm] 再生成後も禁止ワード(${still.join(", ")})が残ったため、そのまま採用します`
+      );
+    }
+  }
+
   console.log(`[llm] 生成プラン: "${plan.title}" style=${plan.style.slice(0, 80)}...`);
   return { plan, llmModel: LLM_MODEL, llmPrompt };
 }

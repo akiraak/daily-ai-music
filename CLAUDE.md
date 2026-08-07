@@ -19,7 +19,7 @@ daily-ai-music は、Suno を使って音楽を生成し、iPhone から操作�
 
 ## 現状
 
-バックエンド + Web 管理画面(`server/`)と iOS アプリ最小版(`ios/`)が動く。ブラウザ・iPhone から生成リクエスト・進行状況の確認・楽曲の一覧と再生ができる。生成は LLM(Claude API)がプリセット+好みプロファイルからスタイル・歌詞を作って Suno に customMode で渡す方式で、評価(👍/👎)がプロファイルに反映され、毎朝 PT 6:00 に自動生成される(仕様: [docs/specs/music-generation.md](docs/specs/music-generation.md))。
+バックエンド + Web 管理画面(`server/`)と iOS アプリ最小版(`ios/`)が動く。ブラウザ・iPhone から生成リクエスト・進行状況の確認・楽曲の一覧と再生ができる。生成は LLM(Claude API)がプリセット+好みプロファイルからスタイル・歌詞を作って Suno に customMode で渡す方式で、評価(👍/👎)がプロファイルに反映され、毎朝 PT 6:00 に自動生成される。毎日の自動生成には外部コンテキスト(ニュース・天気)を「今日のコンテキスト」として注入し、曲の中心となった語(リアルワード)を保存して直近 30 日で同一ワード 2 回までの使用制限を掛ける(仕様: [docs/specs/music-generation.md](docs/specs/music-generation.md))。
 
 ### コマンド
 

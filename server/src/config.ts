@@ -31,7 +31,8 @@ export const PORT = Number(process.env.PORT ?? 3014);
 export const DATA_DIR = path.join(REPO_ROOT, "data");
 export const AUDIO_DIR = path.join(DATA_DIR, "audio");
 export const IMAGE_DIR = path.join(DATA_DIR, "images");
-export const DB_PATH = path.join(DATA_DIR, "db.sqlite");
+// DB_PATH 環境変数は隔離 DB でのテスト用(通常運用では未設定のまま)
+export const DB_PATH = process.env.DB_PATH ?? path.join(DATA_DIR, "db.sqlite");
 export const PUBLIC_DIR = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "../public"

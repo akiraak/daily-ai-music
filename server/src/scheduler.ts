@@ -1,6 +1,7 @@
 // 毎日の自動生成スケジューラ。1 分間隔で現在時刻(設定のタイムゾーン)をチェックし、
 // 当日の実行時刻以降でまだ生成していなければ実行する。最終生成日は settings に記録し、
 // サーバー停止中に実行時刻を跨いだ場合も起動時のチェックで追い生成される
+import { buildTodayContext } from "./context.ts";
 import * as db from "./db.ts";
 import { startGeneration } from "./generation.ts";
 import { generateSongPlan, updateProfile } from "./llm.ts";
@@ -89,7 +90,7 @@ export function shouldRunDaily(input: {
   };
 }
 
-// 毎日の自動生成 1 回分: プロファイル更新 → 冒険日判定 → LLM 生成 → Suno 送信
+// 毎日の自動生成 1 回分: プロファイル更新 → 冒険日判定 → コンテキスト取得 → LLM 生成 → Suno 送信
 export async function runDaily(): Promise<{
   task: db.TaskRow;
   adventure: boolean;
@@ -119,7 +120,13 @@ export async function runDaily(): Promise<{
   const mode = adventure ? "daily_adventure" : "daily";
   console.log(`[daily] mode=${mode} (冒険確率 ${settings.adventureProbability})`);
 
-  // 3〜4. LLM 生成 → Suno 送信
+  // 3. 外部コンテキスト(ニュース・天気)取得。失敗しても生成は続行(その場合セクション無し)
+  const extraContext = await buildTodayContext();
+  if (extraContext) {
+    console.log(`[daily] 今日のコンテキストを注入(${extraContext.length} 文字)`);
+  }
+
+  // 4〜5. LLM 生成 → Suno 送信
   const { plan, llmModel, llmPrompt } = await generateSongPlan({
     mode,
     instrumental: false,
@@ -128,6 +135,7 @@ export async function runDaily(): Promise<{
     presetPool: db.listPresets(),
     freeText: "",
     recentStyles: db.listRecentStyles(),
+    extraContext: extraContext ?? undefined,
   });
   const task = await startGeneration({
     prompt: adventure ? "毎日の自動生成(冒険日)" : "毎日の自動生成",

@@ -26,6 +26,7 @@ export async function startGeneration(input: {
     lyrics: string;
     lyricsJa: string;
     intent: string;
+    realWorldWords: string[];
   };
   llmModel?: string;
   llmPrompt?: string;
@@ -54,6 +55,8 @@ export async function startGeneration(input: {
     llmModel: input.llmModel ?? null,
     llmPrompt: input.llmPrompt ?? null,
   });
+  // リアルワード(曲の中心となった語)を保存し、以後の生成の使用回数制限に使う
+  db.insertRealWorldWords(task.id, input.plan.realWorldWords);
   console.log(`[generation] task ${task.id} 作成 (provider taskId=${providerTaskId})`);
   return task;
 }

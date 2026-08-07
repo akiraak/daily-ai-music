@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>設定 - daily-ai-music</title>
+  <link rel="stylesheet" href="/admin/style.css">
+</head>
+<body>
+  <header>
+    <h1>設定</h1>
+    <div class="header-credits">
+      <a class="nav-link" href="/admin/">楽曲一覧</a>
+      <a class="nav-link" href="/admin/presets.html">パラメータ一覧</a>
+    </div>
+  </header>
+
+  <main>
+    <section class="panel">
+      <h2>今日のコンテキスト(外部ソース)</h2>
+      <p class="empty">毎日の自動生成のプロンプトに、その日のニュース・天気を着想として注入します。変更は次の生成から反映されます。</p>
+      <div class="setting-row">
+        <div class="setting-label">ニュース<span class="setting-hint">Google News の日本版トップニュース見出し</span></div>
+        <input type="checkbox" class="toggle" id="context-news" data-field="contextNews">
+      </div>
+      <div class="setting-row">
+        <div class="setting-label">天気<span class="setting-hint">Open-Meteo の当日の天気・気温</span></div>
+        <input type="checkbox" class="toggle" id="context-weather" data-field="contextWeather">
+      </div>
+      <div class="setting-row">
+        <div class="setting-label">天気の位置<span class="setting-hint">緯度・経度(既定は東京)</span></div>
+        <div class="setting-inputs">
+          <input type="number" id="weather-lat" data-field="weatherLat" step="any" min="-90" max="90" aria-label="緯度">
+          <input type="number" id="weather-lon" data-field="weatherLon" step="any" min="-180" max="180" aria-label="経度">
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>毎日の自動生成</h2>
+      <div class="setting-row">
+        <div class="setting-label">自動生成<span class="setting-hint">毎日 1 曲を自動生成する</span></div>
+        <input type="checkbox" class="toggle" id="daily-enabled" data-field="dailyEnabled">
+      </div>
+      <div class="setting-row">
+        <div class="setting-label">実行時刻(時)<span class="setting-hint">0〜23。タイムゾーン基準</span></div>
+        <div class="setting-inputs">
+          <input type="number" id="daily-hour" data-field="dailyHour" step="1" min="0" max="23">
+        </div>
+      </div>
+      <div class="setting-row">
+        <div class="setting-label">タイムゾーン<span class="setting-hint">IANA 名(例: America/Los_Angeles, Asia/Tokyo)</span></div>
+        <div class="setting-inputs">
+          <input type="text" id="daily-timezone" data-field="dailyTimezone" class="wide">
+        </div>
+      </div>
+      <div class="setting-row">
+        <div class="setting-label">冒険日の確率<span class="setting-hint">0〜1。好みから大きく外した曲に挑戦する日</span></div>
+        <div class="setting-inputs">
+          <input type="number" id="adventure-probability" data-field="adventureProbability" step="0.05" min="0" max="1">
+        </div>
+      </div>
+    </section>
+
+    <p id="settings-message" class="form-message" hidden></p>
+  </main>
+
+  <script src="/admin/settings.js"></script>
+</body>
+</html>

@@ -86,6 +86,13 @@ db.exec(`
     value TEXT NOT NULL,
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
   );
+  CREATE TABLE IF NOT EXISTS real_world_words (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id INTEGER NOT NULL REFERENCES tasks(id),
+    word TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_real_world_words_created ON real_world_words(created_at);
 `);
 
 // 既存 DB への後方互換マイグレーション(カラムが無ければ追加)
@@ -272,6 +279,66 @@ export function listRecentStyles(limit = 5): string[] {
     )
     .all(limit) as unknown as { style: string }[];
   return rows.map((r) => r.style);
+}
+
+// --- リアルワード(曲の中心となった語。使用回数を数えて重複生成を防ぐ) ---
+
+export const WORD_LIMIT_DEFAULTS = {
+  wordMaxUses: 2, // ウィンドウ内の同一ワード使用上限
+  wordWindowDays: 30, // 集計ウィンドウ(日)。外れたワードは自動的に再利用可能になる
+} as const;
+
+export function getWordLimitSettings(): {
+  wordMaxUses: number;
+  wordWindowDays: number;
+} {
+  const num = (v: string | undefined, fallback: number) => {
+    const n = Number(v);
+    return v !== undefined && Number.isFinite(n) && n > 0 ? n : fallback;
+  };
+  return {
+    wordMaxUses: num(getSetting("word_max_uses"), WORD_LIMIT_DEFAULTS.wordMaxUses),
+    wordWindowDays: num(
+      getSetting("word_window_days"),
+      WORD_LIMIT_DEFAULTS.wordWindowDays
+    ),
+  };
+}
+
+export function insertRealWorldWords(taskId: number, words: string[]): void {
+  const stmt = db.prepare(
+    `INSERT INTO real_world_words (task_id, word) VALUES (?, ?)`
+  );
+  for (const w of words) {
+    const word = w.trim().toLowerCase();
+    if (word) stmt.run(taskId, word);
+  }
+}
+
+export function listRealWorldWords(taskId: number): string[] {
+  const rows = db
+    .prepare(`SELECT word FROM real_world_words WHERE task_id = ? ORDER BY id`)
+    .all(taskId) as unknown as { word: string }[];
+  return rows.map((r) => r.word);
+}
+
+// ウィンドウ内(直近 windowDays 日)のワードごとの使用回数。
+// 比較の両辺を同じ ISO 形式(strftime)で揃えて文字列比較の齟齬を避ける
+export interface WordUsage {
+  word: string;
+  uses: number;
+  lastUsedAt: string;
+}
+
+export function countRealWorldWordUses(windowDays: number): WordUsage[] {
+  return db
+    .prepare(
+      `SELECT word, COUNT(*) AS uses, MAX(created_at) AS lastUsedAt
+       FROM real_world_words
+       WHERE created_at >= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ?)
+       GROUP BY word ORDER BY uses DESC, word`
+    )
+    .all(`-${Math.floor(windowDays)} days`) as unknown as WordUsage[];
 }
 
 // 評価済みの楽曲(プロファイル更新用)。since 以降に評価が変更された楽曲を返す

@@ -134,4 +134,45 @@ $("preset-form").addEventListener("submit", async (e) => {
   }
 });
 
+// --- リアルワード(直近ウィンドウ内の使用状況) ---
+function formatWordDate(iso) {
+  return new Date(iso).toLocaleDateString("ja-JP", { month: "numeric", day: "numeric" });
+}
+
+async function loadRealWorldWords() {
+  try {
+    const { wordMaxUses, wordWindowDays, words } = await fetchJson(
+      "/admin/api/real-world-words"
+    );
+    $("words-note").textContent =
+      `直近 ${wordWindowDays} 日に生成した曲の中心となった語。同一ワードは ${wordMaxUses} 回まで使え、使い切ったワードは曲の中心に据えないよう AI に指示されます(ウィンドウを外れると自動で再利用可能)。`;
+    $("word-table").hidden = words.length === 0;
+    $("words-empty").hidden = words.length > 0;
+    $("word-rows").replaceChildren(
+      ...words.map((w) => {
+        const remaining = Math.max(0, wordMaxUses - w.uses);
+        const tr = document.createElement("tr");
+        if (remaining === 0) tr.className = "word-banned";
+        const cells = [
+          w.word,
+          `${w.uses} 回`,
+          remaining === 0 ? "使用禁止" : `あと ${remaining} 回`,
+          formatWordDate(w.lastUsedAt),
+        ];
+        tr.append(
+          ...cells.map((text) => {
+            const td = document.createElement("td");
+            td.textContent = text;
+            return td;
+          })
+        );
+        return tr;
+      })
+    );
+  } catch (err) {
+    $("words-note").textContent = `リアルワードの読み込みに失敗しました: ${err.message}`;
+  }
+}
+
 loadPresets();
+loadRealWorldWords();
