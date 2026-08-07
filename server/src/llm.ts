@@ -16,6 +16,13 @@ export interface SongPlan {
   intent: string;
 }
 
+// 生成結果と、生成に使用したパラメータ(記録・管理画面表示用)
+export interface SongPlanResult {
+  plan: SongPlan;
+  llmModel: string;
+  llmPrompt: string; // LLM に送った user メッセージ全文(プロファイル・プリセット・直近スタイル等を含む)
+}
+
 const SONG_PLAN_SCHEMA = {
   type: "object",
   properties: {
@@ -71,7 +78,7 @@ export async function generateSongPlan(input: {
   presetPool: PresetRow[];
   freeText: string;
   recentStyles: string[];
-}): Promise<SongPlan> {
+}): Promise<SongPlanResult> {
   const sections: string[] = [];
 
   if (input.profile) {
@@ -109,13 +116,14 @@ export async function generateSongPlan(input: {
     `## 出力条件\n- インストゥルメンタル: ${input.instrumental ? "はい(lyrics / lyricsJa は空文字列)" : "いいえ(歌詞を書く)"}`
   );
 
+  const llmPrompt = sections.join("\n\n");
   const message = await client.messages.create({
     model: LLM_MODEL,
     max_tokens: 16000,
     system:
       "あなたは優れた音楽プロデューサー兼作詞家です。AI 音楽生成サービス Suno に渡すスタイルプロンプトと歌詞を作ります。" +
       "毎日 1 曲、ユーザーの生活に寄り添う新しい曲を届けるのが仕事です。ありきたりな表現を避け、具体的で音の想像がつくスタイル指定と、心に残る歌詞を書いてください。",
-    messages: [{ role: "user", content: sections.join("\n\n") }],
+    messages: [{ role: "user", content: llmPrompt }],
     output_config: {
       format: { type: "json_schema", schema: SONG_PLAN_SCHEMA },
     },
@@ -123,7 +131,7 @@ export async function generateSongPlan(input: {
 
   const plan = JSON.parse(firstText(message)) as SongPlan;
   console.log(`[llm] 生成プラン: "${plan.title}" style=${plan.style.slice(0, 80)}...`);
-  return plan;
+  return { plan, llmModel: LLM_MODEL, llmPrompt };
 }
 
 // 評価(👍/👎)を好みプロファイル文書に反映し、更新後の文書全文を返す

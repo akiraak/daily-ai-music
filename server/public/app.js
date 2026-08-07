@@ -11,6 +11,12 @@ const STATUS_LABELS = {
   FAILED: "失敗",
 };
 
+const MODE_LABELS = {
+  manual: "手動",
+  daily: "毎日の自動生成",
+  daily_adventure: "毎日の自動生成(冒険日)",
+};
+
 const $ = (id) => document.getElementById(id);
 const seenTrackIds = new Set();
 let hadActiveTasks = false;
@@ -62,6 +68,7 @@ function renderTasks(tasks) {
           <div class="task-prompt"></div>
           <div class="task-meta">
             <span class="badge">${STATUS_LABELS[t.status] ?? t.status}</span>
+            ${t.mode && t.mode !== "manual" ? `<span class="badge">${t.mode === "daily_adventure" ? "冒険日" : "毎日"}</span>` : ""}
             ${t.instrumental ? '<span class="badge">インスト</span>' : ""}
             <span>${formatDate(t.createdAt)}</span>
           </div>
@@ -90,11 +97,11 @@ function trackElement(t) {
       </div>
     </div>`;
   li.querySelector(".track-title").textContent = t.title;
-  if (t.intent || t.lyrics || t.style) {
+  {
     const details = document.createElement("details");
     details.className = "track-details";
     const summary = document.createElement("summary");
-    summary.textContent = "歌詞・狙い";
+    summary.textContent = "歌詞・生成パラメータ";
     details.append(summary);
     const addSection = (label, text, pre = false) => {
       if (!text) return;
@@ -109,6 +116,19 @@ function trackElement(t) {
     addSection("歌詞", t.lyrics, true);
     addSection("日本語訳", t.lyricsJa, true);
     addSection("スタイル", t.style);
+    // 生成に使用したパラメータ(旧データで欠けている項目は出さない)
+    const params = [
+      ["モード", MODE_LABELS[t.mode] ?? t.mode],
+      ["リクエスト", t.prompt],
+      ["インストゥルメンタル", t.instrumental ? "あり" : "なし"],
+      ["Suno モデル", t.sunoModel],
+      ["LLM モデル", t.llmModel],
+    ]
+      .filter(([, v]) => v)
+      .map(([k, v]) => `${k}: ${v}`)
+      .join("\n");
+    addSection("生成パラメータ", params, true);
+    addSection("LLM への入力全文", t.llmPrompt, true);
     li.querySelector(".track-body").append(details);
   }
   const audio = li.querySelector("audio");

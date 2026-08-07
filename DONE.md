@@ -1,5 +1,9 @@
 # DONE
 
+- [x] 2026-08-07 生成に使用しているパラメータを全て管理画面に表示する — `tasks` に `llm_model` / `llm_prompt`(LLM に送った入力全文 = プロファイル・プリセット・直近スタイル・モード指示)を後方互換マイグレーションで追加し、`generateSongPlan` の戻り値 `{ plan, llmModel, llmPrompt }` 経由で保存。tracks/tasks API に `prompt` / `instrumental` / `sunoModel` / `llmModel` / `llmPrompt` を追加し、管理画面の楽曲詳細(「歌詞・生成パラメータ」)にモード・リクエスト・インスト・Suno モデル・LLM モデル・LLM 入力全文を表示(旧データの欠落項目は非表示)。生成中タスクに毎日/冒険日バッジ。隔離 DB で保存・取得を検証、実 DB マイグレーション・API 出力確認済み(`llm_model` 等は次回生成分から入る)。プラン: [docs/plans/archive/admin-show-generation-params.md](docs/plans/archive/admin-show-generation-params.md)
+
+- [x] 2026-08-07 自動生成の仕組みを確認 — `src/scheduler.ts` を確認。1 分間隔で設定タイムゾーンの現在時刻をチェックし「実行時刻以降かつ当日未生成」なら プロファイル更新 → 冒険日判定 → LLM 生成 → Suno 送信 を実行(初回起動は当日生成済み扱い、失敗時 30 分後再試行、停止中跨ぎは起動時に追い生成)。仕様・CLAUDE.md との矛盾なし
+
 - [x] 2026-08-07 アプリに評価ボタンがない — iOS の楽曲一覧の各行に管理画面と同じトグル式 👍/👎 ボタンを追加(`POST /api/tracks/:id/rating`。行タップ再生は維持し、評価ボタンは `.borderless` の独立タップ領域。`Track` に `rating` 追加、解除時は `"rating": null` をカスタム encode で送信)。UI テスト `RatingUITests` 追加(トグル後に元の評価へ復元するのでデータを汚さない)、既存再生テストと合わせシミュレータで 2 件パス。プラン: [docs/plans/archive/ios-rating-buttons.md](docs/plans/archive/ios-rating-buttons.md)
 
 - [x] 2026-08-07 評価を良い悪いの２択にする — ★(お気に入り)を廃止し 👍/👎 の 2 択に統一。起動時マイグレーションで `tracks.favorite` を DROP(★のみで未評価の曲は 👍 に変換。実 DB で確認)。`POST /api/tracks/:id/rating` は `{ rating: 1 | -1 | null }` のみ受付(favorite 送信は 400)、tracks API レスポンス・プロファイル更新 LLM 入力・管理画面の ★ ボタンも削除。プラン: [docs/plans/archive/rating-two-choice.md](docs/plans/archive/rating-two-choice.md)

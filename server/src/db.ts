@@ -21,6 +21,8 @@ export interface TaskRow {
   lyrics_ja: string | null; // 日本語訳
   title: string | null; // LLM が付けた曲名
   intent: string | null; // 狙いの説明(日本語)
+  llm_model: string | null; // 生成に使った LLM のモデル名
+  llm_prompt: string | null; // LLM に送った入力全文(プロファイル・プリセット・直近スタイル等を含む)
   created_at: string;
   updated_at: string;
 }
@@ -113,6 +115,8 @@ addColumnIfMissing("tasks", "lyrics", "lyrics TEXT");
 addColumnIfMissing("tasks", "lyrics_ja", "lyrics_ja TEXT");
 addColumnIfMissing("tasks", "title", "title TEXT");
 addColumnIfMissing("tasks", "intent", "intent TEXT");
+addColumnIfMissing("tasks", "llm_model", "llm_model TEXT");
+addColumnIfMissing("tasks", "llm_prompt", "llm_prompt TEXT");
 
 export function createTask(input: {
   provider: string;
@@ -126,12 +130,14 @@ export function createTask(input: {
   lyricsJa?: string | null;
   title?: string | null;
   intent?: string | null;
+  llmModel?: string | null;
+  llmPrompt?: string | null;
 }): TaskRow {
   const result = db
     .prepare(
       `INSERT INTO tasks (provider, provider_task_id, prompt, instrumental, model, status,
-                          mode, style, lyrics, lyrics_ja, title, intent)
-       VALUES (?, ?, ?, ?, ?, 'PENDING', ?, ?, ?, ?, ?, ?)`
+                          mode, style, lyrics, lyrics_ja, title, intent, llm_model, llm_prompt)
+       VALUES (?, ?, ?, ?, ?, 'PENDING', ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       input.provider,
@@ -144,7 +150,9 @@ export function createTask(input: {
       input.lyrics ?? null,
       input.lyricsJa ?? null,
       input.title ?? null,
-      input.intent ?? null
+      input.intent ?? null,
+      input.llmModel ?? null,
+      input.llmPrompt ?? null
     );
   return getTask(Number(result.lastInsertRowid))!;
 }
@@ -201,19 +209,27 @@ export function insertTrack(input: {
   );
 }
 
-// 楽曲一覧には生成時の情報(スタイル・歌詞・訳・狙い)も添える
+// 楽曲一覧には生成時の情報(リクエスト・モデル・スタイル・歌詞・訳・狙い・LLM 入力)も添える
 export type TrackWithTaskRow = TrackRow & {
   mode: string;
+  prompt: string;
+  instrumental: number;
+  model: string;
   style: string | null;
   lyrics: string | null;
   lyrics_ja: string | null;
   intent: string | null;
+  llm_model: string | null;
+  llm_prompt: string | null;
 };
+
+const TRACK_TASK_COLUMNS = `tracks.*, tasks.mode, tasks.prompt, tasks.instrumental, tasks.model,
+  tasks.style, tasks.lyrics, tasks.lyrics_ja, tasks.intent, tasks.llm_model, tasks.llm_prompt`;
 
 export function listTracks(limit = 200): TrackWithTaskRow[] {
   return db
     .prepare(
-      `SELECT tracks.*, tasks.mode, tasks.style, tasks.lyrics, tasks.lyrics_ja, tasks.intent
+      `SELECT ${TRACK_TASK_COLUMNS}
        FROM tracks JOIN tasks ON tasks.id = tracks.task_id
        ORDER BY tracks.id DESC LIMIT ?`
     )
@@ -257,7 +273,7 @@ export function listRecentStyles(limit = 5): string[] {
 export function listRatedTracks(sinceIso?: string): TrackWithTaskRow[] {
   return db
     .prepare(
-      `SELECT tracks.*, tasks.mode, tasks.style, tasks.lyrics, tasks.lyrics_ja, tasks.intent
+      `SELECT ${TRACK_TASK_COLUMNS}
        FROM tracks JOIN tasks ON tasks.id = tracks.task_id
        WHERE tracks.rating IS NOT NULL
          AND tracks.rated_at IS NOT NULL AND tracks.rated_at > ?
@@ -286,7 +302,7 @@ export function setSetting(key: string, value: string): void {
 export function getTrack(id: number): TrackWithTaskRow | undefined {
   return db
     .prepare(
-      `SELECT tracks.*, tasks.mode, tasks.style, tasks.lyrics, tasks.lyrics_ja, tasks.intent
+      `SELECT ${TRACK_TASK_COLUMNS}
        FROM tracks JOIN tasks ON tasks.id = tracks.task_id
        WHERE tracks.id = ?`
     )

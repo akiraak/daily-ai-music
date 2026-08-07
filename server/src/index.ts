@@ -48,6 +48,8 @@ function taskJson(t: db.TaskRow) {
     lyrics: t.lyrics,
     lyricsJa: t.lyrics_ja,
     intent: t.intent,
+    llmModel: t.llm_model,
+    llmPrompt: t.llm_prompt,
     createdAt: t.created_at,
     updatedAt: t.updated_at,
   };
@@ -80,7 +82,7 @@ api.post("/generate", async (c) => {
   const displayPrompt = promptParts.join(" / ");
 
   try {
-    const plan = await generateSongPlan({
+    const { plan, llmModel, llmPrompt } = await generateSongPlan({
       mode: "manual",
       instrumental,
       profile: db.getLatestProfile()?.content ?? null,
@@ -94,6 +96,8 @@ api.post("/generate", async (c) => {
       instrumental,
       mode: "manual",
       plan,
+      llmModel,
+      llmPrompt,
     });
     return c.json({ task: taskJson(task) }, 201);
   } catch (err) {
@@ -183,10 +187,15 @@ function trackJson(t: db.TrackWithTaskRow, prefix: string) {
     imageUrl: t.image_file ? `${prefix}/images/${t.image_file}` : null,
     rating: t.rating,
     mode: t.mode,
+    prompt: t.prompt,
+    instrumental: t.instrumental === 1,
+    sunoModel: t.model,
     style: t.style,
     lyrics: t.lyrics,
     lyricsJa: t.lyrics_ja,
     intent: t.intent,
+    llmModel: t.llm_model,
+    llmPrompt: t.llm_prompt,
     createdAt: t.created_at,
   };
 }

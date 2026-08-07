@@ -26,6 +26,8 @@ export async function startGeneration(input: {
     lyricsJa: string;
     intent: string;
   };
+  llmModel?: string;
+  llmPrompt?: string;
 }): Promise<db.TaskRow> {
   const providerTaskId = await sunoClient.createTask({
     customMode: true,
@@ -47,6 +49,8 @@ export async function startGeneration(input: {
     lyricsJa: input.plan.lyricsJa || null,
     title: input.plan.title,
     intent: input.plan.intent,
+    llmModel: input.llmModel ?? null,
+    llmPrompt: input.llmPrompt ?? null,
   });
   console.log(`[generation] task ${task.id} 作成 (provider taskId=${providerTaskId})`);
   return task;

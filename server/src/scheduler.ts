@@ -120,7 +120,7 @@ export async function runDaily(): Promise<{
   console.log(`[daily] mode=${mode} (冒険確率 ${settings.adventureProbability})`);
 
   // 3〜4. LLM 生成 → Suno 送信
-  const plan = await generateSongPlan({
+  const { plan, llmModel, llmPrompt } = await generateSongPlan({
     mode,
     instrumental: false,
     profile: db.getLatestProfile()?.content ?? null,
@@ -134,6 +134,8 @@ export async function runDaily(): Promise<{
     instrumental: false,
     mode,
     plan,
+    llmModel,
+    llmPrompt,
   });
   return { task, adventure, profileUpdated };
 }
