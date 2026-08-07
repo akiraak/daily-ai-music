@@ -16,7 +16,6 @@
   - [x] `server/public/` の静的配信を `/admin` 配下にマウントし直す(esl-learning-assistant と同型)。管理画面内のアセット参照・fetch 先パスも追従(2026-08-06 実装済み)
   - [x] `/` は `/admin/` へリダイレクト(`/admin`(末尾スラッシュ無し)も `/admin/` へ)(2026-08-06 実装済み)
   - [ ] デプロイ後、Cloudflare Access を `music.chobi.me/admin` の 1 アプリ(Google Allow)に整理して Bypass アプリ 3 つを削除(**g3plus-ops 側の作業**。workflow doc・CLAUDE.md も追従。完了したらこの親タスクを DONE.md へ移し、プランを archive する)
-
 ## 将来課題
 
 - [ ] `/audio/*` `/images/*` の認証(2026-08-06 に music.chobi.me で公開済み。現状は無認証で、ファイル名が UUID 的 track id + 一覧取得に要 secret という「推測不能 URL」保護のみ。iOS の AVPlayer 再生と両立する認証方式を検討する)

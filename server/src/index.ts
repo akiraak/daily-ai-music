@@ -19,17 +19,12 @@ function isValidApiSecret(provided: string | undefined): boolean {
 
 app.get("/health", (c) => c.json({ status: "ok" }));
 
-// /api/* は X-API-Secret ヘッダ必須。/audio /images は当面無認証(ローカル LAN 運用。公開時に見直す)
-app.use("/api/*", async (c, next) => {
-  if (!isValidApiSecret(c.req.header("x-api-secret"))) {
-    console.warn(`[api] rejected (invalid X-API-Secret) ${c.req.method} ${c.req.path}`);
-    return c.json({ error: "unauthorized" }, 401);
-  }
-  await next();
-});
+// API 本体。/api(iOS アプリ向け・X-API-Secret 必須)と
+// /admin/api(管理画面向け・アプリ層は無認証。本番はエッジの Cloudflare Access が /admin ごと保護)の両方にマウントする
+const api = new Hono();
 
-// クライアントの接続テスト用(/api 配下なので X-API-Secret の一致確認になる)
-app.get("/api/ping", (c) => c.json({ ok: true }));
+// クライアントの接続テスト用(/api 配下では X-API-Secret の一致確認になる)
+api.get("/ping", (c) => c.json({ ok: true }));
 
 function taskJson(t: db.TaskRow) {
   return {
@@ -44,7 +39,7 @@ function taskJson(t: db.TaskRow) {
   };
 }
 
-app.post("/api/generate", async (c) => {
+api.post("/generate", async (c) => {
   const body = await c.req.json().catch(() => null);
   const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
   const instrumental = body?.instrumental === true;
@@ -63,11 +58,11 @@ app.post("/api/generate", async (c) => {
   }
 });
 
-app.get("/api/tasks", (c) => {
+api.get("/tasks", (c) => {
   return c.json({ tasks: db.listTasks().map(taskJson) });
 });
 
-app.get("/api/tracks", (c) => {
+api.get("/tracks", (c) => {
   const tracks = db.listTracks().map((t) => ({
     id: t.id,
     taskId: t.task_id,
@@ -80,9 +75,20 @@ app.get("/api/tracks", (c) => {
   return c.json({ tracks });
 });
 
-app.get("/api/credits", async (c) => {
+api.get("/credits", async (c) => {
   return c.json({ credits: await sunoClient.getCredits() });
 });
+
+// /api/* は X-API-Secret ヘッダ必須。/audio /images は当面無認証(ローカル LAN 運用。公開時に見直す)
+app.use("/api/*", async (c, next) => {
+  if (!isValidApiSecret(c.req.header("x-api-secret"))) {
+    console.warn(`[api] rejected (invalid X-API-Secret) ${c.req.method} ${c.req.path}`);
+    return c.json({ error: "unauthorized" }, 401);
+  }
+  await next();
+});
+app.route("/api", api);
+app.route("/admin/api", api);
 
 app.use(
   "/audio/*",
@@ -98,6 +104,7 @@ app.use(
     rewriteRequestPath: (p) => p.replace(/^\/images/, ""),
   })
 );
+
 // 管理画面は /admin 配下(本番で Cloudflare Access をこのパスだけに掛けるため)
 app.get("/", (c) => c.redirect("/admin/"));
 app.get("/admin", (c) => c.redirect("/admin/"));

@@ -1,4 +1,5 @@
-// 管理画面。/api/tasks を定期ポーリングし、生成の進行と楽曲一覧を表示する
+// 管理画面。/admin/api/tasks を定期ポーリングし、生成の進行と楽曲一覧を表示する
+// (/admin/api/* は同居サーバーの無認証 API。本番はエッジの Cloudflare Access が /admin ごと保護する)
 const POLL_MS = 5000;
 
 const STATUS_LABELS = {
@@ -25,23 +26,8 @@ function formatDate(iso) {
   });
 }
 
-// /api/* の認証(X-API-Secret)。secret は localStorage に保存し、401 なら一度だけ入力を求める
-const SECRET_STORAGE_KEY = "apiSecret";
-let secretPrompted = false;
-
 async function fetchJson(url, options = {}) {
-  const secret = localStorage.getItem(SECRET_STORAGE_KEY);
-  const headers = { ...(options.headers ?? {}) };
-  if (secret) headers["X-API-Secret"] = secret;
-  const res = await fetch(url, { ...options, headers });
-  if (res.status === 401 && !secretPrompted) {
-    secretPrompted = true; // キャンセル時にポーリングのたび prompt が出ないよう、再表示はリロードまでしない
-    const input = prompt("API Secret を入力してください(.env の API_SECRET)");
-    if (input?.trim()) {
-      localStorage.setItem(SECRET_STORAGE_KEY, input.trim());
-      location.reload();
-    }
-  }
+  const res = await fetch(url, options);
   const json = await res.json().catch(() => null);
   if (!res.ok) throw new Error(json?.error ?? `HTTP ${res.status}`);
   return json;
@@ -49,7 +35,7 @@ async function fetchJson(url, options = {}) {
 
 async function refreshCredits() {
   try {
-    const { credits } = await fetchJson("/api/credits");
+    const { credits } = await fetchJson("/admin/api/credits");
     $("credits").textContent = credits === null ? "" : `残クレジット: ${credits}`;
   } catch {
     $("credits").textContent = "";
@@ -121,8 +107,8 @@ function renderNewTracks(tracks) {
 async function refresh() {
   try {
     const [{ tasks }, { tracks }] = await Promise.all([
-      fetchJson("/api/tasks"),
-      fetchJson("/api/tracks"),
+      fetchJson("/admin/api/tasks"),
+      fetchJson("/admin/api/tracks"),
     ]);
     renderTasks(tasks);
     renderNewTracks(tracks);
@@ -143,7 +129,7 @@ $("generate-form").addEventListener("submit", async (e) => {
   button.disabled = true;
   message.hidden = true;
   try {
-    await fetchJson("/api/generate", {
+    await fetchJson("/admin/api/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

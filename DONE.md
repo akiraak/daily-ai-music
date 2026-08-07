@@ -1,5 +1,7 @@
 # DONE
 
+- [x] 2026-08-06 Web 管理画面を API Secret なしで使えるようにする — API ルートをサブルーター化して `/api`(X-API-Secret 必須・iOS 向け)と `/admin/api`(アプリ層無認証・管理画面向け)の両方にマウントし、管理画面 JS から secret 付与・localStorage 保存・401 時の入力プロンプトを削除。本番はエッジの Cloudflare Access が `/admin` ごと保護する(ローカル LAN では `/admin/api/*` が無認証になる点は許容)。プラン: [docs/plans/archive/admin-no-secret.md](docs/plans/archive/admin-no-secret.md)
+
 - [x] 2026-08-06 サーバの接続先を https://music.chobi.me — `run-ios-device.sh` の既定接続先を本番 `https://music.chobi.me` に変更(`--local` で従来の Mac LAN IP 接続、ビルド前に `/api/ping` 疎通確認を追加)。実機ビルド・インストール・起動を確認。**注意**: ローカル `.env` の `API_SECRET` は本番と不一致(401)のため、`.env` を本番の値に更新するかアプリの設定画面で本番 Secret の入力が必要。プラン: [docs/plans/archive/backend-endpoint-music-chobi-me.md](docs/plans/archive/backend-endpoint-music-chobi-me.md)
 
 - [x] 2026-08-06 iOS アプリ(楽曲の一覧・再生、生成リクエストの送信)と API 認証方式 — `/api/*` を `X-API-Secret` ヘッダ認証に(esl-learning-assistant と同方式。timing-safe 比較・起動時 fail-fast・Web 管理画面は localStorage で対応)。`ios/` に XcodeGen + SwiftUI アプリ(楽曲一覧・AVPlayer 再生・生成リクエスト・設定画面)を作成し、UI テストで再生フローを検証、`run-ios-device.sh` で実機インストール・起動まで確認。プラン: [docs/plans/archive/ios-app-and-api-auth.md](docs/plans/archive/ios-app-and-api-auth.md)

@@ -48,7 +48,7 @@ xcodebuild test -project DailyAIMusic.xcodeproj -scheme DailyAIMusic \
 
 ### API 認証
 
-esl-learning-assistant と同方式。`/api/*` は `X-API-Secret` ヘッダ必須(`.env` の `API_SECRET`。16 文字以上 `[A-Za-z0-9_-]`、未設定はサーバーが起動時 fail-fast)。sha256 で固定長に揃えた timing-safe 比較。`/health` は無認証、`/api/ping` が接続テスト用。`/audio/*` `/images/*` は当面無認証(ローカル LAN 運用のため。公開時に見直し — TODO.md 将来課題)。Web 管理画面は localStorage に secret を保存し(初回 401 で入力を促す)、iOS アプリはビルド時注入(Info.plist)+ 設定画面で上書き。
+esl-learning-assistant と同方式。`/api/*` は `X-API-Secret` ヘッダ必須(`.env` の `API_SECRET`。16 文字以上 `[A-Za-z0-9_-]`、未設定はサーバーが起動時 fail-fast)。sha256 で固定長に揃えた timing-safe 比較。`/health` は無認証、`/api/ping` が接続テスト用。`/audio/*` `/images/*` は当面無認証(ローカル LAN 運用のため。公開時に見直し — TODO.md 将来課題)。Web 管理画面は secret 不要 — 同居サーバーの `/admin/api/*`(同じ API ルートをアプリ層無認証でマウント。本番はエッジの Cloudflare Access が `/admin` ごと保護)を使う。iOS アプリはビルド時注入(Info.plist)+ 設定画面で上書き。
 
 ### バックエンド構成(`server/`)
 
@@ -56,7 +56,7 @@ esl-learning-assistant と同方式。`/api/*` は `X-API-Secret` ヘッダ必�
 - **node:sqlite**(`data/db.sqlite`): `tasks`(生成ジョブ)と `tracks`(完成楽曲)。`data/` は gitignore
 - **`src/suno/client.ts`**: Suno 連携の抽象化インターフェース。実装は `kieai.ts`(kie.ai / sunoapi.org 互換)。公式 API が出たらここを差し替える
 - **`src/generation.ts`**: 生成ジョブ管理。10 秒間隔のポーラーが未完了タスクを照会し、完了したら音源・カバー画像を即 `data/` へダウンロード(プロバイダの URL は一時ファイルのため)。サーバー再起動時も DB から未完了タスクを拾って自動再開
-- API: `POST /api/generate` / `GET /api/tasks` / `GET /api/tracks` / `GET /api/credits` / `GET /api/ping`
+- API: `POST /api/generate` / `GET /api/tasks` / `GET /api/tracks` / `GET /api/credits` / `GET /api/ping`(同じルートを `/admin/api/*` にも無認証でマウント — 管理画面用)
 
 ### iOS アプリ構成(`ios/`)
 
