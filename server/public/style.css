@@ -162,12 +162,18 @@ ul { list-style: none; margin: 0; padding: 0; }
   color: var(--muted);
   font-size: 0.9rem;
   line-height: 1.5;
+  /* 未選択は絵文字をグレースケール+減光して、選択済み(フルカラー+アクセント背景)との差を明確にする */
+  filter: grayscale(1);
+  opacity: 0.55;
 }
-.rate-btn:hover { filter: none; border-color: var(--accent); }
-.rate-btn.active {
+.rate-btn:hover { filter: grayscale(1); opacity: 0.8; border-color: var(--accent); }
+.rate-btn.active,
+.rate-btn.active:hover {
   background: var(--accent);
   border-color: var(--accent);
   color: #fff;
+  filter: none;
+  opacity: 1;
 }
 
 .empty { color: var(--muted); font-size: 0.9rem; margin: 0; }
