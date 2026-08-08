@@ -95,6 +95,15 @@ enum BackendAPI {
         return try makeDecoder().decode(type, from: data)
     }
 
+    /// body 無しの POST(/api/daily/run 用)。timeout はサーバー側で LLM 生成まで待つ
+    /// 長時間リクエスト向けの上書き(既定は URLSession の 60 秒)
+    static func postJSON<T: Decodable>(_ type: T.Type, path: String, timeout: TimeInterval? = nil) async throws -> T {
+        var request = try makeRequest(path: path, method: "POST")
+        if let timeout { request.timeoutInterval = timeout }
+        let data = try await send(request, path: path)
+        return try makeDecoder().decode(type, from: data)
+    }
+
     private static func makeRequest(path: String, method: String) throws -> URLRequest {
         guard let url = absoluteURL(forServerPath: path) else {
             logger.error("\(method, privacy: .public) \(path, privacy: .public): invalid base URL \"\(baseURLString, privacy: .public)\"")

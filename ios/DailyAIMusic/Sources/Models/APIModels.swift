@@ -69,6 +69,8 @@ struct GenerationTask: Identifiable, Decodable, Equatable {
     let error: String?
     /// "manual" | "daily" | "daily_adventure"(Track.mode と同じ)
     let mode: String
+    /// LLM が決めた曲名(TEXT_SUCCESS 以降。それ以前と旧データは nil)
+    let title: String?
     let createdAt: Date
     let updatedAt: Date
 
@@ -113,6 +115,18 @@ struct GenerateRequest: Encodable {
 
 struct GenerateResponse: Decodable {
     let task: GenerationTask
+}
+
+/// POST /api/daily/run(おまかせ生成の手動トリガ)のレスポンス
+struct DailyRunResponse: Decodable {
+    let task: GenerationTask
+    let adventure: Bool
+    let profileUpdated: Bool
+}
+
+/// GET /api/credits。プロバイダから取れなかったときは null
+struct CreditsResponse: Decodable {
+    let credits: Int?
 }
 
 struct PingResponse: Decodable {

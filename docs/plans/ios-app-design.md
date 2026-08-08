@@ -171,6 +171,17 @@ API が既に返している未活用データを見せる画面。
 - 連続再生の自動テスト: フルプレイヤーのシークバーを `adjust(toNormalizedSliderPosition: 0.98)` で終端近くへ送り、曲終了 → タイトル変化を待つ方式で PlayerUITests に組み込めた(シミュレータ+ローカルサーバーなら安定)
 - ロック画面・コントロールセンターの表示/操作は実機でのみ確認可能 → 次回 `./run-ios-device.sh` 時に確認する
 
+### Phase 6 実装メモ(2026-08-08)
+
+GenerateView を Form からライブラリと同じ ScrollView + VStack(横 22pt)構成に作り替えた。
+
+- **おまかせ生成ヒーロー**: sparkles アイコン(AccentColor)+説明文+「いますぐ生成」ボタン(`Capsule` に `Color.accentDeep` 塗り+`Color.appBackground` 文字 — ダークでは accentDeep=アクセント・appBackground=暗色に解決されるのでモックのライト/ダーク仕様を 1 組の色で満たせる)。`POST /api/daily/run` はサーバー側でプロファイル更新→LLM 生成→Suno 送信まで待つため、BackendAPI に body 無し POST+timeout 上書き(180 秒)のオーバーロードを追加して使用。実行中はボタンを「曲を考えています…」+スピナーに
+- **カスタム生成(折りたたみ)**: 行タップで開閉(chevron 回転)。TextField(枠線はヘアライン)+インストトグル+「生成する」文字ボタン(AccentDeep)。既存 `POST /api/generate` のまま
+- **残クレジット**: `GET /api/credits` をナビバー右のピル(tint 背景+AccentDeep 文字)に表示。credits は null あり得るため Int? で、null 時はピル非表示(管理画面と同挙動)
+- **進行状況**: 進行中(スピナー+ステータス+「モード · H:mm 開始」)/ 失敗 1 時間以内(赤)/ **今日完了(最大 5 件)** — チェックマーク(tint 円+AccentDeep)+曲名+「今日 H:mm 完了(· 冒険日)」+カバー 40pt。完了行の曲名・カバーは `/api/tracks` を taskId で引く(`GenerationTask` に title を追加)。ポーリングは 5 秒間隔でタスクのみ、完了検知時に tracks と credits を読み直す
+- テスト: GenerateUITests 新設(おまかせ生成ボタンの表示・折りたたみ開閉・入力による送信ボタン有効化。**クレジット消費を避けるため生成ボタンはタップしない**)。ScreenshotUITests にカスタム展開状態を追加。進行中行はローカル DB へ TEXT_SUCCESS のタスクを直接 INSERT して目視確認(Phase 3 と同じ手法。確認後 DELETE)
+- XCUITest の注意: SwiftUI の複数行 TextField(axis: .vertical)は textViews/textFields のどちらに出るか iOS 版で揺れる → `descendants(matching: .any)` で識別子検索する
+
 ## 影響範囲
 
 - `ios/DailyAIMusic/Sources/` 全画面(ContentView・TrackListView・MiniPlayerView・GenerateView・SettingsView)+ 新設(Theme・TrackDetailView・FullPlayerView)

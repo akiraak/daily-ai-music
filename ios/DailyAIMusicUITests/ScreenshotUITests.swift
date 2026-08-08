@@ -64,6 +64,12 @@ final class ScreenshotUITests: XCTestCase {
             XCTAssertTrue(app.tabBars.buttons[tab].waitForExistence(timeout: 5))
             app.tabBars.buttons[tab].tap()
             attach(app, name: "\(style)-\(name)")
+            // 生成タブはカスタム生成を開いた状態も撮る(生成ボタンはタップしない)
+            if name == "generate" {
+                app.buttons["generate.custom.toggle"].tap()
+                attach(app, name: "\(style)-generate-custom")
+                app.buttons["generate.custom.toggle"].tap()
+            }
         }
     }
 
