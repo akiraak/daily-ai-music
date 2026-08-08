@@ -124,6 +124,23 @@ API が既に返している未活用データを見せる画面。
 - Button 内の `.primary`/`.secondary`(階層スタイル)はティント由来の色に解決される(青/オリーブがかる)→ 固定の文字色には具体色 `Color.primary`/`Color.secondary` を使う
 - スクリーンショット検証は `ScreenshotUITests`(全タブ+再生中を添付、`xcresulttool export attachments` で取り出し)。ダークは `-UIUserInterfaceStyle` 起動引数が効かないため `xcrun simctl ui <sim> appearance dark` で切り替えて撮り直す(接頭辞はシェル環境変数 `TEST_RUNNER_SCREENSHOT_STYLE` で渡す)
 
+### Phase 3 実装メモ(2026-08-08)
+
+ライブラリを List からScrollView + LazyVStack(横パディング 22pt、ヘアラインは Divider)へ作り替え、モックの構成を実装した。
+
+- **今日の一曲ヒーロー**: 当日生成の最新曲(端末タイムゾーンで判定)。カバー角丸 14pt + 右下に再生/一時停止の円形ボタン(AppBackground 92% + AccentDeep)。タイトル・styleJa 1 行・ピル(冒険日 + リアルワード先頭 4 + 「+N」)
+- **進行中ジョブカード**: `/api/tasks` を表示中のみ 5 秒ポーリング(`.task` がタブ離脱でキャンセル)。ジョブ完了を検知したら楽曲一覧を再読込。進行バーは実進捗が取れないためステータス段階のおおよその値(PENDING 0.1 → TEXT_SUCCESS 0.45 → FIRST_SUCCESS 0.7 → SUCCESS 0.9)、経過時間は TimelineView で 1 秒ごとに更新
+- **リスト行**: カバー 52pt/角丸 7pt、タイトル、styleJa 1 行(無い旧データは モード表記にフォールバック)、ピル(冒険日 + ワード先頭 3)。右列に行内再生ボタン(再生中は静止イコライザ `EqualizerBars`)と 👍/👎。日付グループ(今日/昨日/M月d日(E)、ja_JP 固定)
+- モデル拡張: `Track` に mode・styleJa・lyrics(Ja)・intent・sunoModel・llmModel・realWorldWords 等(Phase 4 で使用)、`GenerationTask` に mode。タブ名を「楽曲」→「ライブラリ」に変更
+- UI テスト: 行タップは Phase 4 で詳細遷移になるため、再生導線を行内再生ボタン(`track.play`)に変更済み
+
+ハマりどころ(iOS 26 シミュレータで確認):
+
+- **LazyVStack 直下の兄弟 ForEach は ID 空間が平坦化される**: `ForEach(activeTasks)`(GenerationTask.id)と `ForEach(group.tracks)`(Track.id)がどちらも Int ID のため衝突し、ジョブカードのスロットに同 ID の楽曲行が誤描画された。ジョブカード+ヒーローを非 lazy の `VStack` 1 子に包んで分離して解決
+- **`fixedSize` の子 + `frame(maxWidth: .infinity)` + `.clipped()` でははみ出しを切れない**: 子の理想幅が提案幅を超えると frame ごと子の幅まで広がり、クリップ境界も一緒に広がる。ピルは `SingleLinePillLayout`(Layout プロトコル。1 行に収まる分だけ配置し、収まらない子は画面外へ)で切り詰めた
+- ヒーローカバー中央の細い横線は Suno 生成カバー画像自体の継ぎ目(元 JPEG に存在。レイアウト起因ではない)
+- ジョブカードの検証: ローカルサーバーの DB に進行中タスク(TEXT_SUCCESS)を直接 INSERT した。ポーラーは API エラー時に FAILED にせず再試行するため、偽の provider_task_id でもタスクが進行中のまま残る
+
 ## 影響範囲
 
 - `ios/DailyAIMusic/Sources/` 全画面(ContentView・TrackListView・MiniPlayerView・GenerateView・SettingsView)+ 新設(Theme・TrackDetailView・FullPlayerView)

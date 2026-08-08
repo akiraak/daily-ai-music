@@ -10,7 +10,32 @@ struct Track: Identifiable, Decodable, Equatable {
     let imageUrl: String?
     /// 1 = 👍, -1 = 👎, nil = 未評価
     let rating: Int?
+    /// "manual"(カスタム生成)| "daily" | "daily_adventure"(冒険日)
+    let mode: String
+    let instrumental: Bool
+    /// 以下は LLM 生成のメタデータ。LLM 導入前の旧データでは nil
+    let style: String?
+    let styleJa: String?
+    let lyrics: String?
+    let lyricsJa: String?
+    let intent: String?
+    let sunoModel: String?
+    let llmModel: String?
+    /// 曲の中心となった語(リアルワード)
+    let realWorldWords: [String]
     let createdAt: Date
+
+    var isAdventure: Bool { mode == "daily_adventure" }
+    var modeLabel: String { generationModeLabel(mode) }
+}
+
+func generationModeLabel(_ mode: String) -> String {
+    switch mode {
+    case "manual": "カスタム生成"
+    case "daily": "おまかせ生成"
+    case "daily_adventure": "おまかせ生成(冒険日)"
+    default: mode
+    }
 }
 
 struct TracksResponse: Decodable {
@@ -41,10 +66,26 @@ struct GenerationTask: Identifiable, Decodable, Equatable {
     let instrumental: Bool
     let status: String
     let error: String?
+    /// "manual" | "daily" | "daily_adventure"(Track.mode と同じ)
+    let mode: String
     let createdAt: Date
     let updatedAt: Date
 
     var isActive: Bool { status != "COMPLETE" && status != "FAILED" }
+
+    var modeLabel: String { generationModeLabel(mode) }
+
+    /// ライブラリの進行中ジョブカードの進行バー用。実進捗は取れないためステータス段階のおおよその値
+    var progressFraction: Double {
+        switch status {
+        case "PENDING": 0.1
+        case "TEXT_SUCCESS": 0.45
+        case "FIRST_SUCCESS": 0.7
+        case "SUCCESS": 0.9
+        case "COMPLETE": 1
+        default: 0.05
+        }
+    }
 
     /// Web 管理画面(public/app.js の STATUS_LABELS)と同じ日本語ラベル
     var statusLabel: String {

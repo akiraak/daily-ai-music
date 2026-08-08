@@ -19,11 +19,11 @@ final class ScreenshotUITests: XCTestCase {
         let app = XCUIApplication()
         app.launch()
 
-        // 楽曲タブ: 一覧が読み込まれたら 1 曲再生してミニプレイヤーも写す
+        // ライブラリタブ: 一覧が読み込まれたら 1 曲再生してミニプレイヤーも写す
         let firstRow = app.buttons.matching(identifier: "track.row").firstMatch
         if firstRow.waitForExistence(timeout: 10) {
             attach(app, name: "\(style)-library")
-            firstRow.tap()
+            app.buttons.matching(identifier: "track.play").firstMatch.tap()
             _ = app.buttons["miniplayer.pause"].waitForExistence(timeout: 10)
             attach(app, name: "\(style)-library-playing")
         } else {

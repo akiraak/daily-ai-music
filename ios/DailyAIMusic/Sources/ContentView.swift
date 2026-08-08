@@ -4,7 +4,7 @@ struct ContentView: View {
     var body: some View {
         TabView {
             TrackListView()
-                .tabItem { Label("楽曲", systemImage: "music.note.list") }
+                .tabItem { Label("ライブラリ", systemImage: "music.note.list") }
             GenerateView()
                 .tabItem { Label("生成", systemImage: "waveform.badge.plus") }
             SettingsView()
