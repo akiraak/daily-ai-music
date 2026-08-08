@@ -106,9 +106,12 @@ async function pollTask(task: db.TaskRow): Promise<void> {
     return;
   }
   if (state.done) {
-    await saveTracks(task, state.tracks);
+    // Suno は通常 2 曲返すが同一歌詞・スタイルのバリエーションのため、1 曲目のみ採用する
+    await saveTracks(task, state.tracks.slice(0, 1));
     db.updateTaskStatus(task.id, "COMPLETE");
-    console.log(`[generation] task ${task.id} 完了 (${state.tracks.length} tracks)`);
+    console.log(
+      `[generation] task ${task.id} 完了 (${state.tracks.length} tracks 中 1 曲目を採用)`
+    );
     return;
   }
   if (Date.now() - Date.parse(task.created_at) > TASK_TIMEOUT_MS) {

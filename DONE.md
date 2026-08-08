@@ -1,5 +1,7 @@
 # DONE
 
+- [x] 2026-08-07 曲生成は２曲のうち１曲目のみを採用する — Suno は 1 リクエストで通常 2 曲返すが同一歌詞・スタイルのバリエーションで一覧にほぼ同じ曲が並ぶため、完了検知時に `sunoData` 先頭の 1 曲目のみダウンロード・DB 登録するように変更(`generation.ts` の `pollTask` で `slice(0, 1)`。クレジット消費はリクエスト単位の 12 で不変、既存の保存済みトラックはそのまま)。仕様書の 2 曲前提の記述も更新。typecheck のみ(実生成での確認は次回生成時)。プラン: [docs/plans/archive/adopt-first-track-only.md](docs/plans/archive/adopt-first-track-only.md)
+
 - [x] 2026-08-07 曲にリアルワードの指示文ではなく具体的なワードを表示する — 楽曲詳細の「LLM への入力全文」末尾に出力条件のプロンプト指示文(`- realWorldWords: …5〜8 個`)が表示され、具体的なワードが出ていないように見えた。指示は構造化出力スキーマの description と重複していたためプロンプトから削除(LLM への指示は維持、既存曲の記録はそのまま)。あわせて楽曲一覧の各曲(評価ボタンの下)に realWorldWords をピル型タグで常時表示(ワードの無い旧データはタグ行ごと非表示。詳細内の「リアルワード」セクションは記録として存置)。単体でプロンプトに指示行が無いこと、ヘッドレス Chrome でタグ表示を確認。プラン: [docs/plans/archive/track-real-word-display.md](docs/plans/archive/track-real-word-display.md)
 
 - [x] 2026-08-07 天気の位置を座標ではなく都市名で選択できるようにする — 設定ページの緯度・経度入力を 47 都道府県庁所在地のドロップダウンに置き換え(選択で都市名+座標を 1 回の PUT で同時保存し不整合を防ぐ)。settings に `weather_city`(既定「東京」)を追加し、プロンプトの天気見出しを「### 今日の天気(<都市名>)」に変更。座標は Open-Meteo Geocoding のローマ字クエリ+JP フィルタで一括取得して `settings.js` に定数として埋め込み(同 API は日本語表記のクエリにヒットせず、国土地理院 AddressSearch は候補品質が悪いため検索型は見送り。鳥取が北海道の同名地点を拾う誤りは個別取得で修正)。隔離サーバーで PUT/GET・不正値 400・札幌の天気取得を確認、設定ページはヘッドレス Chrome で表示確認。プラン: [docs/plans/archive/weather-city-selection.md](docs/plans/archive/weather-city-selection.md)
