@@ -1,6 +1,7 @@
 # 音楽生成の仕組み(2026-08-06 決定)
 
 会話で詰めた設計決定。実装プランは [docs/plans/music-generation-engine.md](../plans/music-generation-engine.md)。
+**現在の実装の流れの図解は [music-generation-flow.md](music-generation-flow.md)**(この文書は決定の記録、あちらは挙動の説明)。
 
 ## 全体像
 
