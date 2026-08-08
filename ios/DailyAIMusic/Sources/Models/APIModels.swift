@@ -132,3 +132,56 @@ struct CreditsResponse: Decodable {
 struct PingResponse: Decodable {
     let ok: Bool
 }
+
+/// GET/PUT /api/settings のサーバー設定のうち iOS で扱う分(毎日の自動生成+今日のコンテキスト)。
+/// リアルワード制限(wordMaxUses 等)・座標(weatherLat/Lon)は表示しないため定義しない(余分なキーは無視される)。
+/// 変更の楽観反映(トグルの即時切替)のため var
+struct ServerSettings: Decodable, Equatable {
+    var dailyEnabled: Bool
+    var adventureProbability: Double
+    var dailyHour: Int
+    var dailyTimezone: String
+    var contextNews: Bool
+    var contextWeather: Bool
+    var weatherCity: String
+}
+
+struct SettingsResponse: Decodable {
+    let settings: ServerSettings
+}
+
+/// PUT /api/settings の部分更新 body(nil のキーは送信されない)。
+/// 都市は名前と座標の不整合を防ぐため weatherCity/Lat/Lon を 1 回の PUT で同時に送る(管理画面と同じ)
+struct SettingsUpdateRequest: Encodable {
+    var dailyEnabled: Bool?
+    var adventureProbability: Double?
+    var dailyHour: Int?
+    var dailyTimezone: String?
+    var contextNews: Bool?
+    var contextWeather: Bool?
+    var weatherCity: String?
+    var weatherLat: Double?
+    var weatherLon: Double?
+
+    init(
+        dailyEnabled: Bool? = nil,
+        adventureProbability: Double? = nil,
+        dailyHour: Int? = nil,
+        dailyTimezone: String? = nil,
+        contextNews: Bool? = nil,
+        contextWeather: Bool? = nil,
+        weatherCity: String? = nil,
+        weatherLat: Double? = nil,
+        weatherLon: Double? = nil
+    ) {
+        self.dailyEnabled = dailyEnabled
+        self.adventureProbability = adventureProbability
+        self.dailyHour = dailyHour
+        self.dailyTimezone = dailyTimezone
+        self.contextNews = contextNews
+        self.contextWeather = contextWeather
+        self.weatherCity = weatherCity
+        self.weatherLat = weatherLat
+        self.weatherLon = weatherLon
+    }
+}

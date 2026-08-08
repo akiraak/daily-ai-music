@@ -63,7 +63,7 @@ esl-learning-assistant と同方式。`/api/*` は `X-API-Secret` ヘッダ必�
 ### iOS アプリ構成(`ios/`)
 
 - **XcodeGen + SwiftUI**(iOS 17+、Swift 6)。`project.yml` が真実源で `.xcodeproj` は生成物(gitignore)。esl-learning-assistant と同じ構成
-- 画面: 楽曲一覧(AVPlayer ストリーミング再生・ミニプレイヤー・バックグラウンド再生対応・各行に管理画面と同じトグル式 👍/👎 評価)/ 生成(プロンプト送信 + 5 秒ポーリングの進行表示)/ 設定(サーバー URL・API Secret・接続テスト)
+- 画面(デザインは案A ミニマル。経緯・実装メモ: [docs/plans/archive/ios-app-design.md](docs/plans/archive/ios-app-design.md)): ライブラリ(今日の一曲ヒーロー・進行中ジョブカード・日付グループ・行内再生+👍/👎)/ 楽曲詳細(歌詞 EN/JA 切替・狙い・スタイル・リアルワード・メタ情報)/ フルプレイヤー(シート。キュー連続再生・ロック画面 Now Playing、AVPlayer ストリーミング+バックグラウンド再生)/ 生成(おまかせ生成 POST /api/daily/run 主役+カスタム生成折りたたみ+残クレジット表示)/ 設定(サーバー設定 GET/PUT /api/settings の閲覧・編集+サーバー URL・API Secret・接続テスト)
 - `Services/BackendAPI.swift`: `/api/*` 共通処理(UserDefaults → Info.plist 埋め込み値の順で URL/secret を解決、`X-API-Secret` 付与、os.Logger)
 - 接続先の既定はビルド時に Info.plist へ埋め込む(`run-ios-device.sh` が本番 `https://music.chobi.me` を注入。`--local` で Mac の LAN IP。空ならシミュレータ向けに `http://localhost:3014` へフォールバック)
 - UI テスト(`DailyAIMusicUITests`): 一覧 → タップ → 再生開始のスモークテスト

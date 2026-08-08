@@ -95,7 +95,7 @@ API が既に返している未活用データを見せる画面。
 
 ### 決定(2026-08-08): 案A ミニマル
 
-3 案(`01-minimal.html` / `02-card.html` / `03-playful.html`、コンテンツは本番の実データ・実カバー画像)を目視チェックし、**案A ミニマル**([docs/plans/ios-app-design-mocks/01-minimal.html](ios-app-design-mocks/01-minimal.html))に決定。Phase 2 以降はこのモックを基準に実装する。
+3 案(`01-minimal.html` / `02-card.html` / `03-playful.html`、コンテンツは本番の実データ・実カバー画像)を目視チェックし、**案A ミニマル**([docs/plans/ios-app-design-mocks/01-minimal.html](../ios-app-design-mocks/01-minimal.html))に決定。Phase 2 以降はこのモックを基準に実装する。
 
 案A の要点(実装基準):
 
@@ -189,6 +189,17 @@ GenerateView を Form からライブラリと同じ ScrollView + VStack(横 22p
 - **見出しの `.rounded` は不採用**: 決定した案A のモックがシステム標準フォントで成立しており、実装も標準のままとする(デザイントークン表の「候補」の結論)
 - 検証: シミュレータビルド+スモーク(Playback/Rating)+ScreenshotUITests をライト/ダークで実行し目視確認。アニメーションは一時 UI テストで再生中の画面を 0.4 秒間隔で 3 枚撮り、バーの高さが毎フレーム変わることを確認(一時テストは確認後削除)
 - 設定画面の SecureField が空に見えるのは AppStorage に上書き値が無いため(Info.plist 注入の既定 secret はフィールドに表示しない従来からの挙動。認証は BackendAPI 側のフォールバックで効いている)
+
+### Phase 8 実装メモ(2026-08-08)
+
+サーバー設定の閲覧・編集を設定タブに追加した(Web 管理画面の設定ページと同項目・同じ「変更で即 PUT」の操作感)。
+
+- **セクション構成**: 「毎日の自動生成」(自動生成トグル・実行時刻 0〜23 のメニュー Picker・タイムゾーン TextField・冒険日の確率 Slider)→「今日のコンテキスト」(ニュース/天気トグル・天気の都市のメニュー Picker)→ 既存の「サーバー接続」。読み込み完了までは「サーバー設定」プレースホルダ(スピナー、失敗時はエラー+再読み込みボタン。接続テスト成功時にも未読込なら取り直す)
+- **保存方式**: トグル・Picker は変更を楽観反映して即 `PUT /api/settings`(部分更新)。応答のサーバー値で表示を上書きし、失敗時はエラー表示+再読込で現在値へ戻す。タイムゾーンは return 確定時・スライダーはドラッグ終了時に保存(編集途中の値はローカル state)。保存中はコントロールを disabled
+- **都市**: 管理画面 settings.js と同じ 47 都道府県庁所在地の定数リスト(名前+座標)を Swift に持ち、選択時に weatherCity/Lat/Lon を 1 回の PUT で同時送信(名前と座標の不整合を防ぐ)。保存済みの都市名がリストに無い場合は「(現在の設定)」として選択肢の先頭に足す
+- **モデル**: `ServerSettings`(iOS で扱う 7 項目のみ宣言 — 余分なキーはデコードで無視)+ `SettingsUpdateRequest`(全フィールド optional。synthesized Encodable は nil を省略するので部分更新になる)。`BackendAPI.putJSON` を追加
+- **テスト**: SettingsUITests 新設 — ニューストグルを 2 回タップして往復させ、PUT 成功(失敗時は再読込で元に戻る実装のため、反転値が維持されれば成功)を検証。最終状態が元に戻るためローカルサーバーの設定は変化しない。ScreenshotUITests は設定タブの読み込み待ち+スクロール後の 1 枚を追加。curl で before/after の設定値が同一なことも確認
+- 冒険日の確率スライダーは step 0.05(管理画面の入力 step と同じ)、表示は % 変換
 
 ## 影響範囲
 

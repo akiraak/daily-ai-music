@@ -63,12 +63,20 @@ final class ScreenshotUITests: XCTestCase {
         for (tab, name) in [("生成", "generate"), ("設定", "settings")] {
             XCTAssertTrue(app.tabBars.buttons[tab].waitForExistence(timeout: 5))
             app.tabBars.buttons[tab].tap()
+            // 設定タブはサーバー設定の読み込みを待ってから撮り、スクロール後(サーバー接続側)も撮る
+            if name == "settings" {
+                _ = app.switches["settings.dailyEnabled"].firstMatch.waitForExistence(timeout: 5)
+            }
             attach(app, name: "\(style)-\(name)")
-            // 生成タブはカスタム生成を開いた状態も撮る(生成ボタンはタップしない)
             if name == "generate" {
+                // カスタム生成を開いた状態も撮る(生成ボタンはタップしない)
                 app.buttons["generate.custom.toggle"].tap()
                 attach(app, name: "\(style)-generate-custom")
                 app.buttons["generate.custom.toggle"].tap()
+            }
+            if name == "settings" {
+                app.swipeUp()
+                attach(app, name: "\(style)-settings-scrolled")
             }
         }
     }
