@@ -425,10 +425,18 @@ app.use(
   })
 );
 
-// 初期プリセット投入(空のときだけ。ユーザーが編集・削除した内容は再投入しない)
-if (db.countPresets() === 0) {
-  for (const p of SEED_PRESETS) db.createPreset(p);
-  console.log(`[presets] 初期プリセット ${SEED_PRESETS.length} 件を投入しました`);
+// 初期プリセット投入(DB に 1 件も無いカテゴリだけ。既存カテゴリ内でユーザーが
+// 編集・削除した内容は再投入せず、後から追加された新カテゴリは既存 DB にも入る)
+{
+  const existing = new Set(db.listPresets().map((p) => p.category));
+  const toSeed = SEED_PRESETS.filter((p) => !existing.has(p.category));
+  if (toSeed.length > 0) {
+    for (const p of toSeed) db.createPreset(p);
+    const categories = [...new Set(toSeed.map((p) => p.category))].join(", ");
+    console.log(
+      `[presets] 初期プリセット ${toSeed.length} 件を投入しました(カテゴリ: ${categories})`
+    );
+  }
 }
 
 serve({ fetch: app.fetch, port: PORT }, (info) => {

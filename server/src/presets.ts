@@ -6,6 +6,7 @@ export const CATEGORY_LABELS: Record<string, string> = {
   instrument: "楽器",
   mood: "ムード",
   tempo: "テンポ",
+  vocal: "歌声",
 };
 
 export const SEED_PRESETS: {
@@ -57,4 +58,26 @@ export const SEED_PRESETS: {
   { category: "tempo", value: "mid-tempo", labelJa: "ミッドテンポ" },
   { category: "tempo", value: "uptempo", labelJa: "アップテンポ" },
   { category: "tempo", value: "driving beat", labelJa: "疾走感のあるビート" },
+
+  // 歌声(性別 × 声質 × 年齢感 + アンサンブル・特殊系で広い声色をカバーする)
+  { category: "vocal", value: "clear bright female vocals", labelJa: "透明感のある女性ボーカル" },
+  { category: "vocal", value: "sweet breathy female vocals", labelJa: "甘く息づかいのある女性ボーカル" },
+  { category: "vocal", value: "powerful soulful female vocals", labelJa: "パワフルでソウルフルな女性ボーカル" },
+  { category: "vocal", value: "husky smoky female vocals", labelJa: "ハスキーでスモーキーな女性ボーカル" },
+  { category: "vocal", value: "deep mature female vocals", labelJa: "低く落ち着いた大人の女性ボーカル" },
+  { category: "vocal", value: "youthful cute female vocals", labelJa: "若くかわいらしい女性ボーカル" },
+  { category: "vocal", value: "ethereal airy female vocals", labelJa: "幻想的で浮遊感のある女性ボーカル" },
+  { category: "vocal", value: "operatic soprano vocals", labelJa: "オペラ風ソプラノ" },
+  { category: "vocal", value: "warm baritone male vocals", labelJa: "温かいバリトンの男性ボーカル" },
+  { category: "vocal", value: "deep gravelly male vocals", labelJa: "低くしゃがれた男性ボーカル" },
+  { category: "vocal", value: "smooth tenor male vocals", labelJa: "なめらかなテノールの男性ボーカル" },
+  { category: "vocal", value: "raspy rock male vocals", labelJa: "かすれ声のロック男性ボーカル" },
+  { category: "vocal", value: "gentle falsetto male vocals", labelJa: "優しいファルセットの男性ボーカル" },
+  { category: "vocal", value: "youthful energetic male vocals", labelJa: "若く元気な男性ボーカル" },
+  { category: "vocal", value: "soulful R&B male vocals", labelJa: "ソウルフルな R&B 男性ボーカル" },
+  { category: "vocal", value: "male and female duet vocals", labelJa: "男女デュエット" },
+  { category: "vocal", value: "gospel choir harmonies", labelJa: "ゴスペル聖歌隊のハーモニー" },
+  { category: "vocal", value: "children's choir", labelJa: "子どもの合唱" },
+  { category: "vocal", value: "whispered delicate vocals", labelJa: "ささやくような繊細なボーカル" },
+  { category: "vocal", value: "robotic vocoder vocals", labelJa: "ロボット風ボコーダーボーカル" },
 ];

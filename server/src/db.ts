@@ -401,13 +401,6 @@ export function getPreset(id: number): PresetRow | undefined {
     | undefined;
 }
 
-export function countPresets(): number {
-  const row = db.prepare(`SELECT COUNT(*) AS n FROM presets`).get() as {
-    n: number;
-  };
-  return row.n;
-}
-
 // (category, value) の UNIQUE 違反は SQLite の例外をそのまま投げる(API 層で 409 にする)
 export function createPreset(input: {
   category: string;

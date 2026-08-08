@@ -164,9 +164,15 @@ export function buildSongPlanPrompt(input: SongPlanInput, limits: WordLimits): s
   }
   // realWorldWords の出力指示はスキーマの description で行う(ここに書くと LLM 入力全文の
   // 表示にプロンプト指示文が混ざり、具体的なワードと紛らわしいため)
-  sections.push(
-    `## 出力条件\n- インストゥルメンタル: ${input.instrumental ? "はい(lyrics / lyricsJa は空文字列)" : "いいえ(歌詞を書く)"}`
-  );
+  const conditions = [
+    `- インストゥルメンタル: ${input.instrumental ? "はい(lyrics / lyricsJa は空文字列)" : "いいえ(歌詞を書く)"}`,
+  ];
+  if (!input.instrumental) {
+    conditions.push(
+      "- 歌声: style に歌手の声の特徴(性別・声質・年齢感。vocal カテゴリの要素を参考に)を必ず含める。直近の生成スタイルと歌声が偏らないよう、幅広い声色を試すこと"
+    );
+  }
+  sections.push(`## 出力条件\n${conditions.join("\n")}`);
 
   return sections.join("\n\n");
 }
