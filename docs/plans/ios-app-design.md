@@ -13,13 +13,28 @@ iOS は一覧表示に必要な最小フィールドしか使っておらず、�
 
 アイコンからの実測値: 音符 = `#B4BA40`(オリーブライム)、背景 = `#FDF2E5`(クリーム)。
 
+(色チップは vibeboard で表示可。GitHub 上ではチップが消え hex 文字列のみになる)
+
 | トークン | ライト | ダーク | 用途 |
 |---|---|---|---|
-| `AccentColor` | `#B4BA40` | `#C4C963`(少し明るく) | ティント全般(タブ・ボタン・再生中表示・評価 ON) |
-| `AppBackground` | `#FDF2E5` | `#1C1B16`(暖色系ダーク) | 画面背景 |
-| `CardBackground` | `#FFFFFF`(または `#FFF9F0`) | `#2A2822` | カード・リスト行の面 |
-| `AccentDeep` | `#787D2B`(アクセントの暗色) | `#C4C963` | 明るい面の上の文字・小さい図形(`#B4BA40` は白系背景とのコントラストが弱いため文字には使わない) |
+| `AccentColor` | <span style="display:inline-block;width:14px;height:14px;border-radius:3px;border:1px solid rgba(128,128,128,.5);vertical-align:-2px;background:#B4BA40"></span> `#B4BA40` | <span style="display:inline-block;width:14px;height:14px;border-radius:3px;border:1px solid rgba(128,128,128,.5);vertical-align:-2px;background:#C4C963"></span> `#C4C963`(少し明るく) | ティント全般(タブ・ボタン・再生中表示・評価 ON) |
+| `AppBackground` | <span style="display:inline-block;width:14px;height:14px;border-radius:3px;border:1px solid rgba(128,128,128,.5);vertical-align:-2px;background:#FDF2E5"></span> `#FDF2E5` | <span style="display:inline-block;width:14px;height:14px;border-radius:3px;border:1px solid rgba(128,128,128,.5);vertical-align:-2px;background:#1C1B16"></span> `#1C1B16`(暖色系ダーク) | 画面背景 |
+| `CardBackground` | <span style="display:inline-block;width:14px;height:14px;border-radius:3px;border:1px solid rgba(128,128,128,.5);vertical-align:-2px;background:#FFFFFF"></span> `#FFFFFF`(または <span style="display:inline-block;width:14px;height:14px;border-radius:3px;border:1px solid rgba(128,128,128,.5);vertical-align:-2px;background:#FFF9F0"></span> `#FFF9F0`) | <span style="display:inline-block;width:14px;height:14px;border-radius:3px;border:1px solid rgba(128,128,128,.5);vertical-align:-2px;background:#2A2822"></span> `#2A2822` | カード・リスト行の面 |
+| `AccentDeep` | <span style="display:inline-block;width:14px;height:14px;border-radius:3px;border:1px solid rgba(128,128,128,.5);vertical-align:-2px;background:#787D2B"></span> `#787D2B`(アクセントの暗色) | <span style="display:inline-block;width:14px;height:14px;border-radius:3px;border:1px solid rgba(128,128,128,.5);vertical-align:-2px;background:#C4C963"></span> `#C4C963` | 明るい面の上の文字・小さい図形(`#B4BA40` は白系背景とのコントラストが弱いため文字には使わない) |
 | テキスト | `.primary` / `.secondary` 標準 | 同左 | 本文・補足 |
+
+組み合わせプレビュー(AppBackground の上に CardBackground の面、AccentColor のチップ、AccentDeep の文字):
+
+<table><tr>
+<td style="background:#FDF2E5;padding:16px;border-radius:12px;min-width:240px">
+<div style="background:#FFFFFF;border-radius:10px;padding:10px 14px;box-shadow:0 1px 3px rgba(0,0,0,.08)"><span style="display:inline-block;width:32px;height:32px;border-radius:8px;background:#B4BA40;vertical-align:middle"></span> <span style="color:#787D2B;font-weight:bold">Morning Bloom</span><br><span style="color:#8a8578;font-size:12px">acoustic pop / 朝の光</span></div>
+<div style="margin-top:8px;color:#787D2B;font-size:12px">ライト</div>
+</td>
+<td style="background:#1C1B16;padding:16px;border-radius:12px;min-width:240px">
+<div style="background:#2A2822;border-radius:10px;padding:10px 14px"><span style="display:inline-block;width:32px;height:32px;border-radius:8px;background:#C4C963;vertical-align:middle"></span> <span style="color:#C4C963;font-weight:bold">Morning Bloom</span><br><span style="color:#9a968a;font-size:12px">acoustic pop / 朝の光</span></div>
+<div style="margin-top:8px;color:#C4C963;font-size:12px">ダーク</div>
+</td>
+</tr></table>
 
 - 実装は `Assets.xcassets` にカラーセット(Any/Dark)として定義し、`Theme.swift`(`Color` extension)でセマンティック名を付けて参照する
 - フォントは SF Pro のまま、見出し系に `.rounded` デザインを使いアイコンの丸さと揃える(候補。実装時に見て判断)
@@ -77,6 +92,20 @@ API が既に返している未活用データを見せる画面。
 - **案数**: 3 案程度。カラートークンは Phase 0 で定義した値(CSS 変数として同じ hex を使用)で全案共通とし、トーンを変える — 例: ①ミニマル(余白広め・面はフラット)②カード強め(角丸・影で面を立てる)③遊び強め(芝生イコライザ等のモチーフを多用)
 - **選定**: ブラウザで目視チェックして決定。決定した案(組み合わせの場合はその内容)をこのプランに追記し、Phase 2 以降の実装の基準にする
 - モックは `docs/plans/ios-app-design-mocks/` に置き、選定後も実装時の参照として残す
+
+### 決定(2026-08-08): 案A ミニマル
+
+3 案(`01-minimal.html` / `02-card.html` / `03-playful.html`、コンテンツは本番の実データ・実カバー画像)を目視チェックし、**案A ミニマル**([docs/plans/ios-app-design-mocks/01-minimal.html](ios-app-design-mocks/01-minimal.html))に決定。Phase 2 以降はこのモックを基準に実装する。
+
+案A の要点(実装基準):
+
+- 面はフラット(`AppBackground` 一色)。カード・影は使わず、区切りはヘアライン(`separator` 相当の低コントラスト線)
+- 余白広め(コンテンツ左右 22pt 目安)、タイポグラフィ主導の階層
+- アクセント色は要所のみ: 再生アイコン・再生中インジケータ(芝生イコライザ、静止)・進行バー・選択中タブ・セグメント下線
+- 文字色に使うのは `AccentDeep`(戻るリンク・行内再生ボタン・再生中行のタイトル等)
+- ピルタグ(リアルワード・冒険日)は枠線のみの控えめ表示(冒険日のみ枠線を `AccentDeep`)
+- 主要ボタン: 楽曲詳細の再生は `AccentDeep` アウトラインのピル、おまかせ生成は `AccentDeep` 塗り(ダークは `AccentColor` 塗り+暗色文字)
+- ミニプレイヤー・タブバーはフラット背景+上ヘアライン。ヒーローのカバーは角丸 14pt、行カバーは 7pt 程度
 
 ## 影響範囲
 

@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>案C 遊び — Music Plant iOS デザインモック</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans','Noto Sans JP',sans-serif;background:#e9e7e2;color:#333;padding:26px 32px 60px}
+.pagehead{max-width:1740px;margin:0 auto 6px}
+.pagehead h1{font-size:21px;margin-bottom:4px}
+.pagehead p{color:#666;font-size:13.5px;max-width:960px}
+.pagehead .links{margin-top:8px;font-size:13px}
+.pagehead .links a{color:#5a6ac0;margin-right:14px}
+.toklegend{display:flex;gap:16px;margin-top:10px;font-size:12px;color:#555;flex-wrap:wrap}
+.tok{display:inline-flex;align-items:center;gap:5px}
+.tok i{width:12px;height:12px;border-radius:3px;border:1px solid rgba(0,0,0,.15);display:inline-block}
+section{max-width:1740px;margin:24px auto 0}
+section h2{font-size:15px;color:#444;margin-bottom:10px}
+.row{display:flex;gap:30px;align-items:flex-start;overflow-x:auto;padding:4px 2px 26px}
+.slot{flex:0 0 auto}
+.cap{text-align:center;font-size:12.5px;color:#777;margin-bottom:8px}
+.frame{position:relative;width:390px;height:844px;border-radius:55px;overflow:hidden;background:var(--bg);color:var(--fg);box-shadow:0 2px 6px rgba(0,0,0,.14),0 18px 50px rgba(0,0,0,.25),inset 0 0 0 1.5px rgba(0,0,0,.14);font-size:15px;line-height:1.45}
+.frame.light{--accent:#B4BA40;--bg:#FDF2E5;--card:#FFFFFF;--deep:#787D2B;--fg:#2f2b22;--fg2:#8d8677;--sep:rgba(80,66,40,.16);--tint:rgba(180,186,64,.18);--onaccent:#FFFFFF}
+.frame.dark{--accent:#C4C963;--bg:#1C1B16;--card:#2A2822;--deep:#C4C963;--fg:#f2efe6;--fg2:#98937f;--sep:rgba(255,255,255,.13);--tint:rgba(196,201,99,.20);--onaccent:#23220F}
+.island{position:absolute;top:11px;left:50%;transform:translateX(-50%);width:122px;height:34px;border-radius:18px;background:#000;z-index:60}
+.status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 30px 4px;font-size:15px;font-weight:600;flex:none}
+.sicons svg{display:block}
+.screen{position:absolute;inset:0;display:flex;flex-direction:column}
+.content{flex:1;overflow:hidden;padding:0 18px;position:relative}
+.bottombars{position:absolute;left:0;right:0;bottom:0;z-index:40}
+.tabbar{display:flex;padding:7px 10px 24px}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:10px;color:var(--fg2)}
+.tab .ic{width:25px;height:25px;fill:currentColor}
+.tab.active{color:var(--deep)}
+.tab.active .ic{fill:var(--accent)}
+.homebar{position:absolute;bottom:9px;left:50%;transform:translateX(-50%);width:140px;height:5px;border-radius:3px;background:var(--fg);opacity:.3;z-index:70}
+.ic{width:1em;height:1em;fill:currentColor}
+button{font-family:inherit;cursor:default}
+.cov{background-size:cover;background-position:center;flex:none}
+.navlarge{font-size:30px;font-weight:800;padding:6px 0 8px;display:flex;align-items:center;justify-content:space-between;letter-spacing:.01em}
+.credits{font-size:12px;font-weight:700;color:var(--deep);background:var(--tint);padding:6px 12px;border-radius:20px}
+.sechead{font-size:13px;font-weight:700;color:var(--fg2);margin:12px 0 6px;display:flex;align-items:center;gap:8px}
+.dateb{font-weight:600;font-size:11.5px;color:var(--fg2);opacity:.85}
+.group{font-size:12.5px;font-weight:700;color:var(--fg2);margin:12px 0 2px}
+.spinner{width:19px;height:19px;border-radius:50%;border:2.5px solid var(--tint);border-top-color:var(--accent);animation:spin 1s linear infinite;flex:none}
+@keyframes spin{to{transform:rotate(360deg)}}
+.eq{display:inline-flex;align-items:flex-end;gap:2.5px;height:15px;flex:none}
+.eq i{width:3px;border-radius:1.5px;background:var(--accent)}
+.eq i:nth-child(1){height:38%}.eq i:nth-child(2){height:80%}.eq i:nth-child(3){height:55%}.eq i:nth-child(4){height:100%}.eq i:nth-child(5){height:30%}
+.rate{display:inline-flex;gap:7px}
+.rate span{filter:grayscale(1);opacity:.4;font-size:15px}
+.rate.big span{font-size:19px}
+.rate .on{filter:none;opacity:1}
+.grass{display:none}
+.jobcard{display:flex;align-items:center;gap:12px;padding:11px 13px;margin:2px 0 6px}
+.jobmain{flex:1;min-width:0}
+.jobmain b{display:block;font-size:13.5px}
+.jobmain small{display:block;color:var(--fg2);font-size:11.5px;margin-top:1px}
+.jobbar{height:4px;border-radius:2px;background:var(--sep);margin-top:7px;overflow:hidden}
+.jobbar i{display:block;height:100%;background:var(--accent);border-radius:2px}
+.hero{margin-top:2px}
+.hcover{position:relative;height:190px;overflow:hidden}
+.hscrim{position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,.38),transparent 55%)}
+.hplay{position:absolute;right:12px;bottom:12px;border:none;display:flex;align-items:center;justify-content:center}
+.hmeta{padding:11px 2px 2px}
+.htitle{font-size:20px;font-weight:800}
+.hstyle{color:var(--fg2);font-size:12.5px;margin-top:2px}
+.hpills{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.pill{font-size:10.5px;padding:3px 10px;border-radius:12px;white-space:nowrap}
+.trow{display:flex;gap:12px;align-items:center;padding:10px 0}
+.tcov{width:52px;height:52px}
+.tcov.sm{width:40px;height:40px}
+.tmain{flex:1;min-width:0}
+.tmain b{display:block;font-size:14.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tmain small{display:block;color:var(--fg2);font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin:1px 0 4px}
+.tpills{display:flex;gap:5px;overflow:hidden}
+.tacts{display:flex;flex-direction:column;align-items:center;gap:6px;min-width:40px}
+.rowplay{width:33px;height:33px;border-radius:50%;border:none;display:flex;align-items:center;justify-content:center}
+.rowplay .ic{width:17px;height:17px}
+.trow .rate span{font-size:13px}
+.mini{display:flex;align-items:center;gap:10px;padding:8px 12px}
+.mcov{width:40px;height:40px}
+.mmain{flex:1;min-width:0}
+.mmain b{display:block;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mmain small{display:block;color:var(--fg2);font-size:11px}
+.mbtn{background:none;border:none;color:var(--fg);width:32px;height:32px;display:flex;align-items:center;justify-content:center;flex:none}
+.mbtn .ic{width:21px;height:21px}
+.nav{height:42px;display:flex;align-items:center;padding:0 12px;flex:none}
+.back{display:inline-flex;align-items:center;gap:2px;color:var(--deep);font-size:15px;font-weight:500}
+.back .ic{width:19px;height:19px}
+.dcover{width:172px;height:172px;margin:4px auto 14px}
+.dtitle{font-size:20px;font-weight:800;text-align:center}
+.dsub{text-align:center;color:var(--fg2);font-size:12px;margin:3px 0 12px}
+.dctrl{display:flex;align-items:center;justify-content:center;gap:18px;margin-bottom:4px}
+.bigplay{display:inline-flex;align-items:center;gap:8px;font-size:14.5px;font-weight:700}
+.bigplay .ic{width:16px;height:16px}
+.dsec{font-size:11.5px;font-weight:700;color:var(--fg2);margin:13px 0 6px;letter-spacing:.05em;display:flex;justify-content:space-between;align-items:center}
+.dpills{display:flex;flex-wrap:wrap;gap:6px}
+.dtext{font-size:12.5px;line-height:1.6}
+.clamp2{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.morelink{font-size:12px;color:var(--deep);font-weight:600;margin-top:5px;display:flex;gap:3px;align-items:center}
+.morelink .ic{width:13px;height:13px}
+.seg{display:inline-flex;align-items:center}
+.segopt{padding:3px 12px;font-size:11.5px;color:var(--fg2);font-weight:600}
+.lyrics{white-space:pre-line;font-size:12.5px;line-height:1.65;-webkit-mask-image:linear-gradient(to bottom,#000 70%,transparent);mask-image:linear-gradient(to bottom,#000 70%,transparent)}
+.dmeta{margin-top:2px;font-size:10.5px;color:var(--fg2)}
+.sheetdim{position:absolute;inset:0;background:rgba(0,0,0,.45)}
+.sheet{position:absolute;top:24px;left:0;right:0;bottom:0;background:var(--bg);border-radius:26px 26px 0 0;padding:10px 28px 0;display:flex;flex-direction:column;align-items:center}
+.grabber{width:40px;height:5px;border-radius:3px;background:var(--fg2);opacity:.5;margin-bottom:20px;flex:none}
+.pcover{width:300px;height:300px}
+.ptitle{font-size:20px;font-weight:800;margin-top:24px;text-align:center}
+.psub{color:var(--fg2);font-size:12.5px;margin-top:3px;text-align:center}
+.seek{width:100%;margin-top:24px}
+.sbar{height:6px;border-radius:3px;background:var(--sep);overflow:hidden}
+.sbar i{display:block;height:100%;background:var(--accent);border-radius:3px}
+.stime{display:flex;justify-content:space-between;font-size:11px;color:var(--fg2);margin-top:6px}
+.pctrl{display:flex;align-items:center;gap:46px;margin-top:24px}
+.pbtn{background:none;border:none;color:var(--fg);display:flex}
+.pbtn .ic{width:30px;height:30px}
+.pmain{display:flex;align-items:center;justify-content:center;border:none}
+.psec{display:flex;align-items:center;gap:28px;margin-top:24px}
+.plink{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:700;color:var(--deep);background:none;border:none}
+.plink .ic{width:16px;height:16px}
+.genhero{text-align:center;padding:24px 18px;position:relative;overflow:hidden;margin-top:2px}
+.gicon .ic{width:38px;height:38px;fill:var(--accent)}
+.gtitle{font-size:20px;font-weight:800;margin-top:6px}
+.gdesc{font-size:12.5px;color:var(--fg2);margin:6px auto 14px;max-width:280px;line-height:1.55}
+.gbtn{font-size:15px;font-weight:700;padding:12px 36px;border-radius:26px;border:none;position:relative;z-index:2}
+.customrow{display:flex;align-items:center;gap:8px;padding:13px 15px;margin-top:12px;color:var(--fg2)}
+.customrow .ic{width:15px;height:15px}
+.crmain{flex:1}
+.crmain b{display:block;font-size:14px;color:var(--fg)}
+.crmain small{font-size:11.5px}
+.task{display:flex;align-items:center;gap:12px;padding:10px 2px}
+.tick{width:22px;height:22px;border-radius:50%;background:var(--tint);color:var(--deep);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;flex:none}
+.taskmain{flex:1;min-width:0}
+.taskmain b{display:block;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.taskmain small{display:block;color:var(--fg2);font-size:11.5px;margin-top:1px}
+
+.frame{font-family:ui-rounded,'SF Pro Rounded','Hiragino Maru Gothic ProN','Hiragino Sans',sans-serif}
+.navlarge,.htitle,.dtitle,.ptitle,.gtitle{font-weight:900}
+.grass{display:block;color:var(--accent);fill:currentColor}
+.g-tab{height:13px;width:100%;opacity:.95;margin-bottom:-3px}
+.g-hero{position:absolute;left:0;right:0;bottom:-2px;height:16px;opacity:.55}
+.g-player{width:190px;height:14px;margin-top:16px}
+.eq i{animation:eqb .9s ease-in-out infinite alternate}
+.eq i:nth-child(1){animation-delay:.05s}.eq i:nth-child(2){animation-delay:.32s}.eq i:nth-child(3){animation-delay:.6s}.eq i:nth-child(4){animation-delay:.18s}.eq i:nth-child(5){animation-delay:.45s}
+@keyframes eqb{from{height:22%}to{height:100%}}
+.jobcard{background:var(--tint);border-radius:18px}
+.hcover{border-radius:22px;transform:rotate(-1.6deg);border:5px solid var(--card);box-shadow:0 10px 24px rgba(0,0,0,.15);margin:6px 2px 0}
+.hscrim{display:none}
+.hplay{width:52px;height:52px;border-radius:50%;background:var(--accent);color:var(--onaccent);border:4px solid var(--card)}
+.hplay .ic{width:21px;height:21px}
+.hmeta{padding-top:13px}
+.pill{background:var(--tint);color:var(--deep);font-weight:700}
+.pill.adv{background:var(--accent);color:var(--onaccent)}
+.tcov{width:54px;height:54px;border-radius:16px}
+.trow.playing{background:var(--tint);border-radius:18px;padding:9px 10px;margin:0 -10px}
+.trow.playing b{color:var(--deep)}
+.rowplay{background:var(--tint);color:var(--deep)}
+.mini{background:var(--card);margin:0 10px 8px;border-radius:24px;box-shadow:0 6px 18px rgba(0,0,0,.15)}
+.bottombars{background:linear-gradient(to top,var(--bg) 58%,transparent)}
+.tabbar{padding-top:2px}
+.tab.active .ic{background:var(--tint);border-radius:10px;width:40px;height:27px;padding:2px 9px}
+.dcover{border-radius:24px;transform:rotate(1.4deg);border:6px solid var(--card);box-shadow:0 10px 26px rgba(0,0,0,.17)}
+.bigplay{background:var(--accent);color:var(--onaccent);border:none;border-radius:28px;padding:12px 32px;font-weight:800;box-shadow:0 5px 0 rgba(110,115,40,.38)}
+.seg{background:var(--tint);border-radius:20px;padding:3px}
+.segopt.on{background:var(--accent);color:var(--onaccent);border-radius:16px}
+.lyrics{background:var(--card);border-radius:18px;padding:13px 16px;-webkit-mask-image:none;mask-image:none;max-height:128px;overflow:hidden}
+.dmeta{margin-bottom:28px}
+.pcover{border-radius:28px;border:7px solid var(--card);box-shadow:0 14px 34px rgba(0,0,0,.28);transform:rotate(-1.2deg)}
+.ptitle{margin-top:14px}
+.sbar{height:10px;border-radius:5px}
+.pmain{width:78px;height:78px;border-radius:50%;background:var(--accent);color:var(--onaccent);box-shadow:0 7px 0 rgba(110,115,40,.4)}
+.pmain .ic{width:33px;height:33px}
+.genhero{background:var(--card);border-radius:24px;padding-bottom:38px;box-shadow:0 4px 16px rgba(96,74,28,.10)}
+.frame.dark .genhero{box-shadow:0 6px 18px rgba(0,0,0,.45)}
+.gbtn{background:var(--accent);color:var(--onaccent);border-radius:28px;font-weight:800;box-shadow:0 5px 0 rgba(110,115,40,.38)}
+.customrow{background:var(--card);border-radius:18px}
+.tick{background:var(--accent);color:var(--onaccent)}
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute">
+<defs>
+<symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.1v13.8c0 .8.9 1.3 1.6.9l10.4-6.9c.6-.4.6-1.4 0-1.8L9.6 4.2c-.7-.4-1.6.1-1.6.9z"/></symbol>
+<symbol id="i-pause" viewBox="0 0 24 24"><rect x="6" y="5" width="4.2" height="14" rx="1.6"/><rect x="13.8" y="5" width="4.2" height="14" rx="1.6"/></symbol>
+<symbol id="i-next" viewBox="0 0 24 24"><path d="M4 6.3v11.4c0 .9 1 1.4 1.7.9l8.3-5.7c.6-.4.6-1.4 0-1.8L5.7 5.4C5 4.9 4 5.4 4 6.3z"/><rect x="16.6" y="5" width="2.8" height="14" rx="1.3"/></symbol>
+<symbol id="i-prev" viewBox="0 0 24 24"><path d="M20 6.3v11.4c0 .9-1 1.4-1.7.9L10 12.9c-.6-.4-.6-1.4 0-1.8l8.3-5.7c.7-.5 1.7 0 1.7.9z"/><rect x="4.6" y="5" width="2.8" height="14" rx="1.3"/></symbol>
+<symbol id="i-note" viewBox="0 0 24 24"><path d="M9.2 19.2c0 1.7-1.5 2.8-3.3 2.8-1.7 0-3.2-1-3.2-2.4 0-1.5 1.5-2.6 3.2-2.6.5 0 .9.1 1.3.2V6.1c0-.6.4-1.1 1-1.3l9.5-2.6c.9-.2 1.7.4 1.7 1.3v12c0 1.7-1.5 2.8-3.3 2.8-1.7 0-3.2-1-3.2-2.4 0-1.5 1.5-2.6 3.2-2.6.5 0 1 .1 1.3.2V6.3L9.2 8.4v10.8z"/></symbol>
+<symbol id="i-spark" viewBox="0 0 24 24"><path d="M11 2l1.7 5.6L18.3 9.3l-5.6 1.7L11 16.6 9.3 11 3.7 9.3 9.3 7.6 11 2z"/><path d="M18.5 14l1 3 3 1-3 1-1 3-1-3-3-1 3-1 1-3z"/></symbol>
+<symbol id="i-gear" viewBox="0 0 24 24"><path d="M12 8.2A3.8 3.8 0 1 0 12 15.8 3.8 3.8 0 0 0 12 8.2zm9.5 5.3v-3l-2.7-.7a7 7 0 0 0-.7-1.7l1.5-2.4-2.2-2.2-2.4 1.5c-.5-.3-1.1-.5-1.7-.7L12.6 1.7h-3L8.9 4.4c-.6.2-1.2.4-1.7.7L4.8 3.6 2.6 5.8 4 8.2c-.3.5-.5 1.1-.7 1.7l-2.7.7v3l2.7.7c.2.6.4 1.2.7 1.7l-1.5 2.4 2.2 2.2 2.4-1.5c.5.3 1.1.5 1.7.7l.7 2.7h3l.7-2.7c.6-.2 1.2-.4 1.7-.7l2.4 1.5 2.2-2.2-1.5-2.4c.3-.5.5-1.1.7-1.7l2.7-.7z"/></symbol>
+<symbol id="i-chev-l" viewBox="0 0 24 24"><path d="M14.7 4.3a1 1 0 0 1 0 1.4L8.4 12l6.3 6.3a1 1 0 1 1-1.4 1.4l-7-7a1 1 0 0 1 0-1.4l7-7a1 1 0 0 1 1.4 0z"/></symbol>
+<symbol id="i-chev-r" viewBox="0 0 24 24"><path d="M9.3 4.3a1 1 0 0 0 0 1.4l6.3 6.3-6.3 6.3a1 1 0 1 0 1.4 1.4l7-7a1 1 0 0 0 0-1.4l-7-7a1 1 0 0 0-1.4 0z"/></symbol>
+<symbol id="i-chev-d" viewBox="0 0 24 24"><path d="M4.3 9.3a1 1 0 0 1 1.4 0L12 15.6l6.3-6.3a1 1 0 1 1 1.4 1.4l-7 7a1 1 0 0 1-1.4 0l-7-7a1 1 0 0 1 0-1.4z"/></symbol>
+</defs>
+</svg>
+
+<div class="pagehead">
+<h1>案C 遊び</h1>
+<p>丸ゴシック系フォント+芝生イコライザのモチーフを多用。カバーは白フチ付きで少し傾け、再生インジケータと芝生はアニメーション。 カラートークンは 3 案共通(Phase 0 の値)。コンテンツは本番の実データ。</p>
+<div class="links"><a href="01-minimal.html">案A ミニマル →</a> <a href="02-card.html">案B カード →</a></div>
+<div class="toklegend">
+<span class="tok"><i style="background:#B4BA40"></i>AccentColor L</span>
+<span class="tok"><i style="background:#C4C963"></i>AccentColor D</span>
+<span class="tok"><i style="background:#FDF2E5"></i>AppBackground L</span>
+<span class="tok"><i style="background:#1C1B16"></i>AppBackground D</span>
+<span class="tok"><i style="background:#FFFFFF"></i>CardBackground L</span>
+<span class="tok"><i style="background:#2A2822"></i>CardBackground D</span>
+<span class="tok"><i style="background:#787D2B"></i>AccentDeep L</span>
+</div>
+</div>
+<section id="light"><h2>ライト</h2><div class="row">
+<div class="slot"><div class="cap">ライブラリ(ホーム)</div>
+<div class="frame light"><div class="screen s-lib">
+  <div class="status"><span>9:41</span><span class="sicons"><svg width="62" height="13" viewBox="0 0 62 13" fill="currentColor"><rect x="0" y="7" width="3" height="5" rx="1"/><rect x="5" y="5" width="3" height="7" rx="1"/><rect x="10" y="3" width="3" height="9" rx="1"/><rect x="15" y="1" width="3" height="11" rx="1"/><path d="M25.5 9.2a6.5 6.5 0 0 1 8 0l-1.6 2a4 4 0 0 0-4.8 0z"/><path d="M23 6a10 10 0 0 1 13 0l-1.5 1.9a7.6 7.6 0 0 0-10 0z" opacity=".85"/><circle cx="29.5" cy="12" r="1.4"/><rect x="42" y="1.5" width="16" height="10" rx="3" fill="none" stroke="currentColor" opacity=".45" stroke-width="1.2"/><rect x="44" y="3.5" width="10" height="6" rx="1.5"/><rect x="59.3" y="4.6" width="1.8" height="3.6" rx=".9" opacity=".45"/></svg></span></div>
+  <div class="content">
+    <div class="navlarge">ライブラリ</div>
+    <div class="jobcard"><span class="spinner"></span>
+      <div class="jobmain"><b>生成中 · おまかせ生成</b><small>Suno で音源を生成しています… 3:12</small>
+        <div class="jobbar"><i style="width:62%"></i></div></div>
+    </div>
+    <div class="sechead">今日の一曲<span class="dateb">8月8日(金)</span></div>
+    <div class="hero">
+      <div class="hcover cov" style="background-image:url(covers/fog.jpeg)">
+        <div class="hscrim"></div>
+        <button class="hplay"><svg class="ic"><use href="#i-play"/></svg></button>
+      </div>
+      <div class="hmeta">
+        <div class="htitle">Where the Fog Keeps Watch</div>
+        <div class="hstyle">内省的なピアノバラード × 弦楽四重奏 · 68BPM</div>
+        <div class="hpills"><span class="pill">fog</span><span class="pill">waiting</span><span class="pill">strings</span><span class="pill">reunion</span></div>
+      </div>
+    </div>
+    <div class="group">今日</div>
+    <div class="trow">
+      <div class="tcov cov" style="background-image:url(covers/storm.jpeg)"></div>
+      <div class="tmain"><b>Storm Curfew</b><small>ディープハウス × ネオンシンセウェイブ · 122BPM</small>
+        <div class="tpills"><span class="pill adv">冒険日</span><span class="pill">storm</span><span class="pill">neon pulse</span></div></div>
+      <div class="tacts"><button class="rowplay"><svg class="ic"><use href="#i-play"/></svg></button><span class="rate"><span>👍</span><span>👎</span></span></div>
+    </div>
+    <div class="trow playing">
+      <div class="tcov cov" style="background-image:url(covers/fog.jpeg)"></div>
+      <div class="tmain"><b>Where the Fog Keeps Watch</b><small>内省的なピアノバラード × 弦楽四重奏</small>
+        <div class="tpills"><span class="pill">fog</span><span class="pill">waiting</span></div></div>
+      <div class="tacts"><span class="eq"><i></i><i></i><i></i><i></i><i></i></span><span class="rate"><span>👍</span><span>👎</span></span></div>
+    </div>
+    <div class="group">昨日</div>
+    <div class="trow">
+      <div class="tcov cov" style="background-image:url(covers/midnight.jpeg)"></div>
+      <div class="tmain"><b>Quarter Past Midnight</b><small>ピアノバラード · 雨音のような静けさ</small>
+        <div class="tpills"><span class="pill">midnight</span><span class="pill">rain</span></div></div>
+      <div class="tacts"><button class="rowplay"><svg class="ic"><use href="#i-play"/></svg></button><span class="rate"><span>👍</span><span>👎</span></span></div>
+    </div>
+    <div class="trow">
+      <div class="tcov cov" style="background-image:url(covers/keys.jpeg)"></div>
+      <div class="tmain"><b>Keys to an Empty Room</b><small>カスタム生成</small>
+        <div class="tpills"></div></div>
+      <div class="tacts"><button class="rowplay"><svg class="ic"><use href="#i-play"/></svg></button><span class="rate"><span class="on">👍</span><span>👎</span></span></div>
+    </div>
+    <div class="trow">
+      <div class="tcov cov" style="background-image:url(covers/sunlit.jpeg)"></div>
+      <div class="tmain"><b>Sunlit Window</b><small>カスタム生成</small><div class="tpills"></div></div>
+      <div class="tacts"><button class="rowplay"><svg class="ic"><use href="#i-play"/></svg></button><span class="rate"><span>👍</span><span>👎</span></span></div>
+    </div>
+  </div>
+  <div class="bottombars">
+    <div class="mini">
+      <div class="mcov cov" style="background-image:url(covers/fog.jpeg)"></div>
+      <div class="mmain"><b>Where the Fog Keeps Watch</b><small>ピアノバラード</small></div>
+      <span class="eq"><i></i><i></i><i></i><i></i><i></i></span>
+      <button class="mbtn"><svg class="ic"><use href="#i-pause"/></svg></button>
+      <button class="mbtn"><svg class="ic"><use href="#i-next"/></svg></button>
+    </div>
+    <svg class="grass g-tab" viewBox="0 0 385 26" preserveAspectRatio="none"><rect x="1" y="16" width="4.5" height="10" rx="2.2"/><rect x="9" y="10" width="4.5" height="16" rx="2.2"/><rect x="17" y="19" width="4.5" height="7" rx="2.2"/><rect x="25" y="6" width="4.5" height="20" rx="2.2"/><rect x="33" y="14" width="4.5" height="12" rx="2.2"/><rect x="41" y="18" width="4.5" height="8" rx="2.2"/><rect x="49" y="8" width="4.5" height="18" rx="2.2"/><rect x="57" y="16" width="4.5" height="10" rx="2.2"/><rect x="65" y="4" width="4.5" height="22" rx="2.2"/><rect x="73" y="12" width="4.5" height="14" rx="2.2"/><rect x="81" y="17" width="4.5" height="9" rx="2.2"/><rect x="89" y="9" width="4.5" height="17" rx="2.2"/><rect x="97" y="15" width="4.5" height="11" rx="2.2"/><rect x="105" y="20" width="4.5" height="6" rx="2.2"/><rect x="113" y="7" width="4.5" height="19" rx="2.2"/><rect x="121" y="13" width="4.5" height="13" rx="2.2"/><rect x="129" y="18" width="4.5" height="8" rx="2.2"/><rect x="137" y="5" width="4.5" height="21" rx="2.2"/><rect x="145" y="16" width="4.5" height="10" rx="2.2"/><rect x="153" y="11" width="4.5" height="15" rx="2.2"/><rect x="161" y="19" width="4.5" height="7" rx="2.2"/><rect x="169" y="8" width="4.5" height="18" rx="2.2"/><rect x="177" y="14" width="4.5" height="12" rx="2.2"/><rect x="185" y="17" width="4.5" height="9" rx="2.2"/><rect x="193" y="6" width="4.5" height="20" rx="2.2"/><rect x="201" y="15" width="4.5" height="11" rx="2.2"/><rect x="209" y="10" width="4.5" height="16" rx="2.2"/><rect x="217" y="18" width="4.5" height="8" rx="2.2"/><rect x="225" y="12" width="4.5" height="14" rx="2.2"/><rect x="233" y="4" width="4.5" height="22" rx="2.2"/><rect x="241" y="16" width="4.5" height="10" rx="2.2"/><rect x="249" y="9" width="4.5" height="17" rx="2.2"/><rect x="257" y="19" width="4.5" height="7" rx="2.2"/><rect x="265" y="13" width="4.5" height="13" rx="2.2"/><rect x="273" y="7" width="4.5" height="19" rx="2.2"/><rect x="281" y="17" width="4.5" height="9" rx="2.2"/><rect x="289" y="11" width="4.5" height="15" rx="2.2"/><rect x="297" y="15" width="4.5" height="11" rx="2.2"/><rect x="305" y="6" width="4.5" height="20" rx="2.2"/><rect x="313" y="18" width="4.5" height="8" rx="2.2"/><rect x="321" y="10" width="4.5" height="16" rx="2.2"/><rect x="329" y="14" width="4.5" height="12" rx="2.2"/><rect x="337" y="8" width="4.5" height="18" rx="2.2"/><rect x="345" y="19" width="4.5" height="7" rx="2.2"/><rect x="353" y="12" width="4.5" height="14" rx="2.2"/><rect x="361" y="16" width="4.5" height="10" rx="2.2"/><rect x="369" y="5" width="4.5" height="21" rx="2.2"/><rect x="377" y="17" width="4.5" height="9" rx="2.2"/></svg>
+    <div class="tabbar">
+      <div class="tab active"><svg class="ic"><use href="#i-note"/></svg><span>ライブラリ</span></div>
+      <div class="tab"><svg class="ic"><use href="#i-spark"/></svg><span>生成</span></div>
+      <div class="tab"><svg class="ic"><use href="#i-gear"/></svg><span>設定</span></div>
+    </div>
+  </div>
+  <div class="island"></div><div class="homebar"></div>
+</div></div>
+</div>
+<div class="slot"><div class="cap">楽曲詳細</div>
+<div class="frame light"><div class="screen s-detail">
+  <div class="status"><span>9:41</span><span class="sicons"><svg width="62" height="13" viewBox="0 0 62 13" fill="currentColor"><rect x="0" y="7" width="3" height="5" rx="1"/><rect x="5" y="5" width="3" height="7" rx="1"/><rect x="10" y="3" width="3" height="9" rx="1"/><rect x="15" y="1" width="3" height="11" rx="1"/><path d="M25.5 9.2a6.5 6.5 0 0 1 8 0l-1.6 2a4 4 0 0 0-4.8 0z"/><path d="M23 6a10 10 0 0 1 13 0l-1.5 1.9a7.6 7.6 0 0 0-10 0z" opacity=".85"/><circle cx="29.5" cy="12" r="1.4"/><rect x="42" y="1.5" width="16" height="10" rx="3" fill="none" stroke="currentColor" opacity=".45" stroke-width="1.2"/><rect x="44" y="3.5" width="10" height="6" rx="1.5"/><rect x="59.3" y="4.6" width="1.8" height="3.6" rx=".9" opacity=".45"/></svg></span></div>
+  <div class="nav"><span class="back"><svg class="ic"><use href="#i-chev-l"/></svg>ライブラリ</span></div>
+  <div class="content">
+    <div class="dcover cov" style="background-image:url(covers/fog.jpeg)"></div>
+    <div class="dtitle">Where the Fog Keeps Watch</div>
+    <div class="dsub">2026年8月8日 · 今日の一曲 · daily</div>
+    <div class="dctrl"><button class="bigplay"><svg class="ic"><use href="#i-play"/></svg>再生</button><span class="rate big"><span>👍</span><span>👎</span></span></div>
+    <div class="dsec">リアルワード</div>
+    <div class="dpills"><span class="pill">fog</span><span class="pill">storm</span><span class="pill">waiting</span><span class="pill">reunion</span><span class="pill">strings</span><span class="pill">+3</span></div>
+    <div class="dsec">狙い</div>
+    <p class="dtext clamp2">今日の霧の天気と、長い年月を経て叶わなかった再会のニュースから着想を得て、待ち続けることの静かな強さを描いた。</p>
+    <div class="dsec">スタイル</div>
+    <p class="dtext clamp2">スローで内省的なピアノバラード。アコースティックグランドピアノのソロにソフトなサステインペダル、クローズマイクで録られた息づかいの繊細な女性アルトボーカル。静かな弦楽四重奏が2番の背後で盛り上がる。</p>
+    <div class="morelink">原文スタイルを表示<svg class="ic"><use href="#i-chev-d"/></svg></div>
+    <div class="dsec">歌詞<span class="seg"><span class="segopt">English</span><span class="segopt on">日本語</span></span></div>
+    <div class="lyrics">[Verse 1]
+窓に立つ霧、ガラスに触れる吐息
+数字の合間にあなたの名をなぞる
+十四度の気温と灯る玄関灯
+二度と来ない足音を待っている
+
+[Chorus]
+外の嵐のためにドアを開けておこう
+雷にも待つことを教えてあげよう</div>
+    <div class="dmeta">2026-08-08 06:00 生成 · daily · Suno V5 · claude-sonnet-5</div>
+  </div>
+  <div class="island"></div><div class="homebar"></div>
+</div></div>
+</div>
+<div class="slot"><div class="cap">フルプレイヤー</div>
+<div class="frame light"><div class="screen s-player">
+  <div class="sheetdim"></div>
+  <div class="sheet">
+    <div class="grabber"></div>
+    <div class="pcover cov" style="background-image:url(covers/fog.jpeg)"></div>
+    <svg class="grass g-player" viewBox="0 0 385 26" preserveAspectRatio="none"><rect x="1" y="16" width="4.5" height="10" rx="2.2"/><rect x="9" y="10" width="4.5" height="16" rx="2.2"/><rect x="17" y="19" width="4.5" height="7" rx="2.2"/><rect x="25" y="6" width="4.5" height="20" rx="2.2"/><rect x="33" y="14" width="4.5" height="12" rx="2.2"/><rect x="41" y="18" width="4.5" height="8" rx="2.2"/><rect x="49" y="8" width="4.5" height="18" rx="2.2"/><rect x="57" y="16" width="4.5" height="10" rx="2.2"/><rect x="65" y="4" width="4.5" height="22" rx="2.2"/><rect x="73" y="12" width="4.5" height="14" rx="2.2"/><rect x="81" y="17" width="4.5" height="9" rx="2.2"/><rect x="89" y="9" width="4.5" height="17" rx="2.2"/><rect x="97" y="15" width="4.5" height="11" rx="2.2"/><rect x="105" y="20" width="4.5" height="6" rx="2.2"/><rect x="113" y="7" width="4.5" height="19" rx="2.2"/><rect x="121" y="13" width="4.5" height="13" rx="2.2"/><rect x="129" y="18" width="4.5" height="8" rx="2.2"/><rect x="137" y="5" width="4.5" height="21" rx="2.2"/><rect x="145" y="16" width="4.5" height="10" rx="2.2"/><rect x="153" y="11" width="4.5" height="15" rx="2.2"/><rect x="161" y="19" width="4.5" height="7" rx="2.2"/><rect x="169" y="8" width="4.5" height="18" rx="2.2"/><rect x="177" y="14" width="4.5" height="12" rx="2.2"/><rect x="185" y="17" width="4.5" height="9" rx="2.2"/><rect x="193" y="6" width="4.5" height="20" rx="2.2"/><rect x="201" y="15" width="4.5" height="11" rx="2.2"/><rect x="209" y="10" width="4.5" height="16" rx="2.2"/><rect x="217" y="18" width="4.5" height="8" rx="2.2"/><rect x="225" y="12" width="4.5" height="14" rx="2.2"/><rect x="233" y="4" width="4.5" height="22" rx="2.2"/><rect x="241" y="16" width="4.5" height="10" rx="2.2"/><rect x="249" y="9" width="4.5" height="17" rx="2.2"/><rect x="257" y="19" width="4.5" height="7" rx="2.2"/><rect x="265" y="13" width="4.5" height="13" rx="2.2"/><rect x="273" y="7" width="4.5" height="19" rx="2.2"/><rect x="281" y="17" width="4.5" height="9" rx="2.2"/><rect x="289" y="11" width="4.5" height="15" rx="2.2"/><rect x="297" y="15" width="4.5" height="11" rx="2.2"/><rect x="305" y="6" width="4.5" height="20" rx="2.2"/><rect x="313" y="18" width="4.5" height="8" rx="2.2"/><rect x="321" y="10" width="4.5" height="16" rx="2.2"/><rect x="329" y="14" width="4.5" height="12" rx="2.2"/><rect x="337" y="8" width="4.5" height="18" rx="2.2"/><rect x="345" y="19" width="4.5" height="7" rx="2.2"/><rect x="353" y="12" width="4.5" height="14" rx="2.2"/><rect x="361" y="16" width="4.5" height="10" rx="2.2"/><rect x="369" y="5" width="4.5" height="21" rx="2.2"/><rect x="377" y="17" width="4.5" height="9" rx="2.2"/></svg>
+    <div class="ptitle">Where the Fog Keeps Watch</div>
+    <div class="psub">内省的なピアノバラード × 弦楽四重奏</div>
+    <div class="seek"><div class="sbar"><i style="width:38%"></i></div>
+      <div class="stime"><span>1:12</span><span>-2:00</span></div></div>
+    <div class="pctrl">
+      <button class="pbtn"><svg class="ic"><use href="#i-prev"/></svg></button>
+      <button class="pmain"><svg class="ic"><use href="#i-pause"/></svg></button>
+      <button class="pbtn"><svg class="ic"><use href="#i-next"/></svg></button>
+    </div>
+    <div class="psec"><button class="plink"><svg class="ic"><use href="#i-note"/></svg>歌詞</button><span class="rate big"><span>👍</span><span>👎</span></span></div>
+  </div>
+  <div class="island"></div><div class="homebar"></div>
+</div></div>
+</div>
+<div class="slot"><div class="cap">生成</div>
+<div class="frame light"><div class="screen s-gen">
+  <div class="status"><span>9:41</span><span class="sicons"><svg width="62" height="13" viewBox="0 0 62 13" fill="currentColor"><rect x="0" y="7" width="3" height="5" rx="1"/><rect x="5" y="5" width="3" height="7" rx="1"/><rect x="10" y="3" width="3" height="9" rx="1"/><rect x="15" y="1" width="3" height="11" rx="1"/><path d="M25.5 9.2a6.5 6.5 0 0 1 8 0l-1.6 2a4 4 0 0 0-4.8 0z"/><path d="M23 6a10 10 0 0 1 13 0l-1.5 1.9a7.6 7.6 0 0 0-10 0z" opacity=".85"/><circle cx="29.5" cy="12" r="1.4"/><rect x="42" y="1.5" width="16" height="10" rx="3" fill="none" stroke="currentColor" opacity=".45" stroke-width="1.2"/><rect x="44" y="3.5" width="10" height="6" rx="1.5"/><rect x="59.3" y="4.6" width="1.8" height="3.6" rx=".9" opacity=".45"/></svg></span></div>
+  <div class="content">
+    <div class="navlarge">生成<span class="credits">948 クレジット</span></div>
+    <div class="genhero">
+      <div class="gicon"><svg class="ic"><use href="#i-spark"/></svg></div>
+      <div class="gtitle">おまかせ生成</div>
+      <p class="gdesc">今日のニュース・天気と好みプロファイルから、AI が 1 曲つくります</p>
+      <button class="gbtn">いますぐ生成</button>
+      <svg class="grass g-hero" viewBox="0 0 385 26" preserveAspectRatio="none"><rect x="1" y="16" width="4.5" height="10" rx="2.2"/><rect x="9" y="10" width="4.5" height="16" rx="2.2"/><rect x="17" y="19" width="4.5" height="7" rx="2.2"/><rect x="25" y="6" width="4.5" height="20" rx="2.2"/><rect x="33" y="14" width="4.5" height="12" rx="2.2"/><rect x="41" y="18" width="4.5" height="8" rx="2.2"/><rect x="49" y="8" width="4.5" height="18" rx="2.2"/><rect x="57" y="16" width="4.5" height="10" rx="2.2"/><rect x="65" y="4" width="4.5" height="22" rx="2.2"/><rect x="73" y="12" width="4.5" height="14" rx="2.2"/><rect x="81" y="17" width="4.5" height="9" rx="2.2"/><rect x="89" y="9" width="4.5" height="17" rx="2.2"/><rect x="97" y="15" width="4.5" height="11" rx="2.2"/><rect x="105" y="20" width="4.5" height="6" rx="2.2"/><rect x="113" y="7" width="4.5" height="19" rx="2.2"/><rect x="121" y="13" width="4.5" height="13" rx="2.2"/><rect x="129" y="18" width="4.5" height="8" rx="2.2"/><rect x="137" y="5" width="4.5" height="21" rx="2.2"/><rect x="145" y="16" width="4.5" height="10" rx="2.2"/><rect x="153" y="11" width="4.5" height="15" rx="2.2"/><rect x="161" y="19" width="4.5" height="7" rx="2.2"/><rect x="169" y="8" width="4.5" height="18" rx="2.2"/><rect x="177" y="14" width="4.5" height="12" rx="2.2"/><rect x="185" y="17" width="4.5" height="9" rx="2.2"/><rect x="193" y="6" width="4.5" height="20" rx="2.2"/><rect x="201" y="15" width="4.5" height="11" rx="2.2"/><rect x="209" y="10" width="4.5" height="16" rx="2.2"/><rect x="217" y="18" width="4.5" height="8" rx="2.2"/><rect x="225" y="12" width="4.5" height="14" rx="2.2"/><rect x="233" y="4" width="4.5" height="22" rx="2.2"/><rect x="241" y="16" width="4.5" height="10" rx="2.2"/><rect x="249" y="9" width="4.5" height="17" rx="2.2"/><rect x="257" y="19" width="4.5" height="7" rx="2.2"/><rect x="265" y="13" width="4.5" height="13" rx="2.2"/><rect x="273" y="7" width="4.5" height="19" rx="2.2"/><rect x="281" y="17" width="4.5" height="9" rx="2.2"/><rect x="289" y="11" width="4.5" height="15" rx="2.2"/><rect x="297" y="15" width="4.5" height="11" rx="2.2"/><rect x="305" y="6" width="4.5" height="20" rx="2.2"/><rect x="313" y="18" width="4.5" height="8" rx="2.2"/><rect x="321" y="10" width="4.5" height="16" rx="2.2"/><rect x="329" y="14" width="4.5" height="12" rx="2.2"/><rect x="337" y="8" width="4.5" height="18" rx="2.2"/><rect x="345" y="19" width="4.5" height="7" rx="2.2"/><rect x="353" y="12" width="4.5" height="14" rx="2.2"/><rect x="361" y="16" width="4.5" height="10" rx="2.2"/><rect x="369" y="5" width="4.5" height="21" rx="2.2"/><rect x="377" y="17" width="4.5" height="9" rx="2.2"/></svg>
+    </div>
+    <div class="customrow"><div class="crmain"><b>カスタム生成</b><small>スタイル・歌詞を自分で指定</small></div><svg class="ic"><use href="#i-chev-r"/></svg></div>
+    <div class="sechead">進行状況</div>
+    <div class="task"><span class="spinner"></span>
+      <div class="taskmain"><b>音源を生成しています…</b><small>おまかせ生成 · 12:58 開始</small></div></div>
+    <div class="task done"><span class="tick">✓</span>
+      <div class="taskmain"><b>Where the Fog Keeps Watch</b><small>今日 13:04 完了</small></div>
+      <div class="tcov cov sm" style="background-image:url(covers/fog.jpeg)"></div></div>
+    <div class="task done"><span class="tick">✓</span>
+      <div class="taskmain"><b>Storm Curfew</b><small>今日 9:01 完了 · 冒険日</small></div>
+      <div class="tcov cov sm" style="background-image:url(covers/storm.jpeg)"></div></div>
+  </div>
+  <div class="bottombars">
+    <svg class="grass g-tab" viewBox="0 0 385 26" preserveAspectRatio="none"><rect x="1" y="16" width="4.5" height="10" rx="2.2"/><rect x="9" y="10" width="4.5" height="16" rx="2.2"/><rect x="17" y="19" width="4.5" height="7" rx="2.2"/><rect x="25" y="6" width="4.5" height="20" rx="2.2"/><rect x="33" y="14" width="4.5" height="12" rx="2.2"/><rect x="41" y="18" width="4.5" height="8" rx="2.2"/><rect x="49" y="8" width="4.5" height="18" rx="2.2"/><rect x="57" y="16" width="4.5" height="10" rx="2.2"/><rect x="65" y="4" width="4.5" height="22" rx="2.2"/><rect x="73" y="12" width="4.5" height="14" rx="2.2"/><rect x="81" y="17" width="4.5" height="9" rx="2.2"/><rect x="89" y="9" width="4.5" height="17" rx="2.2"/><rect x="97" y="15" width="4.5" height="11" rx="2.2"/><rect x="105" y="20" width="4.5" height="6" rx="2.2"/><rect x="113" y="7" width="4.5" height="19" rx="2.2"/><rect x="121" y="13" width="4.5" height="13" rx="2.2"/><rect x="129" y="18" width="4.5" height="8" rx="2.2"/><rect x="137" y="5" width="4.5" height="21" rx="2.2"/><rect x="145" y="16" width="4.5" height="10" rx="2.2"/><rect x="153" y="11" width="4.5" height="15" rx="2.2"/><rect x="161" y="19" width="4.5" height="7" rx="2.2"/><rect x="169" y="8" width="4.5" height="18" rx="2.2"/><rect x="177" y="14" width="4.5" height="12" rx="2.2"/><rect x="185" y="17" width="4.5" height="9" rx="2.2"/><rect x="193" y="6" width="4.5" height="20" rx="2.2"/><rect x="201" y="15" width="4.5" height="11" rx="2.2"/><rect x="209" y="10" width="4.5" height="16" rx="2.2"/><rect x="217" y="18" width="4.5" height="8" rx="2.2"/><rect x="225" y="12" width="4.5" height="14" rx="2.2"/><rect x="233" y="4" width="4.5" height="22" rx="2.2"/><rect x="241" y="16" width="4.5" height="10" rx="2.2"/><rect x="249" y="9" width="4.5" height="17" rx="2.2"/><rect x="257" y="19" width="4.5" height="7" rx="2.2"/><rect x="265" y="13" width="4.5" height="13" rx="2.2"/><rect x="273" y="7" width="4.5" height="19" rx="2.2"/><rect x="281" y="17" width="4.5" height="9" rx="2.2"/><rect x="289" y="11" width="4.5" height="15" rx="2.2"/><rect x="297" y="15" width="4.5" height="11" rx="2.2"/><rect x="305" y="6" width="4.5" height="20" rx="2.2"/><rect x="313" y="18" width="4.5" height="8" rx="2.2"/><rect x="321" y="10" width="4.5" height="16" rx="2.2"/><rect x="329" y="14" width="4.5" height="12" rx="2.2"/><rect x="337" y="8" width="4.5" height="18" rx="2.2"/><rect x="345" y="19" width="4.5" height="7" rx="2.2"/><rect x="353" y="12" width="4.5" height="14" rx="2.2"/><rect x="361" y="16" width="4.5" height="10" rx="2.2"/><rect x="369" y="5" width="4.5" height="21" rx="2.2"/><rect x="377" y="17" width="4.5" height="9" rx="2.2"/></svg>
+    <div class="tabbar">
+      <div class="tab"><svg class="ic"><use href="#i-note"/></svg><span>ライブラリ</span></div>
+      <div class="tab active"><svg class="ic"><use href="#i-spark"/></svg><span>生成</span></div>
+      <div class="tab"><svg class="ic"><use href="#i-gear"/></svg><span>設定</span></div>
+    </div>
+  </div>
+  <div class="island"></div><div class="homebar"></div>
+</div></div>
+</div>
+</div></section>
+<section id="dark"><h2>ダーク</h2><div class="row"></div></section>
+<script>
+const darkRow=document.querySelector('#dark .row');
+document.querySelectorAll('#light .slot').forEach(s=>{
+  const c=s.cloneNode(true);
+  c.querySelectorAll('.frame').forEach(f=>{f.classList.remove('light');f.classList.add('dark');});
+  darkRow.appendChild(c);
+});
+</script>
+</body>
+</html>
