@@ -1,5 +1,7 @@
 # DONE
 
+- [x] 2026-08-08 アプリアイコンを変更する — 用意済みのアイコン画像(緑の音符+芝生風イコライザ、1254x1254 PNG)を 1024x1024 に縮小して `AppIcon.appiconset` に登録(iOS 17+ の単一サイズ形式。`Contents.json` に filename を追記、`project.yml` は `ASSETCATALOG_COMPILER_APPICON_NAME` 設定済みのため変更なし)。シミュレータビルド成功+ビルド成果物の `Assets.car` に 1024px アイコンが含まれること・派生 120px アイコンの見た目を確認。プラン: [docs/plans/archive/change-app-icon.md](docs/plans/archive/change-app-icon.md)
+
 - [x] 2026-08-08 アプリ名の変更 — 新名称 **Music Plant**(「AI が毎日音楽を製造する無機質な工場」のイメージが自動生成に合うため。約 40 案から選定)。変更は表示名のみ: iOS ホーム画面表示名(`CFBundleDisplayName`)、管理画面 3 ページの `<title>`・サイドバー、起動ログ・README・CLAUDE.md。内部識別子(bundle id `com.akiraak.dailyaimusic`、Xcode プロジェクト名 `DailyAIMusic`、リポジトリ名、ドメイン `music.chobi.me`)は据え置き — bundle id 変更は実機で別アプリ扱いになり設定が消えるため。typecheck + シミュレータビルド+ヘッドレス Chrome で 3 ページのサイドバー表記を確認。プラン: [docs/plans/archive/rename-app.md](docs/plans/archive/rename-app.md)
 
 - [x] 2026-08-07 歌手の特徴もパラメータ指定できるように — プリセットに新カテゴリ `vocal`(歌声)を追加し、性別 × 声質(クリア・ハスキー・パワフル・ウィスパー・ファルセット等)× 年齢感+アンサンブル・特殊系(デュエット・聖歌隊・子ども合唱・オペラ・ボコーダー)の初期セット 20 件で広い声色をカバー。起動時シーディングを「テーブルが空のとき全件」から「DB に 1 件も無いカテゴリだけ投入」に変更し、既存 DB にも vocal が入るように(既存カテゴリ内の編集・削除は復活しない)。LLM プロンプトの出力条件に「歌詞ありの場合は style に歌声の特徴を必ず含め、直近と偏らないよう幅広い声色を試す」を追加。typecheck +既存 DB への追加投入・再起動での重複なし・プロンプト出力・管理画面の歌声グループ表示(ヘッドレス Chrome)を確認。プラン: [docs/plans/archive/vocal-presets.md](docs/plans/archive/vocal-presets.md)
