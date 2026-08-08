@@ -29,7 +29,7 @@ targets:
     info:
       path: DailyAIMusic/Resources/Info.plist
       properties:
-        CFBundleDisplayName: Daily AI Music
+        CFBundleDisplayName: Music Plant
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait

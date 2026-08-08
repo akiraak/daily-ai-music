@@ -440,7 +440,7 @@ app.use(
 }
 
 serve({ fetch: app.fetch, port: PORT }, (info) => {
-  console.log(`daily-ai-music admin: http://localhost:${info.port}/admin/`);
+  console.log(`Music Plant admin: http://localhost:${info.port}/admin/`);
   startPoller();
   startScheduler();
 });

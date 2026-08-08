@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## プロジェクト概要
 
-daily-ai-music は、Suno を使って音楽を生成し、iPhone から操作・再生できるアプリ。
+**Music Plant**(リポジトリ名: daily-ai-music)は、Suno を使って音楽を生成し、iPhone から操作・再生できるアプリ。名前は「AI が毎日音楽を製造する無機質な工場」のイメージ。内部識別子(bundle id `com.akiraak.dailyaimusic`、Xcode プロジェクト名 `DailyAIMusic`、リポジトリ名、ドメイン `music.chobi.me`)は旧称のまま。
 
 - **毎日の自動生成**: スケジュール実行で毎日新しい曲を自動生成する
 - **手動リクエスト**: iPhone からプロンプトを指定してその都度生成することもできる
