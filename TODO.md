@@ -7,5 +7,3 @@
   - [x] Phase 4: 天気(Open-Meteo)+ 設定画面に天気 ON/OFF・位置設定を追加
   - [x] Phase 5: パラメータ一覧ページに使用ワードと残り回数を表示(任意)
   - [ ] 稼働後チェック: Sonnet 5 のパラメータ(realWorldWords 等)生成精度を確認し、悪ければ `.env` の `LLM_MODEL` を claude-opus-5 に変更
-
-- [ ] ロック画面・コントロールセンターの Now Playing 表示/操作を実機で確認する(次回 `./run-ios-device.sh` 時。iOS アプリデザイン Phase 5 の持ち越し)
