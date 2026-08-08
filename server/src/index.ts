@@ -135,7 +135,7 @@ api.get("/settings", (c) => {
 });
 
 // 部分更新: { dailyEnabled?, adventureProbability?, dailyHour?, dailyTimezone?,
-//            contextNews?, contextWeather?, weatherLat?, weatherLon?, wordMaxUses?, wordWindowDays? }
+//            contextNews?, contextWeather?, weatherCity?, weatherLat?, weatherLon?, wordMaxUses?, wordWindowDays? }
 api.put("/settings", async (c) => {
   const body = await c.req.json().catch(() => null);
   if (body === null || typeof body !== "object") {
@@ -178,6 +178,13 @@ api.put("/settings", async (c) => {
       }
       updates.push([key, String(body[field])]);
     }
+  }
+  if ("weatherCity" in body) {
+    const v = typeof body.weatherCity === "string" ? body.weatherCity.trim() : "";
+    if (!v || v.length > 100) {
+      return c.json({ error: "weatherCity は 1〜100 文字の文字列です" }, 400);
+    }
+    updates.push(["weather_city", v]);
   }
   if ("weatherLat" in body) {
     const v = body.weatherLat;

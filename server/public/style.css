@@ -305,7 +305,18 @@ details.panel summary {
   text-align: right;
 }
 .setting-inputs input.wide { width: 220px; text-align: left; }
-.setting-inputs input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.setting-inputs select {
+  font: inherit;
+  font-size: 0.9rem;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  min-width: 140px;
+}
+.setting-inputs input:focus,
+.setting-inputs select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
 
 input[type="checkbox"].toggle {
   appearance: none;

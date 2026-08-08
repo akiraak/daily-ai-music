@@ -1,5 +1,7 @@
 # DONE
 
+- [x] 2026-08-07 天気の位置を座標ではなく都市名で選択できるようにする — 設定ページの緯度・経度入力を 47 都道府県庁所在地のドロップダウンに置き換え(選択で都市名+座標を 1 回の PUT で同時保存し不整合を防ぐ)。settings に `weather_city`(既定「東京」)を追加し、プロンプトの天気見出しを「### 今日の天気(<都市名>)」に変更。座標は Open-Meteo Geocoding のローマ字クエリ+JP フィルタで一括取得して `settings.js` に定数として埋め込み(同 API は日本語表記のクエリにヒットせず、国土地理院 AddressSearch は候補品質が悪いため検索型は見送り。鳥取が北海道の同名地点を拾う誤りは個別取得で修正)。隔離サーバーで PUT/GET・不正値 400・札幌の天気取得を確認、設定ページはヘッドレス Chrome で表示確認。プラン: [docs/plans/archive/weather-city-selection.md](docs/plans/archive/weather-city-selection.md)
+
 - [x] 2026-08-07 管理画面を一般的なレイアウト(左ペインメニュー)に変更 — 3 ページ(楽曲一覧・パラメータ一覧・設定)を、左サイドバー(アプリ名+縦並びメニュー、現在ページをアクセント背景でハイライト)+右コンテンツの 2 ペイン構成に変更。静的 3 ページなのでテンプレートは導入せずサイドバーは各 HTML に複製。残クレジット+チャージリンクは楽曲一覧のページヘッダーへ移動(`app.js` の id 不変で JS 3 本は無変更)。700px 以下はサイドバーを上部横並びナビに切替(折り返し許可で実機幅にも対応)。ヘッドレス Chrome でデスクトップ 1100px の 3 ページ+モバイル 500px を確認。プラン: [docs/plans/archive/admin-sidebar-layout.md](docs/plans/archive/admin-sidebar-layout.md)
 
 - [x] 2026-08-07 管理画面で評価ボタンを押したかどうか分からないので直す — 👍/👎 は未選択でも絵文字がフルカラーで背景差しか無く状態が判別しづらかったため、未選択を `filter: grayscale(1)` + `opacity: 0.55` で減光し、選択済み(フルカラー絵文字+アクセント背景)との差を強調(`style.css` の `.rate-btn` のみ。JS のトグルロジックは変更なし、iOS は対象外)。ヘッドレス Chrome で選択済み/未選択の見た目の差を確認。プラン: [docs/plans/archive/rating-button-visibility.md](docs/plans/archive/rating-button-visibility.md)

@@ -59,7 +59,7 @@ LLM(Claude API)が「好みプロファイル」とプリセットをもとに�
 - `tracks` に追加: `rating`(NULL / 1 / -1)
 - `presets`(新規): `category`(genre / instrument / mood など)、`value`(英語・プロンプト用)、`label_ja`(表示用)。初期セットはこちらで用意
 - `profile`(新規): プロファイル文書を版として積む(最新行が現行)。管理画面で閲覧可
-- `settings`(新規): key-value(`adventure_probability`、`daily_enabled`、実行時刻・タイムゾーン等)。将来 iPhone から変更できるように DB 持ち。2026-08-07 追加: `context_news` / `context_weather`(外部ソース ON/OFF)、`weather_lat` / `weather_lon`(天気の位置、既定は東京)、`word_max_uses` / `word_window_days`(リアルワード制限)。管理画面の設定ページ(/admin/settings.html)から変更でき、次の生成から即反映
+- `settings`(新規): key-value(`adventure_probability`、`daily_enabled`、実行時刻・タイムゾーン等)。将来 iPhone から変更できるように DB 持ち。2026-08-07 追加: `context_news` / `context_weather`(外部ソース ON/OFF)、`weather_city` / `weather_lat` / `weather_lon`(天気の都市名と座標、既定は東京。設定画面では都道府県庁所在地のドロップダウンで選択し、都市名+座標を同時保存)、`word_max_uses` / `word_window_days`(リアルワード制限)。管理画面の設定ページ(/admin/settings.html)から変更でき、次の生成から即反映
 - `real_world_words`(新規、2026-08-07): `task_id`、`word`、`created_at`。曲の中心となった語をタスク単位で記録し、使用回数制限の集計に使う
 
 ## API(追加)

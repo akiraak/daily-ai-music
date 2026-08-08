@@ -33,10 +33,9 @@
         <input type="checkbox" class="toggle" id="context-weather" data-field="contextWeather">
       </div>
       <div class="setting-row">
-        <div class="setting-label">天気の位置<span class="setting-hint">緯度・経度(既定は東京)</span></div>
+        <div class="setting-label">天気の都市<span class="setting-hint">都道府県庁所在地から選択(既定は東京)</span></div>
         <div class="setting-inputs">
-          <input type="number" id="weather-lat" data-field="weatherLat" step="any" min="-90" max="90" aria-label="緯度">
-          <input type="number" id="weather-lon" data-field="weatherLon" step="any" min="-180" max="180" aria-label="経度">
+          <select id="weather-city" aria-label="天気の都市"></select>
         </div>
       </div>
     </section>

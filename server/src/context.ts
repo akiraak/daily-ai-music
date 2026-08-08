@@ -10,13 +10,15 @@ const NEWS_MAX_ITEMS = 8;
 export const CONTEXT_SETTING_DEFAULTS = {
   contextNews: true,
   contextWeather: true,
-  weatherLat: 35.6895, // 東京
+  weatherCity: "東京", // 表示用の都市名(座標とセットで保存される)
+  weatherLat: 35.6895,
   weatherLon: 139.6917,
 } as const;
 
 export interface ContextSettings {
   contextNews: boolean;
   contextWeather: boolean;
+  weatherCity: string;
   weatherLat: number;
   weatherLon: number;
 }
@@ -33,6 +35,7 @@ export function getContextSettings(): ContextSettings {
     contextWeather:
       (db.getSetting("context_weather") ??
         String(CONTEXT_SETTING_DEFAULTS.contextWeather)) === "true",
+    weatherCity: db.getSetting("weather_city") ?? CONTEXT_SETTING_DEFAULTS.weatherCity,
     weatherLat: num(db.getSetting("weather_lat"), CONTEXT_SETTING_DEFAULTS.weatherLat),
     weatherLon: num(db.getSetting("weather_lon"), CONTEXT_SETTING_DEFAULTS.weatherLon),
   };
@@ -87,7 +90,11 @@ function weatherLabel(code: number): string {
 }
 
 // Open-Meteo(キー不要)で当日の天気・気温を取得する
-async function fetchWeather(lat: number, lon: number): Promise<string | null> {
+async function fetchWeather(
+  city: string,
+  lat: number,
+  lon: number
+): Promise<string | null> {
   const url =
     `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
     `&current=temperature_2m,weather_code` +
@@ -113,7 +120,7 @@ async function fetchWeather(lat: number, lon: number): Promise<string | null> {
   }
   const current = data.current?.temperature_2m;
   if (current !== undefined) parts.push(`現在 ${Math.round(current)}°C`);
-  return `### 今日の天気\n${parts.join("、")}(ムードやテンポの着想に)`;
+  return `### 今日の天気(${city})\n${parts.join("、")}(ムードやテンポの着想に)`;
 }
 
 interface ContextSource {
@@ -127,7 +134,7 @@ const SOURCES: ContextSource[] = [
   {
     name: "weather",
     enabled: (s) => s.contextWeather,
-    fetch: (s) => fetchWeather(s.weatherLat, s.weatherLon),
+    fetch: (s) => fetchWeather(s.weatherCity, s.weatherLat, s.weatherLon),
   },
 ];
 
