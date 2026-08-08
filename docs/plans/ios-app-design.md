@@ -182,6 +182,14 @@ GenerateView を Form からライブラリと同じ ScrollView + VStack(横 22p
 - テスト: GenerateUITests 新設(おまかせ生成ボタンの表示・折りたたみ開閉・入力による送信ボタン有効化。**クレジット消費を避けるため生成ボタンはタップしない**)。ScreenshotUITests にカスタム展開状態を追加。進行中行はローカル DB へ TEXT_SUCCESS のタスクを直接 INSERT して目視確認(Phase 3 と同じ手法。確認後 DELETE)
 - XCUITest の注意: SwiftUI の複数行 TextField(axis: .vertical)は textViews/textFields のどちらに出るか iOS 版で揺れる → `descendants(matching: .any)` で識別子検索する
 
+### Phase 7 実装メモ(2026-08-08)
+
+- **芝生イコライザのアニメーション化**: `EqualizerBars` に `animating` パラメータを追加。`TimelineView(.animation(minimumInterval: 1/30, paused: !animating))` で、バーごとに周期(rad/s)・位相をずらした sin 波で高さを揺らす(揺れの中心は静止レベルを中央寄りに圧縮した値でクリップを回避)。静止時は従来の固定レベル(アイコンの芝生シルエット)。使用箇所は再生中のみ表示される 2 箇所(一覧行 16pt・ミニプレイヤー 15pt)で、どちらも `animating: true` に
+- **設定画面を他画面と同構成に統一**: Form → ScrollView + VStack(横 22pt)。セクション見出しは「進行状況」と同じ footnote bold secondary、URL/Secret フィールドはカスタム生成のプロンプト欄と同じヘアライン枠(`RoundedRectangle` + `Color(.separator)`)、接続テストは AccentDeep の文字ボタン+上にヘアライン区切り。機能・バインディングは変更なし。識別子 `settings.baseURL` / `settings.apiSecret` / `settings.test` を付与
+- **見出しの `.rounded` は不採用**: 決定した案A のモックがシステム標準フォントで成立しており、実装も標準のままとする(デザイントークン表の「候補」の結論)
+- 検証: シミュレータビルド+スモーク(Playback/Rating)+ScreenshotUITests をライト/ダークで実行し目視確認。アニメーションは一時 UI テストで再生中の画面を 0.4 秒間隔で 3 枚撮り、バーの高さが毎フレーム変わることを確認(一時テストは確認後削除)
+- 設定画面の SecureField が空に見えるのは AppStorage に上書き値が無いため(Info.plist 注入の既定 secret はフィールドに表示しない従来からの挙動。認証は BackendAPI 側のフォールバックで効いている)
+
 ## 影響範囲
 
 - `ios/DailyAIMusic/Sources/` 全画面(ContentView・TrackListView・MiniPlayerView・GenerateView・SettingsView)+ 新設(Theme・TrackDetailView・FullPlayerView)

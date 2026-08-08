@@ -377,7 +377,7 @@ private struct TrackRow: View {
         Button(action: onPlay) {
             Group {
                 if isCurrent && isPlaying {
-                    EqualizerBars(height: 16)
+                    EqualizerBars(height: 16, animating: true)
                 } else {
                     Image(systemName: "play.fill")
                         .font(.system(size: 20))

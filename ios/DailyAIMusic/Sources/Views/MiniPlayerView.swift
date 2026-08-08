@@ -33,7 +33,7 @@ struct MiniPlayerView: View {
                         }
                         Spacer(minLength: 0)
                         if player.isPlaying {
-                            EqualizerBars(height: 15)
+                            EqualizerBars(height: 15, animating: true)
                         }
                     }
                     .contentShape(Rectangle())
