@@ -10,6 +10,8 @@ struct ContentView: View {
             SettingsView()
                 .tabItem { Label("設定", systemImage: "gearshape") }
         }
+        // コントロール既定ティント。アセットカタログのグローバルアクセントに任せず明示する
+        .tint(.appAccent)
     }
 }
 

@@ -33,6 +33,7 @@ struct GenerateView: View {
                             Text("生成する")
                         }
                     }
+                    .tint(.accentDeep)
                     .disabled(!canSubmit)
                     if let errorMessage {
                         Text(errorMessage)
@@ -40,6 +41,7 @@ struct GenerateView: View {
                             .foregroundStyle(.red)
                     }
                 }
+                .listRowBackground(Color.appBackground)
 
                 if !visibleTasks.isEmpty {
                     Section("生成の進行状況") {
@@ -65,8 +67,11 @@ struct GenerateView: View {
                             .padding(.vertical, 2)
                         }
                     }
+                    .listRowBackground(Color.appBackground)
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(Color.appBackground)
             .navigationTitle("生成")
             .task { await pollTasks() }
         }

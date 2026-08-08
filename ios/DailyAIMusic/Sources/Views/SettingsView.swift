@@ -21,6 +21,7 @@ struct SettingsView: View {
                 } footer: {
                     Text("既定値はビルド時に埋め込まれる(run-ios-device.sh が Mac の IP と .env の API_SECRET を注入)。ここで上書きできる。")
                 }
+                .listRowBackground(Color.appBackground)
 
                 Section {
                     Button {
@@ -32,6 +33,7 @@ struct SettingsView: View {
                             Text("接続テスト")
                         }
                     }
+                    .tint(.accentDeep)
                     .disabled(isTesting)
                     if let testResult {
                         Text(testResult)
@@ -39,7 +41,10 @@ struct SettingsView: View {
                             .foregroundStyle(testSucceeded ? .green : .red)
                     }
                 }
+                .listRowBackground(Color.appBackground)
             }
+            .scrollContentBackground(.hidden)
+            .background(Color.appBackground)
             .navigationTitle("設定")
         }
     }

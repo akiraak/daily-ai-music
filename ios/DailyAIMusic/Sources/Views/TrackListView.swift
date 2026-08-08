@@ -35,10 +35,13 @@ struct TrackListView: View {
                                 }
                             }
                         )
+                        .listRowBackground(Color.appBackground)
                     }
                     .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
                 }
             }
+            .background(Color.appBackground)
             .navigationTitle("楽曲")
             .refreshable { await load() }
             .task { await load() }
@@ -83,6 +86,7 @@ private struct TrackRow: View {
                         Text(track.title)
                             .font(.body)
                             .fontWeight(isCurrent ? .semibold : .regular)
+                            .foregroundStyle(isCurrent ? Color.accentDeep : Color.primary)
                             .lineLimit(2)
                         Text("\(formatDuration(track.duration)) · \(track.createdAt.formatted(.dateTime.month().day().hour().minute()))")
                             .font(.caption)
@@ -113,7 +117,8 @@ private struct TrackRow: View {
         } label: {
             Image(systemName: isActive ? "\(symbol).fill" : symbol)
                 .font(.title3)
-                .foregroundStyle(isActive ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+                // Color.secondary 固定(階層 .secondary はボタン内でティント由来の色になるため)
+                .foregroundStyle(isActive ? AnyShapeStyle(.tint) : AnyShapeStyle(Color.secondary))
                 .frame(width: 32, height: 44)
         }
         .buttonStyle(.borderless)

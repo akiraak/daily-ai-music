@@ -107,6 +107,23 @@ API が既に返している未活用データを見せる画面。
 - 主要ボタン: 楽曲詳細の再生は `AccentDeep` アウトラインのピル、おまかせ生成は `AccentDeep` 塗り(ダークは `AccentColor` 塗り+暗色文字)
 - ミニプレイヤー・タブバーはフラット背景+上ヘアライン。ヒーローのカバーは角丸 14pt、行カバーは 7pt 程度
 
+### Phase 2 実装メモ(2026-08-08)
+
+既存レイアウトのまま色基盤を全画面へ適用した。適用ルール:
+
+- 画面背景 = `AppBackground`。List/Form は `.scrollContentBackground(.hidden)` + `.listRowBackground(Color.appBackground)` でフラット化(行区切りは標準 separator のヘアライン)
+- コントロール既定ティント = `AccentColor`(ContentView ルートの `.tint(.appAccent)`)
+- `AccentDeep` を使う場所: ナビの文字ボタン(`UINavigationBar.appearance().tintColor`)、タブ選択中ラベル、文字ボタン(生成する・接続テストは `.tint(.accentDeep)`)、再生中行のタイトル
+- タブ選択中アイコン = `AccentColor`(`UITabBarAppearance`。バー背景は標準のまま)
+- ミニプレイヤー: `.bar` 素材 → フラット `AppBackground` + 上ヘアライン(`Divider` overlay)
+
+ハマりどころ(iOS 26 シミュレータで確認。以降の Phase でも注意):
+
+- `UINavigationBarAppearance` で背景を上書きすると NavigationStack の大タイトルが描画されなくなる → ナビバーの背景・影には触らない(tintColor のみ変更可)
+- `ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor` は project.yml に追加済みだが実行時ティントに反映されなかった → SwiftUI 側の `.tint(.appAccent)` で明示するのが確実
+- Button 内の `.primary`/`.secondary`(階層スタイル)はティント由来の色に解決される(青/オリーブがかる)→ 固定の文字色には具体色 `Color.primary`/`Color.secondary` を使う
+- スクリーンショット検証は `ScreenshotUITests`(全タブ+再生中を添付、`xcresulttool export attachments` で取り出し)。ダークは `-UIUserInterfaceStyle` 起動引数が効かないため `xcrun simctl ui <sim> appearance dark` で切り替えて撮り直す(接頭辞はシェル環境変数 `TEST_RUNNER_SCREENSHOT_STYLE` で渡す)
+
 ## 影響範囲
 
 - `ios/DailyAIMusic/Sources/` 全画面(ContentView・TrackListView・MiniPlayerView・GenerateView・SettingsView)+ 新設(Theme・TrackDetailView・FullPlayerView)

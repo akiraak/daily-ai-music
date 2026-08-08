@@ -22,6 +22,8 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.akiraak.dailyaimusic
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        # コントロール既定ティント(SwiftUI の .tint / Color.accentColor)を AccentColor カラーセットにする
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         # 既定は空。実機ビルドは run-ios-device.sh が本番 URL(--local 時は Mac の IP)と
         # .env の API_SECRET を注入する。空のときアプリは http://localhost:3014 にフォールバックする(シミュレータ向け)
         BACKEND_BASE_URL: ""

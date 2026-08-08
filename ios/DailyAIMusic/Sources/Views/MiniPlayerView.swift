@@ -17,6 +17,8 @@ struct MiniPlayerView: View {
                     } label: {
                         Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
                             .font(.title2)
+                            // Color.primary 固定(階層 .primary はボタン内でティント色になるため)
+                            .foregroundStyle(Color.primary)
                     }
                     .accessibilityIdentifier(player.isPlaying ? "miniplayer.pause" : "miniplayer.play")
                 }
@@ -40,7 +42,8 @@ struct MiniPlayerView: View {
             }
             .padding(.horizontal)
             .padding(.vertical, 8)
-            .background(.bar)
+            .background(Color.appBackground)
+            .overlay(alignment: .top) { Divider() }
         }
     }
 }
