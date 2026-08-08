@@ -141,6 +141,20 @@ API が既に返している未活用データを見せる画面。
 - ヒーローカバー中央の細い横線は Suno 生成カバー画像自体の継ぎ目(元 JPEG に存在。レイアウト起因ではない)
 - ジョブカードの検証: ローカルサーバーの DB に進行中タスク(TEXT_SUCCESS)を直接 INSERT した。ポーラーは API エラー時に FAILED にせず再試行するため、偽の provider_task_id でもタスクが進行中のまま残る
 
+### Phase 4 実装メモ(2026-08-08)
+
+`TrackDetailView` を新設し、行本体・ヒーローのタップで遷移するようにした。
+
+- **構成**(モックの s-detail 準拠): 中央カバー 172pt/角丸 12 → タイトル → 日付+モード行 → AccentDeep アウトラインの再生/一時停止ピル+👍/👎(大)→ リアルワード → 狙い → スタイル → 歌詞 → メタ情報(生成日時・モード・インスト・Suno/LLM モデル)。LLM 導入前の旧データは nil のセクションを丸ごと出さない
+- **リアルワード**: `WrappingPillLayout`(Layout プロトコル)で折り返して全件表示。冒険日はモード表記「おまかせ生成(冒険日)」で伝わるため詳細ではピルを出さない
+- **スタイル**: styleJa を全文表示し、原文 style は「原文スタイルを表示」の折りたたみ。styleJa が無い旧データは原文を直接表示
+- **歌詞**: English/日本語をアクセント下線のカスタムセグメントで切替(既定は日本語、片方しか無い曲はセグメント非表示)
+- **遷移**: `NavigationStack(path: [Track])` + `navigationDestination(for: Track.self)`(`Track` を Hashable に)。行本体の Button は再生→詳細遷移に変更(再生は行内再生ボタン。Phase 3 で変更済みの UI テスト前提どおり)。ヒーローは全体に `onTapGesture` — 子の再生 Button のジェスチャが優先されるので共存できる
+- ミニプレイヤーの `safeAreaInset` を NavigationStack 側へ移し、詳細画面でも表示されるようにした
+- 👍/👎 を `RatingButtons` として共通化(行と詳細で使用。識別子接頭辞 `track`/`detail` と large を指定可)。評価結果は詳細のローカル state と一覧の tracks 配列の両方へ反映
+- テスト: `TrackDetailUITests` 新設(行→詳細遷移・原文スタイル開閉・歌詞言語切替・ヒーロータップ遷移)。`ScreenshotUITests` に詳細画面 2 枚(上部・スクロール後)を追加。既存スモーク Playback/Rating も通過、ライト/ダークのスクショを目視確認
+- iOS 26 ではスクロール中のコンテンツがフローティングの戻るボタンの背後を透けて通る(標準挙動。ナビバー背景には触らない方針のまま)
+
 ## 影響範囲
 
 - `ios/DailyAIMusic/Sources/` 全画面(ContentView・TrackListView・MiniPlayerView・GenerateView・SettingsView)+ 新設(Theme・TrackDetailView・FullPlayerView)

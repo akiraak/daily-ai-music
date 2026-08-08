@@ -8,9 +8,10 @@ struct TrackListView: View {
     @State private var activeTasks: [GenerationTask] = []
     @State private var errorMessage: String?
     @State private var isLoading = false
+    @State private var path: [Track] = []
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             Group {
                 if let errorMessage, tracks.isEmpty {
                     ContentUnavailableView {
@@ -32,12 +33,16 @@ struct TrackListView: View {
             }
             .background(Color.appBackground)
             .navigationTitle("ライブラリ")
+            .navigationDestination(for: Track.self) { track in
+                TrackDetailView(track: track, onRated: applyRating)
+            }
             .refreshable { await load() }
             .task { await pollWhileVisible() }
-            .safeAreaInset(edge: .bottom) {
-                if player.currentTrack != nil {
-                    MiniPlayerView()
-                }
+        }
+        // NavigationStack 側に付けて、詳細画面へ遷移してもミニプレイヤーが残るようにする
+        .safeAreaInset(edge: .bottom) {
+            if player.currentTrack != nil {
+                MiniPlayerView()
             }
         }
     }
@@ -59,7 +64,8 @@ struct TrackListView: View {
                         HeroCard(
                             track: hero,
                             isPlayingThis: player.currentTrack?.id == hero.id && player.isPlaying,
-                            onPlay: { playOrToggle(hero) }
+                            onPlay: { playOrToggle(hero) },
+                            onOpen: { path.append(hero) }
                         )
                     }
                 }
@@ -76,11 +82,8 @@ struct TrackListView: View {
                             isCurrent: player.currentTrack?.id == track.id,
                             isPlaying: player.isPlaying,
                             onPlay: { playOrToggle(track) },
-                            onRated: { updated in
-                                if let index = tracks.firstIndex(where: { $0.id == updated.id }) {
-                                    tracks[index] = updated
-                                }
-                            }
+                            onOpen: { path.append(track) },
+                            onRated: applyRating
                         )
                         Divider()
                     }
@@ -96,6 +99,13 @@ struct TrackListView: View {
             player.togglePlayPause()
         } else {
             player.play(track)
+        }
+    }
+
+    /// 評価 API の結果(行・楽曲詳細どちらから来ても)を一覧へ反映する
+    private func applyRating(_ updated: Track) {
+        if let index = tracks.firstIndex(where: { $0.id == updated.id }) {
+            tracks[index] = updated
         }
     }
 
@@ -235,10 +245,13 @@ private struct GenerationJobCard: View {
 
 // MARK: - 今日の一曲ヒーロー
 
+/// タップ(再生ボタン以外)で楽曲詳細へ。再生ボタンは子 Button のジェスチャが優先されるので
+/// 全体の onTapGesture と共存できる
 private struct HeroCard: View {
     let track: Track
     let isPlayingThis: Bool
     let onPlay: () -> Void
+    let onOpen: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -289,25 +302,27 @@ private struct HeroCard: View {
             }
         }
         .padding(.bottom, 14)
+        .contentShape(Rectangle())
+        .onTapGesture(perform: onOpen)
+        .accessibilityIdentifier("hero.card")
     }
 }
 
 // MARK: - リスト行
 
-/// 一覧の 1 行。行本体のタップと右上の再生ボタンで再生/一時停止、👍/👎 は独立したトグルボタン
-/// (管理画面と同じ仕様)。Phase 4 で行本体タップは詳細画面への遷移に変える予定
+/// 一覧の 1 行。行本体のタップで楽曲詳細へ、再生/一時停止は行内の再生ボタン、
+/// 👍/👎 は独立したトグルボタン(管理画面と同じ仕様)
 private struct TrackRow: View {
     let track: Track
     let isCurrent: Bool
     let isPlaying: Bool
     let onPlay: () -> Void
+    let onOpen: () -> Void
     let onRated: (Track) -> Void
-
-    @State private var isRating = false
 
     var body: some View {
         HStack(spacing: 10) {
-            Button(action: onPlay) {
+            Button(action: onOpen) {
                 HStack(spacing: 12) {
                     CoverImageView(path: track.imageUrl)
                         .frame(width: 52, height: 52)
@@ -334,10 +349,7 @@ private struct TrackRow: View {
 
             VStack(spacing: 4) {
                 playButton
-                HStack(spacing: 7) {
-                    ratingButton(value: 1, symbol: "hand.thumbsup", identifier: "track.rate.up")
-                    ratingButton(value: -1, symbol: "hand.thumbsdown", identifier: "track.rate.down")
-                }
+                RatingButtons(track: track, onRated: onRated)
             }
         }
         .padding(.vertical, 10)
@@ -374,39 +386,6 @@ private struct TrackRow: View {
         }
         .buttonStyle(.borderless)
         .accessibilityIdentifier("track.play")
-    }
-
-    private func ratingButton(value: Int, symbol: String, identifier: String) -> some View {
-        let isActive = track.rating == value
-        return Button {
-            Task { await rate(value) }
-        } label: {
-            Image(systemName: isActive ? "\(symbol).fill" : symbol)
-                .font(.footnote)
-                // Color.secondary 固定(階層 .secondary はボタン内でティント由来の色になるため)
-                .foregroundStyle(isActive ? AnyShapeStyle(.tint) : AnyShapeStyle(Color.secondary))
-                .frame(width: 26, height: 28)
-        }
-        .buttonStyle(.borderless)
-        .disabled(isRating)
-        .accessibilityIdentifier(identifier)
-        .accessibilityValue(isActive ? "on" : "off")
-    }
-
-    private func rate(_ value: Int) async {
-        isRating = true
-        defer { isRating = false }
-        do {
-            let request = RatingRequest(rating: track.rating == value ? nil : value)
-            let response = try await BackendAPI.postJSON(
-                RatingResponse.self,
-                path: "/api/tracks/\(track.id)/rating",
-                body: request
-            )
-            onRated(response.track)
-        } catch {
-            // 通信・HTTP エラーは BackendAPI がログ済み。表示は変えず次のタップで再試行できる
-        }
     }
 }
 

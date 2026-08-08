@@ -1,7 +1,8 @@
 import Foundation
 
 /// GET /api/tracks の楽曲。audioUrl / imageUrl はサーバーからの相対パス(例: /api/audio/xxx.mp3。X-API-Secret 必須)
-struct Track: Identifiable, Decodable, Equatable {
+/// Hashable は楽曲詳細への NavigationStack 遷移(navigationDestination の value)用
+struct Track: Identifiable, Decodable, Hashable {
     let id: Int
     let taskId: Int
     let title: String

@@ -26,6 +26,15 @@ final class ScreenshotUITests: XCTestCase {
             app.buttons.matching(identifier: "track.play").firstMatch.tap()
             _ = app.buttons["miniplayer.pause"].waitForExistence(timeout: 10)
             attach(app, name: "\(style)-library-playing")
+
+            // 楽曲詳細: 行タップで遷移し、スクロールして歌詞側も撮る
+            firstRow.tap()
+            if app.buttons["detail.play"].waitForExistence(timeout: 5) {
+                attach(app, name: "\(style)-detail")
+                app.swipeUp()
+                attach(app, name: "\(style)-detail-scrolled")
+                app.navigationBars.buttons.firstMatch.tap()
+            }
         } else {
             attach(app, name: "\(style)-library-empty")
         }
