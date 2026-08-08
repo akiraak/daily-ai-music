@@ -27,6 +27,27 @@ final class ScreenshotUITests: XCTestCase {
             _ = app.buttons["miniplayer.pause"].waitForExistence(timeout: 10)
             attach(app, name: "\(style)-library-playing")
 
+            // フルプレイヤー: ミニプレイヤー本体タップでシートを開き、歌詞画面も撮る
+            app.buttons["miniplayer.open"].tap()
+            if app.staticTexts["player.title"].waitForExistence(timeout: 5) {
+                attach(app, name: "\(style)-player")
+                if app.buttons["player.lyrics"].exists {
+                    app.buttons["player.lyrics"].tap()
+                    _ = app.buttons["player.lyrics.ja"].waitForExistence(timeout: 3)
+                    attach(app, name: "\(style)-player-lyrics")
+                    app.navigationBars.buttons.firstMatch.tap()
+                    _ = app.buttons["player.lyrics"].waitForExistence(timeout: 3)
+                }
+                // シートは上端付近から下へドラッグして閉じる(swipeDown はスライダー等に
+                // 当たると閉じないことがある)。閉じ切って行が押せるようになるまで待つ
+                app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.08))
+                    .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.85)))
+                let rowHittable = XCTNSPredicateExpectation(
+                    predicate: NSPredicate(format: "hittable == true"), object: firstRow
+                )
+                _ = XCTWaiter().wait(for: [rowHittable], timeout: 5)
+            }
+
             // 楽曲詳細: 行タップで遷移し、スクロールして歌詞側も撮る
             firstRow.tap()
             if app.buttons["detail.play"].waitForExistence(timeout: 5) {

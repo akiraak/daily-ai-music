@@ -42,7 +42,7 @@ struct TrackListView: View {
         // NavigationStack 側に付けて、詳細画面へ遷移してもミニプレイヤーが残るようにする
         .safeAreaInset(edge: .bottom) {
             if player.currentTrack != nil {
-                MiniPlayerView()
+                MiniPlayerView(onRated: applyRating)
             }
         }
     }
@@ -98,15 +98,17 @@ struct TrackListView: View {
         if player.currentTrack?.id == track.id {
             player.togglePlayPause()
         } else {
-            player.play(track)
+            // ライブラリからの再生は一覧の表示順を再生キューにする(曲終了で次の曲へ自動送り)
+            player.play(track, queue: tracks)
         }
     }
 
-    /// 評価 API の結果(行・楽曲詳細どちらから来ても)を一覧へ反映する
+    /// 評価 API の結果(行・楽曲詳細・フルプレイヤーのどこから来ても)を一覧と再生中の曲へ反映する
     private func applyRating(_ updated: Track) {
         if let index = tracks.firstIndex(where: { $0.id == updated.id }) {
             tracks[index] = updated
         }
+        player.applyRated(updated)
     }
 
     // MARK: - 今日の一曲・日付グループ

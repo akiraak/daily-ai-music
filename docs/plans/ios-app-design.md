@@ -155,6 +155,22 @@ API が既に返している未活用データを見せる画面。
 - テスト: `TrackDetailUITests` 新設(行→詳細遷移・原文スタイル開閉・歌詞言語切替・ヒーロータップ遷移)。`ScreenshotUITests` に詳細画面 2 枚(上部・スクロール後)を追加。既存スモーク Playback/Rating も通過、ライト/ダークのスクショを目視確認
 - iOS 26 ではスクロール中のコンテンツがフローティングの戻るボタンの背後を透けて通る(標準挙動。ナビバー背景には触らない方針のまま)
 
+### Phase 5 実装メモ(2026-08-08)
+
+- **PlayerService**: 再生キュー(ライブラリの表示順 = 新しい順。「次の曲」はリストの 1 つ下)を追加。`play(_:queue:)` は queue 指定で置換(ライブラリからの再生)、無指定は既存キューに track が居ればキュー維持(楽曲詳細・フルプレイヤーからの再生)、居なければその 1 曲だけに。曲終了(didPlayToEnd)で次の曲へ自動送り、キュー末尾は曲頭に戻して停止。`playPrevious` は 3 秒以上再生していれば曲頭へ(一般的なプレイヤーの挙動)
+- **Now Playing**: `MPNowPlayingInfoCenter`(タイトル・アーティスト "Music Plant"・duration・elapsed・rate。カバーは CoverImageCache から取得後に同じ曲なら差し込み)+ `MPRemoteCommandCenter`(play/pause/toggle/next/prev/changePlaybackPosition、ハンドラは `MainActor.assumeIsolated`)。elapsed/rate は状態変化時のみ更新(システムが補間)
+- **MiniPlayerView 刷新**: カバー 40pt+タイトル/styleJa+再生中イコライザ+再生/一時停止+次の曲。シークバーは廃止(フルプレイヤーへ)。本体タップで FullPlayerView をシート表示。onRated は TrackListView の applyRating を引き継ぐ
+- **FullPlayerView 新設**: シート(ドラッグインジケータ表示・ナビバー非表示)。カバー 300pt/角丸 14/影 → タイトル → styleJa 1 行 → Slider(tint appAccent)+経過/-残り → 前後・再生/一時停止(44pt)→ 歌詞リンク+👍/👎。表示は常に `player.currentTrack` で自動送りに追従。歌詞は NavigationStack 内の PlayerLyricsView へ push(English/日本語セグメントは `LyricsSegment` に共通化して楽曲詳細と共用)
+- **評価の一元化**: applyRating(一覧反映)から `PlayerService.applyRated`(currentTrack・キューへ反映)も呼ぶ。行・詳細・フルプレイヤーどこで評価しても両方へ届く
+
+ハマりどころ:
+
+- **`MPMediaItemArtwork` の requestHandler で実行時クラッシュ**: ハンドラは MediaPlayer がバックグラウンドキューから呼ぶが、@MainActor コンテキストで書いたクロージャは MainActor 分離と推論され `dispatch_assert_queue_fail`(EXC_BREAKPOINT)で落ちる → `{ @Sendable _ in image }` と明示して非分離にする
+- `toolbarVisibility(_:for:)` は iOS 18+。iOS 17 ターゲットでは `toolbar(.hidden, for: .navigationBar)` を使う
+- XCUITest のシート閉じは `app.swipeDown()` だとスライダー等に当たって閉じないことがある → 上端付近(dy 0.08)から座標ドラッグし、下の要素が hittable になるまで待つ
+- 連続再生の自動テスト: フルプレイヤーのシークバーを `adjust(toNormalizedSliderPosition: 0.98)` で終端近くへ送り、曲終了 → タイトル変化を待つ方式で PlayerUITests に組み込めた(シミュレータ+ローカルサーバーなら安定)
+- ロック画面・コントロールセンターの表示/操作は実機でのみ確認可能 → 次回 `./run-ios-device.sh` 時に確認する
+
 ## 影響範囲
 
 - `ios/DailyAIMusic/Sources/` 全画面(ContentView・TrackListView・MiniPlayerView・GenerateView・SettingsView)+ 新設(Theme・TrackDetailView・FullPlayerView)
