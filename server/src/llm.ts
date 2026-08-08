@@ -162,8 +162,10 @@ export function buildSongPlanPrompt(input: SongPlanInput, limits: WordLimits): s
       `## 残り 1 回のワード(できれば別のアイデアを優先する)\n${limits.lastChance.map((w) => `- ${w}`).join("\n")}`
     );
   }
+  // realWorldWords の出力指示はスキーマの description で行う(ここに書くと LLM 入力全文の
+  // 表示にプロンプト指示文が混ざり、具体的なワードと紛らわしいため)
   sections.push(
-    `## 出力条件\n- インストゥルメンタル: ${input.instrumental ? "はい(lyrics / lyricsJa は空文字列)" : "いいえ(歌詞を書く)"}\n- realWorldWords: この曲の中心となった語(今日のコンテキストから採ったテーマ語+ジャンル・ムード・情景など)を英語小文字で 5〜8 個`
+    `## 出力条件\n- インストゥルメンタル: ${input.instrumental ? "はい(lyrics / lyricsJa は空文字列)" : "いいえ(歌詞を書く)"}`
   );
 
   return sections.join("\n\n");

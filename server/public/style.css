@@ -208,6 +208,17 @@ ul { list-style: none; margin: 0; padding: 0; }
 }
 
 .rating { display: flex; gap: 8px; margin-top: 8px; }
+
+/* リアルワード(曲の中心となった語)のタグ */
+.word-tags { display: flex; flex-wrap: wrap; gap: 4px 6px; margin-top: 8px; }
+.word-tag {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0 9px;
+  font-size: 0.72rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
 .rate-btn {
   padding: 2px 12px;
   background: transparent;

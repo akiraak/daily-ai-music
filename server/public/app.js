@@ -95,8 +95,21 @@ function trackElement(t) {
         <button type="button" class="rate-btn" data-kind="up" title="好き">👍</button>
         <button type="button" class="rate-btn" data-kind="down" title="好みじゃない">👎</button>
       </div>
+      <div class="word-tags" hidden></div>
     </div>`;
   li.querySelector(".track-title").textContent = t.title;
+  {
+    // リアルワード(曲の中心となった語)を展開せずに見えるタグで表示。無い旧データは行ごと隠す
+    const words = t.realWorldWords ?? [];
+    const tags = li.querySelector(".word-tags");
+    tags.hidden = words.length === 0;
+    for (const w of words) {
+      const span = document.createElement("span");
+      span.className = "word-tag";
+      span.textContent = w;
+      tags.append(span);
+    }
+  }
   {
     const details = document.createElement("details");
     details.className = "track-details";
