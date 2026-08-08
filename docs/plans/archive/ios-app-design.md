@@ -91,11 +91,11 @@ API が既に返している未活用データを見せる画面。
 - **形式**: iPhone 実寸フレーム(390pt 幅)の HTML モック。案ごとに主要 4 画面(ライブラリ・楽曲詳細・フルプレイヤー・生成タブ)を並べ、ライト/ダーク両方を用意する。実データ風のダミーコンテンツ(タイトル・styleJa・リアルワードタグ・歌詞)を入れて実際の情報量で判断できるようにする
 - **案数**: 3 案程度。カラートークンは Phase 0 で定義した値(CSS 変数として同じ hex を使用)で全案共通とし、トーンを変える — 例: ①ミニマル(余白広め・面はフラット)②カード強め(角丸・影で面を立てる)③遊び強め(芝生イコライザ等のモチーフを多用)
 - **選定**: ブラウザで目視チェックして決定。決定した案(組み合わせの場合はその内容)をこのプランに追記し、Phase 2 以降の実装の基準にする
-- モックは `docs/plans/ios-app-design-mocks/` に置き、選定後も実装時の参照として残す
+- モックは `docs/plans/archive/ios-app-design-mocks/` に置き、選定後も実装時の参照として残す(プランのアーカイブに合わせて 2026-08-08 に archive/ 配下へ移動)
 
 ### 決定(2026-08-08): 案A ミニマル
 
-3 案(`01-minimal.html` / `02-card.html` / `03-playful.html`、コンテンツは本番の実データ・実カバー画像)を目視チェックし、**案A ミニマル**([docs/plans/ios-app-design-mocks/01-minimal.html](../ios-app-design-mocks/01-minimal.html))に決定。Phase 2 以降はこのモックを基準に実装する。
+3 案(`01-minimal.html` / `02-card.html` / `03-playful.html`、コンテンツは本番の実データ・実カバー画像)を目視チェックし、**案A ミニマル**([docs/plans/archive/ios-app-design-mocks/01-minimal.html](ios-app-design-mocks/01-minimal.html))に決定。Phase 2 以降はこのモックを基準に実装する。
 
 案A の要点(実装基準):
 
