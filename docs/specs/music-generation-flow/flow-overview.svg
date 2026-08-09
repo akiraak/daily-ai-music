@@ -52,7 +52,7 @@
   <text x="284" y="350" font-size="12" fill="#3A382F">・プリセット(5 カテゴリのプール)</text>
   <text x="298" y="368" font-size="11" fill="#8A8578">(評価 👍/👎 の集計を併記 ※daily のみ)</text>
   <text x="284" y="390" font-size="12" fill="#3A382F">・今日のコンテキスト ※daily のみ</text>
-  <text x="298" y="408" font-size="11" fill="#8A8578">(ニュース・天気)</text>
+  <text x="298" y="408" font-size="11" fill="#8A8578">(ニュース)</text>
   <text x="284" y="430" font-size="12" fill="#3A382F">・直近 5 曲のスタイル(重複回避)</text>
   <text x="284" y="450" font-size="12" fill="#3A382F">・リアルワードの使用制限</text>
   <line x1="384" y1="300" x2="384" y2="252" stroke="#787D2B" stroke-width="1.5" marker-end="url(#arrow)"/>

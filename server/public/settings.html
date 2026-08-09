@@ -23,20 +23,10 @@
     </div>
     <section class="panel">
       <h2>今日のコンテキスト(外部ソース)</h2>
-      <p class="empty">毎日の自動生成のプロンプトに、その日のニュース・天気を着想として注入します。変更は次の生成から反映されます。</p>
+      <p class="empty">毎日の自動生成のプロンプトに、その日のニュースを着想として注入します。変更は次の生成から反映されます。</p>
       <div class="setting-row">
         <div class="setting-label">ニュース<span class="setting-hint">Google News の日本版トップニュース見出し</span></div>
         <input type="checkbox" class="toggle" id="context-news" data-field="contextNews">
-      </div>
-      <div class="setting-row">
-        <div class="setting-label">天気<span class="setting-hint">Open-Meteo の当日の天気・気温</span></div>
-        <input type="checkbox" class="toggle" id="context-weather" data-field="contextWeather">
-      </div>
-      <div class="setting-row">
-        <div class="setting-label">天気の都市<span class="setting-hint">都道府県庁所在地から選択(既定は東京)</span></div>
-        <div class="setting-inputs">
-          <select id="weather-city" aria-label="天気の都市"></select>
-        </div>
       </div>
     </section>
 

@@ -51,9 +51,7 @@ struct GenerationParamsView: View {
     }
 
     private func contextValue(_ p: GenerationParams) -> String {
-        let news = "ニュース \(p.contextNews ? "ON" : "OFF")"
-        let weather = p.contextWeather ? "天気 ON(\(p.weatherCity))" : "天気 OFF"
-        return "\(news) · \(weather)"
+        "ニュース \(p.contextNews ? "ON" : "OFF")"
     }
 
     // MARK: - 要素プール

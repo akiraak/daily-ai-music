@@ -107,7 +107,7 @@ struct SettingsView: View {
     @ViewBuilder
     private var contextSection: some View {
         sectionHeader("今日のコンテキスト")
-        Text("毎日の自動生成のプロンプトに、その日のニュース・天気を着想として注入する。変更は次の生成から反映される。")
+        Text("毎日の自動生成のプロンプトに、その日のニュースを着想として注入する。変更は次の生成から反映される。")
             .font(.caption)
             .foregroundStyle(.secondary)
             .padding(.bottom, 4)
@@ -116,27 +116,6 @@ struct SettingsView: View {
                 Toggle("ニュース", isOn: binding(\.contextNews) { SettingsUpdateRequest(contextNews: $0) })
                     .labelsHidden()
                     .accessibilityIdentifier("settings.contextNews")
-            }
-            Divider()
-            settingRow("天気", hint: "Open-Meteo の当日の天気・気温") {
-                Toggle("天気", isOn: binding(\.contextWeather) { SettingsUpdateRequest(contextWeather: $0) })
-                    .labelsHidden()
-                    .accessibilityIdentifier("settings.contextWeather")
-            }
-            Divider()
-            settingRow("天気の都市", hint: "都道府県庁所在地から選択") {
-                Picker("天気の都市", selection: cityBinding) {
-                    if let current = settings?.weatherCity,
-                       !Self.cities.contains(where: { $0.name == current }) {
-                        Text("\(current)(現在の設定)").tag(current)
-                    }
-                    ForEach(Self.cities, id: \.name) { city in
-                        Text(city.name).tag(city.name)
-                    }
-                }
-                .pickerStyle(.menu)
-                .tint(Color.accentDeep)
-                .accessibilityIdentifier("settings.weatherCity")
             }
         }
         .disabled(isSavingSettings)
@@ -266,19 +245,6 @@ struct SettingsView: View {
         )
     }
 
-    /// 都市は名前+座標を 1 回の PUT で同時保存する(管理画面 settings.js と同じ)
-    private var cityBinding: Binding<String> {
-        Binding(
-            get: { settings?.weatherCity ?? "" },
-            set: { name in
-                guard name != settings?.weatherCity,
-                      let city = Self.cities.first(where: { $0.name == name }) else { return }
-                settings?.weatherCity = name
-                save(SettingsUpdateRequest(weatherCity: city.name, weatherLat: city.lat, weatherLon: city.lon))
-            }
-        )
-    }
-
     private func saveTimezone() {
         let tz = timezoneText.trimmingCharacters(in: .whitespaces)
         guard let settings, !tz.isEmpty, tz != settings.dailyTimezone else { return }
@@ -342,42 +308,6 @@ private extension ServerSettings {
     /// settings 未読込時にバインディングの get が返すダミー(未読込中はコントロール自体を表示しない)
     static let placeholder = ServerSettings(
         dailyEnabled: false, adventureProbability: 0, dailyHour: 0,
-        dailyTimezone: "", contextNews: false, contextWeather: false, weatherCity: ""
+        dailyTimezone: "", contextNews: false
     )
-}
-
-private extension SettingsView {
-    struct WeatherCity {
-        let name: String
-        let lat: Double
-        let lon: Double
-    }
-
-    /// 天気の都市(都道府県庁所在地)。管理画面 settings.js の CITIES と同じ値
-    static let cities: [WeatherCity] = [
-        .init(name: "札幌", lat: 43.0667, lon: 141.35), .init(name: "青森", lat: 40.8167, lon: 140.7333),
-        .init(name: "盛岡", lat: 39.7, lon: 141.15), .init(name: "仙台", lat: 38.2667, lon: 140.8667),
-        .init(name: "秋田", lat: 39.7167, lon: 140.1167), .init(name: "山形", lat: 38.2333, lon: 140.3667),
-        .init(name: "福島", lat: 37.75, lon: 140.4667), .init(name: "水戸", lat: 36.35, lon: 140.45),
-        .init(name: "宇都宮", lat: 36.5667, lon: 139.8833), .init(name: "前橋", lat: 36.4, lon: 139.0833),
-        .init(name: "さいたま", lat: 35.9081, lon: 139.6566), .init(name: "千葉", lat: 35.6, lon: 140.1167),
-        .init(name: "東京", lat: 35.6895, lon: 139.6917), .init(name: "横浜", lat: 35.4333, lon: 139.65),
-        .init(name: "新潟", lat: 37.9226, lon: 139.0412), .init(name: "富山", lat: 36.7, lon: 137.2167),
-        .init(name: "金沢", lat: 36.6, lon: 136.6167), .init(name: "福井", lat: 36.0644, lon: 136.2226),
-        .init(name: "甲府", lat: 35.6667, lon: 138.5667), .init(name: "長野", lat: 36.65, lon: 138.1833),
-        .init(name: "岐阜", lat: 35.4229, lon: 136.7604), .init(name: "静岡", lat: 34.9833, lon: 138.3833),
-        .init(name: "名古屋", lat: 35.1815, lon: 136.9064), .init(name: "津", lat: 34.7333, lon: 136.5167),
-        .init(name: "大津", lat: 35.0, lon: 135.8667), .init(name: "京都", lat: 35.0211, lon: 135.7538),
-        .init(name: "大阪", lat: 34.6938, lon: 135.5011), .init(name: "神戸", lat: 34.6913, lon: 135.183),
-        .init(name: "奈良", lat: 34.6851, lon: 135.8049), .init(name: "和歌山", lat: 34.2333, lon: 135.1667),
-        .init(name: "鳥取", lat: 35.5, lon: 134.2333), .init(name: "松江", lat: 35.4833, lon: 133.05),
-        .init(name: "岡山", lat: 34.65, lon: 133.9333), .init(name: "広島", lat: 34.4, lon: 132.45),
-        .init(name: "山口", lat: 34.1833, lon: 131.4667), .init(name: "徳島", lat: 34.0667, lon: 134.5667),
-        .init(name: "高松", lat: 34.3333, lon: 134.05), .init(name: "松山", lat: 33.8392, lon: 132.7657),
-        .init(name: "高知", lat: 33.55, lon: 133.5333), .init(name: "福岡", lat: 33.6, lon: 130.4167),
-        .init(name: "佐賀", lat: 33.2333, lon: 130.3), .init(name: "長崎", lat: 32.75, lon: 129.8833),
-        .init(name: "熊本", lat: 32.8059, lon: 130.6918), .init(name: "大分", lat: 33.2333, lon: 131.6),
-        .init(name: "宮崎", lat: 31.9167, lon: 131.4167), .init(name: "鹿児島", lat: 31.5667, lon: 130.55),
-        .init(name: "那覇", lat: 26.213, lon: 127.6785),
-    ]
 }

@@ -126,7 +126,7 @@ export interface SongPlanInput {
   presetRatings?: PresetRatings; // プリセット別の 👍/👎 集計(daily 系で注入。manual は非注入)
   freeText: string;
   recentStyles: string[];
-  extraContext?: string; // 「今日のコンテキスト」(ニュース・天気。毎日の自動生成のみ)
+  extraContext?: string; // 「今日のコンテキスト」(ニュース。毎日の自動生成のみ)
 }
 
 // リアルワードの使用制限(ウィンドウ内の使用回数から算出。テスト用に注入可能)

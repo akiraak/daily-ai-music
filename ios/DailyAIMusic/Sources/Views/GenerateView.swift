@@ -69,7 +69,7 @@ struct GenerateView: View {
             Text("おまかせ生成")
                 .font(.title3.weight(.heavy))
                 .padding(.top, 8)
-            Text("今日のニュース・天気とこれまでの評価(👍/👎)から、AI が 1 曲つくります")
+            Text("今日のニュースとこれまでの評価(👍/👎)から、AI が 1 曲つくります")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)

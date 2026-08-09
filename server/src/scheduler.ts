@@ -101,7 +101,7 @@ export async function runDaily(): Promise<{
   const mode = adventure ? "daily_adventure" : "daily";
   console.log(`[daily] mode=${mode} (冒険確率 ${settings.adventureProbability})`);
 
-  // 2. 外部コンテキスト(ニュース・天気)取得。失敗しても生成は続行(その場合セクション無し)
+  // 2. 外部コンテキスト(ニュース)取得。失敗しても生成は続行(その場合セクション無し)
   const extraContext = await buildTodayContext();
   if (extraContext) {
     console.log(`[daily] 今日のコンテキストを注入(${extraContext.length} 文字)`);

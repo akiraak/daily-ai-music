@@ -131,7 +131,7 @@ api.get("/settings", (c) => {
 });
 
 // 部分更新: { dailyEnabled?, adventureProbability?, dailyHour?, dailyTimezone?,
-//            contextNews?, contextWeather?, weatherCity?, weatherLat?, weatherLon?, wordMaxUses?, wordWindowDays? }
+//            contextNews?, wordMaxUses?, wordWindowDays? }
 api.put("/settings", async (c) => {
   const body = await c.req.json().catch(() => null);
   if (body === null || typeof body !== "object") {
@@ -164,37 +164,11 @@ api.put("/settings", async (c) => {
     }
     updates.push(["daily_timezone", body.dailyTimezone]);
   }
-  for (const [field, key] of [
-    ["contextNews", "context_news"],
-    ["contextWeather", "context_weather"],
-  ] as const) {
-    if (field in body) {
-      if (typeof body[field] !== "boolean") {
-        return c.json({ error: `${field} は boolean です` }, 400);
-      }
-      updates.push([key, String(body[field])]);
+  if ("contextNews" in body) {
+    if (typeof body.contextNews !== "boolean") {
+      return c.json({ error: "contextNews は boolean です" }, 400);
     }
-  }
-  if ("weatherCity" in body) {
-    const v = typeof body.weatherCity === "string" ? body.weatherCity.trim() : "";
-    if (!v || v.length > 100) {
-      return c.json({ error: "weatherCity は 1〜100 文字の文字列です" }, 400);
-    }
-    updates.push(["weather_city", v]);
-  }
-  if ("weatherLat" in body) {
-    const v = body.weatherLat;
-    if (typeof v !== "number" || !(v >= -90 && v <= 90)) {
-      return c.json({ error: "weatherLat は -90〜90 の数値です" }, 400);
-    }
-    updates.push(["weather_lat", String(v)]);
-  }
-  if ("weatherLon" in body) {
-    const v = body.weatherLon;
-    if (typeof v !== "number" || !(v >= -180 && v <= 180)) {
-      return c.json({ error: "weatherLon は -180〜180 の数値です" }, 400);
-    }
-    updates.push(["weather_lon", String(v)]);
+    updates.push(["context_news", String(body.contextNews)]);
   }
   if ("wordMaxUses" in body) {
     const v = body.wordMaxUses;
@@ -229,8 +203,6 @@ api.get("/generation-params", (c) => {
     params: {
       adventureProbability: daily.adventureProbability,
       contextNews: context.contextNews,
-      contextWeather: context.contextWeather,
-      weatherCity: context.weatherCity,
       presets: db.listPresets().map((p) => presetJson(p, ratings)),
       categoryLabels: CATEGORY_LABELS,
       recentStyles: db.listRecentStyleRows(),

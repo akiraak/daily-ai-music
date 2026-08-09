@@ -2,7 +2,7 @@
 
 現在の実装が実際にどう動くかを図で説明する文書。設計決定の経緯・理由・データモデルは [music-generation.md](music-generation.md) を参照(この文書は挙動の説明に徹し、決定の記録は持たない)。
 
-対応するコード: `server/src/scheduler.ts`(毎日の自動生成)/ `llm.ts`(LLM 呼び出し)/ `context.ts`(ニュース・天気)/ `generation.ts`(Suno 送信・完了検知)/ `suno/kieai.ts`(プロバイダ実装)。
+対応するコード: `server/src/scheduler.ts`(毎日の自動生成)/ `llm.ts`(LLM 呼び出し)/ `context.ts`(ニュース)/ `generation.ts`(Suno 送信・完了検知)/ `suno/kieai.ts`(プロバイダ実装)。
 
 ## 全体像
 
@@ -24,7 +24,7 @@
 
 ![毎日の自動生成の 4 手順](music-generation-flow/daily-run-steps.svg)
 
-実行時刻・タイムゾーン・冒険日確率・ニュース/天気の ON/OFF と都市は `settings` テーブルで持ち、管理画面の設定ページと iOS の設定タブ(`GET/PUT /api/settings`)から変更できる(次の生成から反映)。
+実行時刻・タイムゾーン・冒険日確率・ニュースの ON/OFF は `settings` テーブルで持ち、管理画面の設定ページと iOS の設定タブ(`GET/PUT /api/settings`)から変更できる(次の生成から反映)。
 
 ## LLM 生成の入出力
 
@@ -34,7 +34,7 @@ LLM への入力(user メッセージ)は次のセクションを組み立てて
 |---|---|---|
 | ユーザーが選んだ要素・自由リクエスト | 選択プリセット+自由テキスト(最優先で反映) | manual のみ |
 | 利用できる要素プール+モード指示 | プリセット全件(genre・instrument・mood・tempo・vocal)にプリセット別の評価集計(👍 N / 👎 N。両方 0 は無印)を併記し、通常日(👍 優先・👎 回避+1 要素は外す)/冒険日(集計に従わなくてよい)の方針を指示 | daily / daily_adventure |
-| 今日のコンテキスト | ニュース見出し(Google News RSS 上位 8 件)+天気(Open-Meteo、設定の都市)。「報告ではなく雰囲気・テーマとして織り込む」と指示 | daily / daily_adventure |
+| 今日のコンテキスト | ニュース見出し(Google News RSS 上位 8 件)。「報告ではなく雰囲気・テーマとして織り込む」と指示 | daily / daily_adventure |
 | 直近の生成スタイル | 直近 5 曲の style(重複回避用) | 全モード |
 | 使用禁止ワード/残り 1 回のワード | リアルワードの使用回数集計から算出(下記) | 全モード |
 | 出力条件 | インストゥルメンタル指定、歌声の特徴を style に必ず含める指示 | 全モード |
