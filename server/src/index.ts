@@ -433,6 +433,20 @@ app.use(
   })
 );
 
+// 楽器カテゴリ廃止(2026-08-09)の一回限りマイグレーション。既存 DB の instrument
+// プリセットを削除する(task_presets のスナップショット・評価履歴は残る)。実施済みを
+// settings に記録し、ユーザーが後から手動で再追加したものは再起動で消さない
+{
+  const MIGRATION_KEY = "migration_drop_instrument_presets";
+  if (db.getSetting(MIGRATION_KEY) === undefined) {
+    const removed = db.deletePresetsByCategory("instrument");
+    db.setSetting(MIGRATION_KEY, "1");
+    if (removed > 0) {
+      console.log(`[presets] 楽器カテゴリ廃止に伴い instrument プリセット ${removed} 件を削除しました`);
+    }
+  }
+}
+
 // 初期プリセット投入(DB に 1 件も無いカテゴリだけ。既存カテゴリ内でユーザーが
 // 編集・削除した内容は再投入せず、後から追加された新カテゴリは既存 DB にも入る)
 {

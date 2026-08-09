@@ -3,7 +3,6 @@
 
 export const CATEGORY_LABELS: Record<string, string> = {
   genre: "ジャンル",
-  instrument: "楽器",
   mood: "ムード",
   tempo: "テンポ",
   vocal: "歌声",
@@ -28,18 +27,8 @@ export const SEED_PRESETS: {
   { category: "genre", value: "deep house", labelJa: "ディープハウス" },
   { category: "genre", value: "orchestral", labelJa: "オーケストラ" },
 
-  // 楽器
-  { category: "instrument", value: "acoustic guitar", labelJa: "アコースティックギター" },
-  { category: "instrument", value: "piano", labelJa: "ピアノ" },
-  { category: "instrument", value: "electric piano", labelJa: "エレクトリックピアノ" },
-  { category: "instrument", value: "synthesizer", labelJa: "シンセサイザー" },
-  { category: "instrument", value: "strings", labelJa: "ストリングス" },
-  { category: "instrument", value: "saxophone", labelJa: "サックス" },
-  { category: "instrument", value: "trumpet", labelJa: "トランペット" },
-  { category: "instrument", value: "electric guitar", labelJa: "エレキギター" },
-  { category: "instrument", value: "upright bass", labelJa: "ウッドベース" },
-  { category: "instrument", value: "flute", labelJa: "フルート" },
-  { category: "instrument", value: "ukulele", labelJa: "ウクレレ" },
+  // 楽器カテゴリは 2026-08-09 に廃止 — ジャンルの編成と喧嘩しやすく、楽器は LLM が
+  // style 内でジャンルに合わせて自由に書くため(既存 DB は起動時マイグレーションで削除)
 
   // ムード
   { category: "mood", value: "calm and warm", labelJa: "穏やかで温かい" },

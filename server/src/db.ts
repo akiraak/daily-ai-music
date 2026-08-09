@@ -424,6 +424,11 @@ export function deletePreset(id: number): boolean {
   return db.prepare(`DELETE FROM presets WHERE id = ?`).run(id).changes > 0;
 }
 
+// カテゴリ廃止のマイグレーション用(task_presets のスナップショットは残る)
+export function deletePresetsByCategory(category: string): number {
+  return Number(db.prepare(`DELETE FROM presets WHERE category = ?`).run(category).changes);
+}
+
 // --- 使用プリセット(タスク単位の記録。評価集計の元データ) ---
 // preset_id は集計用(プリセット削除後も行は残す)。category/value/label_ja は使用時点の
 // スナップショットで、プリセットが編集・削除されても表示できる
