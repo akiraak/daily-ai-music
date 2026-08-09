@@ -11,7 +11,7 @@ struct Track: Identifiable, Decodable, Hashable {
     let imageUrl: String?
     /// 1 = 👍, -1 = 👎, nil = 未評価
     let rating: Int?
-    /// "manual"(カスタム生成)| "daily" | "daily_adventure"(冒険日)
+    /// "manual"(カスタム生成)| "daily" | "daily_adventure"(冒険日)| "artist"(アーティスト経由)
     let mode: String
     let instrumental: Bool
     /// 以下は LLM 生成のメタデータ。LLM 導入前の旧データでは nil
@@ -28,10 +28,19 @@ struct Track: Identifiable, Decodable, Hashable {
     let realWorldWords: [String]
     /// 使用プリセット(使用時点のスナップショット)。旧サーバーでは nil、記録の無い旧データでは空配列
     let usedPresets: [UsedPreset]?
+    /// artist モードで参照した曲(使用時点のスナップショット)。他モード・旧サーバーでは nil
+    let refArtistName: String?
+    let refSongTitle: String?
     let createdAt: Date
 
     var isAdventure: Bool { mode == "daily_adventure" }
     var modeLabel: String { generationModeLabel(mode) }
+
+    /// 楽曲詳細に出す「リファレンス: <アーティスト>「<曲名>」」の表示文字列
+    var referenceLabel: String? {
+        guard let refArtistName, let refSongTitle else { return nil }
+        return "\(refArtistName)「\(refSongTitle)」"
+    }
 }
 
 /// 曲の生成に使われたプリセット(使用時点のスナップショット。プリセットが編集・削除されても表示できる)
@@ -46,6 +55,7 @@ func generationModeLabel(_ mode: String) -> String {
     case "manual": "カスタム生成"
     case "daily": "おまかせ生成"
     case "daily_adventure": "おまかせ生成(冒険日)"
+    case "artist": "アーティスト経由"
     default: mode
     }
 }
@@ -78,7 +88,7 @@ struct GenerationTask: Identifiable, Decodable, Equatable {
     let instrumental: Bool
     let status: String
     let error: String?
-    /// "manual" | "daily" | "daily_adventure"(Track.mode と同じ)
+    /// "manual" | "daily" | "daily_adventure" | "artist"(Track.mode と同じ)
     let mode: String
     /// LLM が決めた曲名(TEXT_SUCCESS 以降。それ以前と旧データは nil)
     let title: String?
@@ -119,9 +129,12 @@ struct TasksResponse: Decodable {
     let tasks: [GenerationTask]
 }
 
+/// POST /api/generate の body。artistSongId を入れるとアーティスト経由生成(mode = artist)になる。
+/// nil のときはキー自体を送らない(Encodable の既定動作)ため、旧サーバーとも互換
 struct GenerateRequest: Encodable {
     let prompt: String
     let instrumental: Bool
+    var artistSongId: Int?
 }
 
 struct GenerateResponse: Decodable {
@@ -132,6 +145,66 @@ struct GenerateResponse: Decodable {
 struct DailyRunResponse: Decodable {
     let task: GenerationTask
     let adventure: Bool
+}
+
+// MARK: - アーティスト経由生成
+
+/// GET /api/artists の登録済みアーティスト
+struct Artist: Identifiable, Decodable, Hashable {
+    let id: Int
+    let name: String
+    /// iTunes の分類(取れないときは nil)
+    let genre: String?
+    /// 取り込み済みの曲数
+    let songCount: Int
+}
+
+struct ArtistsResponse: Decodable {
+    let artists: [Artist]
+}
+
+/// GET /api/artists/search の候補(まだ登録されていない。iTunes の検索結果)
+struct ArtistCandidate: Decodable, Hashable, Identifiable {
+    let itunesArtistId: Int
+    let name: String
+    let genre: String?
+
+    var id: Int { itunesArtistId }
+}
+
+struct ArtistSearchResponse: Decodable {
+    let candidates: [ArtistCandidate]
+}
+
+/// POST /api/artists の body(itunesArtistId は候補から選んだときに付ける)
+struct CreateArtistRequest: Encodable {
+    let name: String
+    let itunesArtistId: Int?
+}
+
+struct CreateArtistResponse: Decodable {
+    let artist: Artist
+    /// 取り込んだ曲数
+    let added: Int
+}
+
+/// GET /api/artists/:id/songs の曲
+struct ArtistSong: Identifiable, Decodable, Hashable {
+    let id: Int
+    let title: String
+    let album: String?
+    let releaseYear: Int?
+    let genre: String?
+
+    /// 一覧の副題(年 / アルバム。どちらも無ければ空)
+    var subtitle: String {
+        [releaseYear.map(String.init), album].compactMap { $0 }.joined(separator: " · ")
+    }
+}
+
+struct ArtistSongsResponse: Decodable {
+    let artist: Artist
+    let songs: [ArtistSong]
 }
 
 /// GET /api/credits。プロバイダから取れなかったときは null

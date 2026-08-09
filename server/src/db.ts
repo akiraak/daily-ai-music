@@ -15,7 +15,7 @@ export interface TaskRow {
   model: string;
   status: string;
   error: string | null;
-  mode: string; // 'manual' | 'daily' | 'daily_adventure'
+  mode: string; // 'manual' | 'daily' | 'daily_adventure' | 'artist'
   style: string | null; // LLM が生成したスタイルプロンプト(英語)
   style_ja: string | null; // スタイルプロンプトの日本語訳
   lyrics: string | null; // 英語歌詞
@@ -24,6 +24,10 @@ export interface TaskRow {
   intent: string | null; // 狙いの説明(日本語)
   llm_model: string | null; // 生成に使った LLM のモデル名
   llm_prompt: string | null; // LLM に送った入力全文(プリセット・直近スタイル等を含む)
+  artist_id: number | null; // artist モードの参照アーティスト(将来の集計用。削除されると孤児になる)
+  artist_song_id: number | null; // artist モードの参照曲(同上)
+  ref_artist_name: string | null; // 表示用スナップショット(アーティスト削除後も残す)
+  ref_song_title: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -104,6 +108,26 @@ db.exec(`
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
   );
   CREATE INDEX IF NOT EXISTS idx_task_presets_task ON task_presets(task_id);
+  -- 生成経路「アーティスト経由」の登録アーティストと、その楽曲リスト(iTunes Search API から取得)
+  CREATE TABLE IF NOT EXISTS artists (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    itunes_artist_id INTEGER,
+    genre TEXT,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+  );
+  CREATE TABLE IF NOT EXISTS artist_songs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    artist_id INTEGER NOT NULL REFERENCES artists(id),
+    title TEXT NOT NULL,
+    album TEXT,
+    release_year INTEGER,
+    genre TEXT,
+    itunes_track_id INTEGER,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    UNIQUE (artist_id, title)
+  );
+  CREATE INDEX IF NOT EXISTS idx_artist_songs_artist ON artist_songs(artist_id);
 `);
 
 // 既存 DB への後方互換マイグレーション(カラムが無ければ追加)
@@ -137,6 +161,11 @@ addColumnIfMissing("tasks", "title", "title TEXT");
 addColumnIfMissing("tasks", "intent", "intent TEXT");
 addColumnIfMissing("tasks", "llm_model", "llm_model TEXT");
 addColumnIfMissing("tasks", "llm_prompt", "llm_prompt TEXT");
+// artist モード(参照曲から生成)の記録。ref_* は表示用スナップショット
+addColumnIfMissing("tasks", "artist_id", "artist_id INTEGER");
+addColumnIfMissing("tasks", "artist_song_id", "artist_song_id INTEGER");
+addColumnIfMissing("tasks", "ref_artist_name", "ref_artist_name TEXT");
+addColumnIfMissing("tasks", "ref_song_title", "ref_song_title TEXT");
 
 export function createTask(input: {
   provider: string;
@@ -153,12 +182,17 @@ export function createTask(input: {
   intent?: string | null;
   llmModel?: string | null;
   llmPrompt?: string | null;
+  artistId?: number | null;
+  artistSongId?: number | null;
+  refArtistName?: string | null;
+  refSongTitle?: string | null;
 }): TaskRow {
   const result = db
     .prepare(
       `INSERT INTO tasks (provider, provider_task_id, prompt, instrumental, model, status,
-                          mode, style, style_ja, lyrics, lyrics_ja, title, intent, llm_model, llm_prompt)
-       VALUES (?, ?, ?, ?, ?, 'PENDING', ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                          mode, style, style_ja, lyrics, lyrics_ja, title, intent, llm_model, llm_prompt,
+                          artist_id, artist_song_id, ref_artist_name, ref_song_title)
+       VALUES (?, ?, ?, ?, ?, 'PENDING', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       input.provider,
@@ -174,7 +208,11 @@ export function createTask(input: {
       input.title ?? null,
       input.intent ?? null,
       input.llmModel ?? null,
-      input.llmPrompt ?? null
+      input.llmPrompt ?? null,
+      input.artistId ?? null,
+      input.artistSongId ?? null,
+      input.refArtistName ?? null,
+      input.refSongTitle ?? null
     );
   return getTask(Number(result.lastInsertRowid))!;
 }
@@ -244,10 +282,13 @@ export type TrackWithTaskRow = TrackRow & {
   intent: string | null;
   llm_model: string | null;
   llm_prompt: string | null;
+  ref_artist_name: string | null;
+  ref_song_title: string | null;
 };
 
 const TRACK_TASK_COLUMNS = `tracks.*, tasks.mode, tasks.prompt, tasks.instrumental, tasks.model,
-  tasks.style, tasks.style_ja, tasks.lyrics, tasks.lyrics_ja, tasks.intent, tasks.llm_model, tasks.llm_prompt`;
+  tasks.style, tasks.style_ja, tasks.lyrics, tasks.lyrics_ja, tasks.intent, tasks.llm_model, tasks.llm_prompt,
+  tasks.ref_artist_name, tasks.ref_song_title`;
 
 export function listTracks(limit = 200): TrackWithTaskRow[] {
   return db
@@ -480,6 +521,117 @@ export function countPresetRatings(): Map<number, PresetRatingCount> {
     )
     .all() as unknown as { preset_id: number; up: number; down: number }[];
   return new Map(rows.map((r) => [r.preset_id, { up: r.up, down: r.down }]));
+}
+
+// --- アーティスト・参照曲(生成経路「アーティスト経由」) ---
+// name は iTunes の正式表記(ローマ字のことが多い)。UNIQUE 違反は SQLite の例外を
+// そのまま投げる(API 層で 409 にする)
+
+export interface ArtistRow {
+  id: number;
+  name: string;
+  itunes_artist_id: number | null;
+  genre: string | null;
+  created_at: string;
+}
+
+export type ArtistWithCountRow = ArtistRow & { song_count: number };
+
+export interface ArtistSongRow {
+  id: number;
+  artist_id: number;
+  title: string;
+  album: string | null;
+  release_year: number | null;
+  genre: string | null;
+  itunes_track_id: number | null;
+  created_at: string;
+}
+
+export function listArtists(): ArtistWithCountRow[] {
+  return db
+    .prepare(
+      `SELECT a.*, (SELECT COUNT(*) FROM artist_songs s WHERE s.artist_id = a.id) AS song_count
+       FROM artists a ORDER BY a.name`
+    )
+    .all() as unknown as ArtistWithCountRow[];
+}
+
+export function getArtist(id: number): ArtistWithCountRow | undefined {
+  return db
+    .prepare(
+      `SELECT a.*, (SELECT COUNT(*) FROM artist_songs s WHERE s.artist_id = a.id) AS song_count
+       FROM artists a WHERE a.id = ?`
+    )
+    .get(id) as ArtistWithCountRow | undefined;
+}
+
+export function createArtist(input: {
+  name: string;
+  itunesArtistId?: number | null;
+  genre?: string | null;
+}): ArtistWithCountRow {
+  const result = db
+    .prepare(`INSERT INTO artists (name, itunes_artist_id, genre) VALUES (?, ?, ?)`)
+    .run(input.name, input.itunesArtistId ?? null, input.genre ?? null);
+  return getArtist(Number(result.lastInsertRowid))!;
+}
+
+// 曲ごと削除する。生成済みタスクは ref_artist_name / ref_song_title のスナップショットで表示が続く
+export function deleteArtist(id: number): boolean {
+  db.prepare(`DELETE FROM artist_songs WHERE artist_id = ?`).run(id);
+  return db.prepare(`DELETE FROM artists WHERE id = ?`).run(id).changes > 0;
+}
+
+export interface ArtistSongInput {
+  title: string;
+  album: string | null;
+  releaseYear: number | null;
+  genre: string | null;
+  itunesTrackId: number | null;
+}
+
+// 楽曲リストの取り込み。INSERT OR IGNORE なので既存曲(同じ title)はそのままで新譜だけ増える。
+// 追加された件数を返す
+export function insertArtistSongs(artistId: number, songs: ArtistSongInput[]): number {
+  const stmt = db.prepare(
+    `INSERT OR IGNORE INTO artist_songs (artist_id, title, album, release_year, genre, itunes_track_id)
+     VALUES (?, ?, ?, ?, ?, ?)`
+  );
+  let added = 0;
+  for (const s of songs) {
+    const r = stmt.run(
+      artistId,
+      s.title,
+      s.album,
+      s.releaseYear,
+      s.genre,
+      s.itunesTrackId
+    );
+    added += Number(r.changes);
+  }
+  return added;
+}
+
+// リリース年の新しい順(年不明は末尾)
+export function listArtistSongs(artistId: number): ArtistSongRow[] {
+  return db
+    .prepare(
+      `SELECT * FROM artist_songs WHERE artist_id = ?
+       ORDER BY release_year IS NULL, release_year DESC, title`
+    )
+    .all(artistId) as unknown as ArtistSongRow[];
+}
+
+export type ArtistSongWithArtistRow = ArtistSongRow & { artist_name: string };
+
+export function getArtistSong(id: number): ArtistSongWithArtistRow | undefined {
+  return db
+    .prepare(
+      `SELECT s.*, a.name AS artist_name FROM artist_songs s
+       JOIN artists a ON a.id = s.artist_id WHERE s.id = ?`
+    )
+    .get(id) as ArtistSongWithArtistRow | undefined;
 }
 
 // 評価の更新。更新後の行を返す

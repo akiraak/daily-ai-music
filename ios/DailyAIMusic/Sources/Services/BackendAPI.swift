@@ -87,12 +87,22 @@ enum BackendAPI {
         return try makeDecoder().decode(type, from: data)
     }
 
-    static func postJSON<T: Decodable>(_ type: T.Type, path: String, body: some Encodable) async throws -> T {
+    /// timeout はサーバー側で LLM 生成まで待つ長時間リクエスト向けの上書き(既定は URLSession の 60 秒)
+    static func postJSON<T: Decodable>(
+        _ type: T.Type, path: String, body: some Encodable, timeout: TimeInterval? = nil
+    ) async throws -> T {
         var request = try makeRequest(path: path, method: "POST")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(body)
+        if let timeout { request.timeoutInterval = timeout }
         let data = try await send(request, path: path)
         return try makeDecoder().decode(type, from: data)
+    }
+
+    /// 削除(/api/artists/:id)。レスポンス body({ ok: true })は使わない
+    static func delete(path: String) async throws {
+        let request = try makeRequest(path: path, method: "DELETE")
+        _ = try await send(request, path: path)
     }
 
     static func putJSON<T: Decodable>(_ type: T.Type, path: String, body: some Encodable) async throws -> T {

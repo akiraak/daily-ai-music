@@ -15,6 +15,14 @@ const MODE_LABELS = {
   manual: "手動",
   daily: "毎日の自動生成",
   daily_adventure: "毎日の自動生成(冒険日)",
+  artist: "アーティスト経由",
+};
+
+// 進行中カードのバッジ用の短い表記(manual は既定なのでバッジを出さない)
+const MODE_BADGES = {
+  daily: "毎日",
+  daily_adventure: "冒険日",
+  artist: "アーティスト",
 };
 
 const $ = (id) => document.getElementById(id);
@@ -85,7 +93,7 @@ function renderTasks(tasks) {
           <div class="task-prompt"></div>
           <div class="task-meta">
             <span class="badge">${STATUS_LABELS[t.status] ?? t.status}</span>
-            ${t.mode && t.mode !== "manual" ? `<span class="badge">${t.mode === "daily_adventure" ? "冒険日" : "毎日"}</span>` : ""}
+            ${MODE_BADGES[t.mode] ? `<span class="badge">${MODE_BADGES[t.mode]}</span>` : ""}
             ${t.instrumental ? '<span class="badge">インスト</span>' : ""}
             <span>${formatDate(t.createdAt)}</span>
           </div>
@@ -142,6 +150,10 @@ function trackElement(t) {
       body.textContent = text;
       details.append(h, body);
     };
+    // artist モードで参照した曲(スナップショット。他モード・旧データでは出ない)
+    if (t.refArtistName) {
+      addSection("リファレンス", `${t.refArtistName}「${t.refSongTitle}」`);
+    }
     addSection("狙い", t.intent);
     addSection("歌詞", t.lyrics, true);
     addSection("日本語訳", t.lyricsJa, true);

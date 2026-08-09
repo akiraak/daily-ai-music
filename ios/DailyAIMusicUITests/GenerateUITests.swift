@@ -50,6 +50,40 @@ final class GenerateUITests: XCTestCase {
         XCTAssertFalse(prompt.exists, "閉じると入力欄が隠れること")
     }
 
+    /// アーティスト経由生成への導線。一覧の表示までを確認する(登録は外部の iTunes 通信を
+    /// 伴うためここでは掘らない。サーバー側は curl シナリオでカバー済み)。
+    /// 実際の生成(クレジット消費)は行わないため、曲はタップしない
+    @MainActor
+    func testArtistsEntryPoint() throws {
+        let app = XCUIApplication()
+        app.launch()
+
+        app.tabBars.buttons["生成"].tap()
+        let row = app.buttons["generate.artists"]
+        XCTAssertTrue(row.waitForExistence(timeout: 5), "アーティストから生成の行があること")
+
+        row.tap()
+        XCTAssertTrue(
+            app.navigationBars["アーティスト"].waitForExistence(timeout: 5),
+            "アーティスト一覧へ遷移すること"
+        )
+        // 未登録なら空表示、登録済みなら行が出る。どちらでも + から追加シートを開ける
+        let add = app.buttons["artists.add"]
+        XCTAssertTrue(add.waitForExistence(timeout: 3), "追加ボタンがあること")
+        add.tap()
+        XCTAssertTrue(
+            app.navigationBars["アーティストを追加"].waitForExistence(timeout: 3),
+            "追加シートが開くこと"
+        )
+        attachScreenshot(app, name: "artists-add-sheet")
+        app.buttons["閉じる"].tap()
+        XCTAssertTrue(
+            app.navigationBars["アーティスト"].waitForExistence(timeout: 3),
+            "閉じるでシートが閉じること"
+        )
+        attachScreenshot(app, name: "artists-list")
+    }
+
     /// キーボード開閉の目視確認用スクリーンショットを xcresult に添付する
     @MainActor
     private func attachScreenshot(_ app: XCUIApplication, name: String) {

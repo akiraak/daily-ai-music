@@ -35,6 +35,8 @@ struct GenerateView: View {
                     Divider()
                     paramsRow
                     Divider()
+                    artistsRow
+                    Divider()
                     customSection
                     Divider()
                     progressSection
@@ -160,6 +162,33 @@ struct GenerateView: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("generate.params")
+    }
+
+    // MARK: - アーティストから生成(読み取り専用画面と同じ push 遷移の行)
+
+    private var artistsRow: some View {
+        NavigationLink {
+            ArtistsView()
+        } label: {
+            HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("アーティストから生成")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color.primary)
+                    Text("好きな曲に似た新曲をつくる")
+                        .font(.caption)
+                        .foregroundStyle(Color.secondary)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Color.secondary)
+            }
+            .contentShape(Rectangle())
+            .padding(.vertical, 13)
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("generate.artists")
     }
 
     // MARK: - カスタム生成(折りたたみ)

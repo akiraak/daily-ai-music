@@ -22,6 +22,7 @@ struct TrackDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 header
+                referenceSection
                 wordsSection
                 presetsSection
                 intentSection
@@ -98,6 +99,16 @@ struct TrackDetailView: View {
     }
 
     // MARK: - セクション
+
+    /// アーティスト経由生成で参照した曲(使用時点のスナップショット。
+    /// アーティストを削除しても残る)。他モード・旧データでは出さない
+    @ViewBuilder
+    private var referenceSection: some View {
+        if let reference = track.referenceLabel {
+            sectionHeader("リファレンス")
+            bodyText(reference)
+        }
+    }
 
     @ViewBuilder
     private var wordsSection: some View {

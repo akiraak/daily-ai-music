@@ -56,6 +56,13 @@ export async function startGeneration(input: {
   selectedPresets?: db.PresetRow[]; // manual でユーザーが選んだ要素(必ず記録する)
   llmModel?: string;
   llmPrompt?: string;
+  // artist モードの参照曲。名前・曲名はスナップショットで、アーティスト削除後も表示に使える
+  artist?: {
+    artistId: number;
+    artistSongId: number;
+    artistName: string;
+    songTitle: string;
+  };
 }): Promise<db.TaskRow> {
   const providerTaskId = await sunoClient.createTask({
     customMode: true,
@@ -80,6 +87,10 @@ export async function startGeneration(input: {
     intent: input.plan.intent,
     llmModel: input.llmModel ?? null,
     llmPrompt: input.llmPrompt ?? null,
+    artistId: input.artist?.artistId ?? null,
+    artistSongId: input.artist?.artistSongId ?? null,
+    refArtistName: input.artist?.artistName ?? null,
+    refSongTitle: input.artist?.songTitle ?? null,
   });
   // リアルワード(曲の中心となった語)を保存し、以後の生成の使用回数制限に使う
   db.insertRealWorldWords(task.id, input.plan.realWorldWords);

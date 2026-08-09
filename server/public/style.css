@@ -299,6 +299,32 @@ details.panel summary {
 .preset-form { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
 .preset-form button { padding: 6px 18px; }
 
+/* --- アーティストページ(候補・登録済み一覧・曲一覧に共通の 1 行レイアウト) --- */
+.artist,
+.song {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  border-top: 1px solid var(--border);
+  font-size: 0.9rem;
+}
+.artist:first-child,
+.song:first-child { border-top: none; }
+.artist-name,
+.song-title { overflow-wrap: anywhere; }
+.artist-meta,
+.song-meta {
+  flex: 1;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+}
+/* 曲は最大 200 件になるのでパネル内でスクロールさせる */
+#songs { max-height: 460px; overflow-y: auto; }
+.form-message a { color: var(--accent); }
+
 /* --- 設定ページ --- */
 .setting-row {
   display: flex;

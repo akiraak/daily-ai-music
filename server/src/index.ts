@@ -7,6 +7,7 @@ import { API_SECRET, AUDIO_DIR, IMAGE_DIR, PORT, PUBLIC_DIR } from "./config.ts"
 import { getContextSettings } from "./context.ts";
 import * as db from "./db.ts";
 import { startGeneration, startPoller, sunoClient } from "./generation.ts";
+import * as itunes from "./itunes.ts";
 import { currentWordLimits, generateSongPlan } from "./llm.ts";
 import { CATEGORY_LABELS, SEED_PRESETS } from "./presets.ts";
 import {
@@ -54,6 +55,9 @@ function taskJson(t: db.TaskRow) {
     llmPrompt: t.llm_prompt,
     realWorldWords: db.listRealWorldWords(t.id),
     usedPresets: db.listTaskPresets(t.id).map(usedPresetJson),
+    // artist モードの参照曲(他モードは null)
+    refArtistName: t.ref_artist_name,
+    refSongTitle: t.ref_song_title,
     createdAt: t.created_at,
     updatedAt: t.updated_at,
   };
@@ -64,7 +68,9 @@ function usedPresetJson(p: db.TaskPresetRow) {
   return { category: p.category, value: p.value, labelJa: p.label_ja };
 }
 
-// LLM 経由の生成フロー: プリセット選択 + 自由テキスト → LLM がスタイル・歌詞を生成 → Suno へ customMode で送信
+// LLM 経由の生成フロー: プリセット選択 + 自由テキスト → LLM がスタイル・歌詞を生成 → Suno へ customMode で送信。
+// artistSongId を指定すると「その曲に似た新曲」モード(artist)になり、presetIds は無視して
+// 自由テキストは「追加の要望」として併用する
 api.post("/generate", async (c) => {
   const body = await c.req.json().catch(() => null);
   const freeText = typeof body?.prompt === "string" ? body.prompt.trim() : "";
@@ -72,41 +78,70 @@ api.post("/generate", async (c) => {
     ? body.presetIds.filter((id: unknown) => Number.isInteger(id))
     : [];
   const instrumental = body?.instrumental === true;
-  if (!freeText && presetIds.length === 0) {
+  const artistSongId = Number.isInteger(body?.artistSongId)
+    ? (body.artistSongId as number)
+    : undefined;
+  if (artistSongId === undefined && !freeText && presetIds.length === 0) {
     return c.json({ error: "プリセットか自由テキストを指定してください" }, 400);
   }
   if (freeText.length > 2000) {
     return c.json({ error: "自由テキストが長すぎます(2000 文字以内)" }, 400);
   }
-  const selectedPresets = presetIds
-    .map((id) => db.getPreset(id))
-    .filter((p): p is db.PresetRow => p !== undefined);
+  const song = artistSongId !== undefined ? db.getArtistSong(artistSongId) : undefined;
+  if (artistSongId !== undefined && !song) {
+    return c.json({ error: "参照する楽曲が見つかりません" }, 404);
+  }
+  // artist モードでは要素プールを LLM に提示しないため、プリセット選択は使わない
+  const selectedPresets = song
+    ? []
+    : presetIds
+        .map((id) => db.getPreset(id))
+        .filter((p): p is db.PresetRow => p !== undefined);
 
   // タスク一覧に出す表示用のリクエスト内容
   const promptParts: string[] = [];
+  if (song) promptParts.push(`${song.artist_name}「${song.title}」風`);
   if (freeText) promptParts.push(freeText);
   if (selectedPresets.length > 0) {
     promptParts.push(`プリセット: ${selectedPresets.map((p) => p.label_ja).join("、")}`);
   }
   const displayPrompt = promptParts.join(" / ");
+  const mode = song ? "artist" : "manual";
 
   try {
     const { plan, llmModel, llmPrompt } = await generateSongPlan({
-      mode: "manual",
+      mode,
       instrumental,
       selectedPresets,
       presetPool: db.listPresets(),
       freeText,
       recentStyles: db.listRecentStyles(),
+      referenceSong: song
+        ? {
+            artist: song.artist_name,
+            title: song.title,
+            album: song.album,
+            releaseYear: song.release_year,
+            genre: song.genre,
+          }
+        : undefined,
     });
     const task = await startGeneration({
       prompt: displayPrompt,
       instrumental,
-      mode: "manual",
+      mode,
       plan,
       selectedPresets,
       llmModel,
       llmPrompt,
+      artist: song
+        ? {
+            artistId: song.artist_id,
+            artistSongId: song.id,
+            artistName: song.artist_name,
+            songTitle: song.title,
+          }
+        : undefined,
     });
     return c.json({ task: taskJson(task) }, 201);
   } catch (err) {
@@ -270,6 +305,9 @@ function trackJson(t: db.TrackWithTaskRow, prefix: string) {
     llmPrompt: t.llm_prompt,
     realWorldWords: db.listRealWorldWords(t.task_id),
     usedPresets: db.listTaskPresets(t.task_id).map(usedPresetJson),
+    // artist モードの参照曲(他モードは null)
+    refArtistName: t.ref_artist_name,
+    refSongTitle: t.ref_song_title,
     createdAt: t.created_at,
   };
 }
@@ -388,6 +426,132 @@ api.delete("/presets/:id", (c) => {
   const id = Number(c.req.param("id"));
   if (!Number.isInteger(id)) return c.json({ error: "不正な id です" }, 400);
   if (!db.deletePreset(id)) return c.json({ error: "プリセットが見つかりません" }, 404);
+  return c.json({ ok: true });
+});
+
+// --- アーティスト管理(生成経路「アーティスト経由」) ---
+
+function artistJson(a: db.ArtistWithCountRow) {
+  return {
+    id: a.id,
+    name: a.name,
+    itunesArtistId: a.itunes_artist_id,
+    genre: a.genre,
+    songCount: a.song_count,
+    createdAt: a.created_at,
+  };
+}
+
+function artistSongJson(s: db.ArtistSongRow) {
+  return {
+    id: s.id,
+    artistId: s.artist_id,
+    title: s.title,
+    album: s.album,
+    releaseYear: s.release_year,
+    genre: s.genre,
+  };
+}
+
+// 登録前の曖昧性解消用(DB には触らない)。日本語で検索してもヒットするが、
+// 返る名前はローマ字表記のことが多く別名義も混ざるため、候補から選ばせる
+api.get("/artists/search", async (c) => {
+  const term = (c.req.query("term") ?? "").trim();
+  if (!term) return c.json({ error: "term を指定してください" }, 400);
+  try {
+    return c.json({ candidates: await itunes.searchArtists(term) });
+  } catch (err) {
+    console.error(`[api] アーティスト検索失敗: ${err}`);
+    return c.json({ error: String(err instanceof Error ? err.message : err) }, 502);
+  }
+});
+
+api.get("/artists", (c) => {
+  return c.json({ artists: db.listArtists().map(artistJson) });
+});
+
+// 登録と同時に楽曲リストの取得まで行う。itunesArtistId 省略時は検索の最上位候補を使う
+api.post("/artists", async (c) => {
+  const body = await c.req.json().catch(() => null);
+  const name = typeof body?.name === "string" ? body.name.trim() : "";
+  if (!name) return c.json({ error: "name を指定してください" }, 400);
+  if (name.length > 200) return c.json({ error: "name が長すぎます(200 文字以内)" }, 400);
+  const itunesArtistId = Number.isInteger(body?.itunesArtistId)
+    ? (body.itunesArtistId as number)
+    : undefined;
+
+  try {
+    // itunesArtistId が指定されていればそれを信頼し、名前も指定値をそのまま採る。
+    // 未指定なら検索して最上位候補(正式表記)に解決する
+    let resolved: itunes.ArtistCandidate;
+    if (itunesArtistId !== undefined) {
+      resolved = { itunesArtistId, name, genre: null };
+    } else {
+      const candidates = await itunes.searchArtists(name);
+      if (candidates.length === 0) {
+        return c.json({ error: `「${name}」に一致するアーティストが見つかりません` }, 404);
+      }
+      resolved = candidates[0];
+    }
+
+    // 楽曲の取得を先に済ませてから登録する(iTunes 側で失敗しても曲 0 件の
+    // アーティストが残らない)。ジャンルは候補経由で来ていなければ lookup の応答から拾う
+    const { artistGenre, songs } = await itunes.fetchSongs(resolved.itunesArtistId);
+    let artist: db.ArtistWithCountRow;
+    try {
+      artist = db.createArtist({
+        name: resolved.name,
+        itunesArtistId: resolved.itunesArtistId,
+        genre: resolved.genre ?? artistGenre,
+      });
+    } catch {
+      return c.json({ error: `「${resolved.name}」は既に登録されています` }, 409);
+    }
+    const added = db.insertArtistSongs(artist.id, songs);
+    console.log(`[artists] "${artist.name}" を登録し楽曲 ${added} 件を取り込みました`);
+    return c.json({ artist: artistJson(db.getArtist(artist.id)!), added }, 201);
+  } catch (err) {
+    console.error(`[api] アーティスト登録失敗: ${err}`);
+    return c.json({ error: String(err instanceof Error ? err.message : err) }, 502);
+  }
+});
+
+api.get("/artists/:id/songs", (c) => {
+  const id = Number(c.req.param("id"));
+  if (!Number.isInteger(id)) return c.json({ error: "不正な id です" }, 400);
+  const artist = db.getArtist(id);
+  if (!artist) return c.json({ error: "アーティストが見つかりません" }, 404);
+  return c.json({
+    artist: artistJson(artist),
+    songs: db.listArtistSongs(id).map(artistSongJson),
+  });
+});
+
+// 楽曲リストの再取得(新譜の取り込み)。既存曲はそのままで差分だけ追加する
+api.post("/artists/:id/refresh", async (c) => {
+  const id = Number(c.req.param("id"));
+  if (!Number.isInteger(id)) return c.json({ error: "不正な id です" }, 400);
+  const artist = db.getArtist(id);
+  if (!artist) return c.json({ error: "アーティストが見つかりません" }, 404);
+  if (artist.itunes_artist_id === null) {
+    return c.json({ error: "iTunes のアーティスト ID が未登録のため再取得できません" }, 400);
+  }
+  try {
+    const { songs } = await itunes.fetchSongs(artist.itunes_artist_id);
+    const added = db.insertArtistSongs(id, songs);
+    console.log(`[artists] "${artist.name}" の楽曲を再取得しました(新規 ${added} 件)`);
+    return c.json({ artist: artistJson(db.getArtist(id)!), added });
+  } catch (err) {
+    console.error(`[api] 楽曲再取得失敗: ${err}`);
+    return c.json({ error: String(err instanceof Error ? err.message : err) }, 502);
+  }
+});
+
+// アーティストと曲を削除する。生成済みタスクは ref_* のスナップショットで表示が続く
+api.delete("/artists/:id", (c) => {
+  const id = Number(c.req.param("id"));
+  if (!Number.isInteger(id)) return c.json({ error: "不正な id です" }, 400);
+  if (!db.deleteArtist(id)) return c.json({ error: "アーティストが見つかりません" }, 404);
   return c.json({ ok: true });
 });
 

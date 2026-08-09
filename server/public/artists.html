@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>アーティスト - Music Plant</title>
+  <link rel="stylesheet" href="/admin/style.css">
+</head>
+<body>
+  <div class="layout">
+  <aside class="sidebar">
+    <div class="app-title">Music Plant</div>
+    <nav class="menu">
+      <a href="/admin/">楽曲一覧</a>
+      <a href="/admin/artists.html" class="active">アーティスト</a>
+      <a href="/admin/presets.html">パラメータ一覧</a>
+      <a href="/admin/settings.html">設定</a>
+    </nav>
+  </aside>
+
+  <main>
+    <div class="page-header">
+      <h1>アーティスト</h1>
+    </div>
+
+    <section class="panel">
+      <h2>アーティストを登録</h2>
+      <p class="empty">名前で検索して候補から選ぶと、その人の曲(最大 200 曲)を iTunes から取り込みます。日本語で検索できますが、登録名は iTunes の表記(ローマ字のことが多い)になります。</p>
+      <form id="search-form" class="preset-form">
+        <input id="search-term" placeholder="アーティスト名(例: 米津玄師 / Radiohead)" required>
+        <button type="submit">検索</button>
+      </form>
+      <ul id="candidates"></ul>
+      <p id="search-message" class="form-message" hidden></p>
+    </section>
+
+    <section class="panel">
+      <h2>登録済みアーティスト</h2>
+      <ul id="artists"></ul>
+      <p class="empty" id="artists-empty" hidden>まだアーティストが登録されていません。</p>
+      <p id="artists-message" class="form-message" hidden></p>
+    </section>
+
+    <section class="panel" id="songs-panel" hidden>
+      <h2 id="songs-title">曲を選ぶ</h2>
+      <p class="empty">曲を選ぶと、その曲の音楽的な特徴に似た新曲を AI が作ります(原曲の歌詞は使わず、完全な新作になります)。</p>
+      <div class="preset-form">
+        <input id="song-filter" placeholder="曲名で絞り込み">
+        <input id="song-extra" placeholder="追加の要望(任意。例: テンポを速めに)">
+      </div>
+      <ul id="songs"></ul>
+      <p id="songs-message" class="form-message" hidden></p>
+    </section>
+  </main>
+  </div>
+
+  <script src="/admin/artists.js"></script>
+</body>
+</html>

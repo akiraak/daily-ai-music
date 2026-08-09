@@ -7,7 +7,7 @@ import type { PresetRow } from "./db.ts";
 
 const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
 
-export type GenerationMode = "manual" | "daily" | "daily_adventure";
+export type GenerationMode = "manual" | "daily" | "daily_adventure" | "artist";
 
 export interface SongPlan {
   style: string;
@@ -118,6 +118,15 @@ function firstText(message: Anthropic.Message): string {
   return block.text;
 }
 
+// artist モードの参照曲(この曲に似た新曲を作る)
+export interface ReferenceSong {
+  artist: string;
+  title: string;
+  album: string | null;
+  releaseYear: number | null;
+  genre: string | null;
+}
+
 export interface SongPlanInput {
   mode: GenerationMode;
   instrumental: boolean;
@@ -127,6 +136,7 @@ export interface SongPlanInput {
   freeText: string;
   recentStyles: string[];
   extraContext?: string; // 「今日のコンテキスト」(ニュース。毎日の自動生成のみ)
+  referenceSong?: ReferenceSong; // artist モードのみ
 }
 
 // リアルワードの使用制限(ウィンドウ内の使用回数から算出。テスト用に注入可能)
@@ -148,7 +158,27 @@ export function currentWordLimits(): WordLimits {
 export function buildSongPlanPrompt(input: SongPlanInput, limits: WordLimits): string {
   const sections: string[] = [];
 
-  if (input.mode === "manual") {
+  if (input.mode === "artist" && input.referenceSong) {
+    const ref = input.referenceSong;
+    const refLines = [`- アーティスト: ${ref.artist}`, `- 曲名: ${ref.title}`];
+    if (ref.album) refLines.push(`- 収録アルバム: ${ref.album}`);
+    if (ref.releaseYear) refLines.push(`- リリース年: ${ref.releaseYear}`);
+    if (ref.genre) refLines.push(`- ジャンル(iTunes の分類): ${ref.genre}`);
+    sections.push(
+      `## リファレンス楽曲(この曲に似た新曲を作る)\n${refLines.join("\n")}`
+    );
+    sections.push(
+      `## 作り方(厳守)
+- リファレンス楽曲の音楽的特徴(ジャンル、テンポ、リズム、コード進行の雰囲気、楽器編成、ボーカルの質感、プロダクションの質感)を具体的な英語の音楽用語に翻訳して style を書く。「〜風」と書くのではなく、音そのものを記述すること
+- **style・title・lyrics に実在の固有名詞(アーティスト名・バンド名・曲名)を一切含めない**。上記のアーティスト名・曲名も書いてはいけない。Suno のモデレーションが固有名詞を拒否し、生成そのものが失敗する
+- 歌詞は原曲の歌詞を複製・翻訳・言い換えしない。テーマや情景の方向性を参考にするのは構わないが、完全な新作の歌詞を書く
+- リファレンス楽曲を知らない場合は、そのアーティストの一般的な作風から推定してよい。その場合も推測であることを断らずに具体的に書き切ること
+- intent には、リファレンス楽曲のどの音楽的特徴を取り入れたかと、その根拠(その曲を知っている / アーティストの一般的な作風からの推定)を日本語で必ず書く`
+    );
+    if (input.freeText) {
+      sections.push(`## 追加の要望(リファレンスに重ねて反映する)\n${input.freeText}`);
+    }
+  } else if (input.mode === "manual") {
     if (input.selectedPresets.length > 0) {
       sections.push(
         `## ユーザーが選んだ要素(必ず反映する)\n${presetLines(input.selectedPresets)}`
@@ -176,17 +206,20 @@ export function buildSongPlanPrompt(input: SongPlanInput, limits: WordLimits): s
       `## 今日のコンテキスト(歌詞・曲調の着想に使う。ニュースの報告ではなく、雰囲気やテーマとしてさりげなく織り込む)\n${input.extraContext}`
     );
   }
-  if (input.recentStyles.length > 0) {
+  // artist は「参照曲に似せる」のが目的なので、直近スタイルとの重複回避は注入しない(目的と矛盾する)
+  if (input.mode !== "artist" && input.recentStyles.length > 0) {
     sections.push(
       `## 直近の生成スタイル(重複を避ける)\n${input.recentStyles.map((s) => `- ${s}`).join("\n")}`
     );
   }
   if (limits.banned.length > 0) {
-    // manual はユーザーの指定・リクエストが最優先(禁止ワードと衝突したらユーザー指定が勝つ)
+    // manual / artist はユーザーの指定・リクエストが最優先(禁止ワードと衝突したらユーザー指定が勝つ)
     const note =
       input.mode === "manual"
         ? "。ただしユーザーが選んだ要素・自由リクエストと衝突する場合はユーザー指定を優先する"
-        : "";
+        : input.mode === "artist"
+          ? "。ただしリファレンス楽曲の再現と衝突する場合はリファレンスを優先する"
+          : "";
     sections.push(
       `## 使用禁止ワード(直近で使いすぎ。テーマ・スタイル・歌詞の中心に据えず、realWorldWords にも含めない${note})\n${limits.banned.map((w) => `- ${w}`).join("\n")}`
     );
@@ -202,8 +235,11 @@ export function buildSongPlanPrompt(input: SongPlanInput, limits: WordLimits): s
     `- インストゥルメンタル: ${input.instrumental ? "はい(lyrics / lyricsJa は空文字列)" : "いいえ(歌詞を書く)"}`,
   ];
   if (!input.instrumental) {
+    // artist は参照曲の声に寄せるのが目的なので、声色を散らす指示は出さない
     conditions.push(
-      "- 歌声: style に歌手の声の特徴(性別・声質・年齢感。vocal カテゴリの要素を参考に)を必ず含める。直近の生成スタイルと歌声が偏らないよう、幅広い声色を試すこと"
+      input.mode === "artist"
+        ? "- 歌声: style に歌手の声の特徴(性別・声質・年齢感)を必ず含める。リファレンス楽曲のボーカルの質感に寄せること"
+        : "- 歌声: style に歌手の声の特徴(性別・声質・年齢感。vocal カテゴリの要素を参考に)を必ず含める。直近の生成スタイルと歌声が偏らないよう、幅広い声色を試すこと"
     );
   }
   sections.push(`## 出力条件\n${conditions.join("\n")}`);
@@ -231,6 +267,64 @@ function bannedWordsIn(plan: SongPlan, banned: string[]): string[] {
   return banned.filter((b) => words.includes(b));
 }
 
+// 固有名詞の検出。ASCII の名前は語境界で見る(「Air」が「airplane」に誤ヒットしないように)。
+// 日本語などの非 ASCII は語境界の概念が無いので単純な部分一致。短すぎる名前は誤検出が多いので見ない
+function containsName(lowerHaystack: string, name: string): boolean {
+  const n = name.trim().toLowerCase();
+  if (n.length < 3) return false;
+  if (/^[\x20-\x7e]+$/.test(n)) {
+    const escaped = n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(`(^|[^a-z0-9])${escaped}([^a-z0-9]|$)`).test(lowerHaystack);
+  }
+  return lowerHaystack.includes(n);
+}
+
+// artist モードの固有名詞チェック。Suno はプロンプト内のアーティスト名・曲名をモデレーションで
+// 弾く(SENSITIVE_WORD_ERROR → タスク FAILED)ため、送信前に検査する。
+// 曲名は普通の単語のこと(「Lemon」等)があるので title だけを見る(歌詞に偶然出るのは許容)
+export function properNounsIn(plan: SongPlan, ref: ReferenceSong): string[] {
+  const found: string[] = [];
+  const body = [plan.style, plan.title, plan.lyrics].join("\n").toLowerCase();
+  if (containsName(body, ref.artist)) found.push(ref.artist);
+  if (containsName(plan.title.toLowerCase(), ref.title)) found.push(ref.title);
+  return found;
+}
+
+// 再生成すべき問題(検出内容と、プロンプトに足す指示)
+interface PlanIssue {
+  label: string;
+  instruction: string;
+}
+
+function planIssues(
+  plan: SongPlan,
+  input: SongPlanInput,
+  limits: WordLimits
+): PlanIssue[] {
+  const issues: PlanIssue[] = [];
+  const banned = bannedWordsIn(plan, limits.banned);
+  if (banned.length > 0) {
+    issues.push({
+      label: `禁止ワード(${banned.join(", ")})`,
+      instruction:
+        `前回の出力には使用禁止ワード(${banned.join(", ")})が中心要素として含まれていた。` +
+        `これらのワードをテーマ・スタイル・歌詞・realWorldWords のいずれにも使わず、別の発想で作り直すこと。`,
+    });
+  }
+  if (input.mode === "artist" && input.referenceSong) {
+    const nouns = properNounsIn(plan, input.referenceSong);
+    if (nouns.length > 0) {
+      issues.push({
+        label: `固有名詞の混入(${nouns.join(", ")})`,
+        instruction:
+          `前回の出力には固有名詞(${nouns.join(", ")})が含まれていた。Suno のモデレーションに拒否され生成が失敗するため、` +
+          `style・title・lyrics から固有名詞を完全に取り除き、音楽的特徴の記述だけで書き直すこと。`,
+      });
+    }
+  }
+  return issues;
+}
+
 // スタイル+歌詞+訳+タイトル+狙い+リアルワードを生成する。manual はユーザー指定の要素を尊重し、
 // daily はプール全体から評価を踏まえて選ぶ(1 要素は普段と違うもの)。daily_adventure は大きく外す。
 // リアルワードの使用制限は全モード共通でここで一元処理する
@@ -239,21 +333,19 @@ export async function generateSongPlan(input: SongPlanInput): Promise<SongPlanRe
   let llmPrompt = buildSongPlanPrompt(input, limits);
   let plan = await requestSongPlan(llmPrompt);
 
-  // 検証リトライ: 禁止ワードが中心要素に残っていたら、指示を強めて 1 回だけ再生成する
-  const violations = bannedWordsIn(plan, limits.banned);
-  if (violations.length > 0) {
+  // 検証リトライ: 禁止ワードの残留・固有名詞の混入があれば、指示を強めて 1 回だけ再生成する
+  const issues = planIssues(plan, input, limits);
+  if (issues.length > 0) {
     console.warn(
-      `[llm] 禁止ワード(${violations.join(", ")})が含まれたため再生成します`
+      `[llm] ${issues.map((i) => i.label).join(" / ")}が含まれたため再生成します`
     );
-    llmPrompt +=
-      `\n\n## 再生成の指示(厳守)\n前回の出力には使用禁止ワード(${violations.join(", ")})が中心要素として含まれていた。` +
-      `これらのワードをテーマ・スタイル・歌詞・realWorldWords のいずれにも使わず、別の発想で作り直すこと。`;
+    llmPrompt += `\n\n## 再生成の指示(厳守)\n${issues.map((i) => i.instruction).join("\n")}`;
     plan = await requestSongPlan(llmPrompt);
-    const still = bannedWordsIn(plan, limits.banned);
+    const still = planIssues(plan, input, limits);
     if (still.length > 0) {
-      // 生成は止めない(警告のみ)
+      // 生成は止めない(警告のみ。固有名詞が残った場合は Suno 側で FAILED として観測できる)
       console.warn(
-        `[llm] 再生成後も禁止ワード(${still.join(", ")})が残ったため、そのまま採用します`
+        `[llm] 再生成後も ${still.map((i) => i.label).join(" / ")} が残ったため、そのまま採用します`
       );
     }
   }
