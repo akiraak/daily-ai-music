@@ -4,7 +4,7 @@
 import * as db from "./db.ts";
 
 const FETCH_TIMEOUT_MS = 8_000;
-const NEWS_RSS_URL = "https://news.google.com/rss?hl=ja&gl=JP&ceid=JP:ja";
+const NEWS_RSS_URL = "https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en";
 const NEWS_MAX_ITEMS = 8;
 
 export const CONTEXT_SETTING_DEFAULTS = {
@@ -39,7 +39,7 @@ function decodeXmlEntities(s: string): string {
     .replace(/&amp;/g, "&");
 }
 
-// Google News RSS(日本版トップニュース)の見出し上位を整形して返す
+// Google News RSS(米国版・英語トップニュース)の見出し上位を整形して返す
 async function fetchNews(): Promise<string | null> {
   const res = await fetchWithTimeout(NEWS_RSS_URL);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);

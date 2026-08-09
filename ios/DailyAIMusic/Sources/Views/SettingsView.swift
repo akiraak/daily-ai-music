@@ -112,7 +112,7 @@ struct SettingsView: View {
             .foregroundStyle(.secondary)
             .padding(.bottom, 4)
         Group {
-            settingRow("ニュース", hint: "Google News の日本版トップニュース見出し") {
+            settingRow("ニュース", hint: "Google News の米国版(英語)トップニュース見出し") {
                 Toggle("ニュース", isOn: binding(\.contextNews) { SettingsUpdateRequest(contextNews: $0) })
                     .labelsHidden()
                     .accessibilityIdentifier("settings.contextNews")
