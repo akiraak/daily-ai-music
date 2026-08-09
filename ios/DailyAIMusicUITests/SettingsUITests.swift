@@ -17,6 +17,7 @@ final class SettingsUITests: XCTestCase {
         let newsToggle = app.switches["settings.contextNews"].firstMatch
         XCTAssertTrue(newsToggle.waitForExistence(timeout: 10), "サーバー設定が読み込まれること(サーバー起動と API Secret 注入が必要)")
         XCTAssertTrue(app.descendants(matching: .any)["settings.dailyHour"].firstMatch.exists)
+        XCTAssertTrue(app.descendants(matching: .any)["settings.dailyCount"].firstMatch.exists)
 
         // タイムゾーン欄にサーバーの現在値が入っていること
         let timezone = app.descendants(matching: .any)["settings.dailyTimezone"].firstMatch

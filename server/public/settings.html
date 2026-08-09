@@ -33,8 +33,14 @@
     <section class="panel">
       <h2>毎日の自動生成</h2>
       <div class="setting-row">
-        <div class="setting-label">自動生成<span class="setting-hint">毎日 1 曲を自動生成する</span></div>
+        <div class="setting-label">自動生成<span class="setting-hint">毎日、設定した曲数を自動生成する</span></div>
         <input type="checkbox" class="toggle" id="daily-enabled" data-field="dailyEnabled">
+      </div>
+      <div class="setting-row">
+        <div class="setting-label">1 日の曲数<span class="setting-hint">1〜10。実行時刻から 1 曲ずつ順次生成する</span></div>
+        <div class="setting-inputs">
+          <input type="number" id="daily-count" data-field="dailyCount" step="1" min="1" max="10">
+        </div>
       </div>
       <div class="setting-row">
         <div class="setting-label">実行時刻(時)<span class="setting-hint">0〜23。タイムゾーン基準</span></div>

@@ -259,8 +259,8 @@ export function listTracks(limit = 200): TrackWithTaskRow[] {
     .all(limit) as unknown as TrackWithTaskRow[];
 }
 
-// 直近の生成スタイル(LLM の重複回避用)
-export function listRecentStyles(limit = 5): string[] {
+// 直近の生成スタイル(LLM の重複回避用)。1 日 3 曲でも数日分を見渡せる件数にしてある
+export function listRecentStyles(limit = 10): string[] {
   const rows = db
     .prepare(
       `SELECT style FROM tasks WHERE style IS NOT NULL ORDER BY id DESC LIMIT ?`
@@ -275,7 +275,7 @@ export interface RecentStyleRow {
   styleJa: string | null;
 }
 
-export function listRecentStyleRows(limit = 5): RecentStyleRow[] {
+export function listRecentStyleRows(limit = 10): RecentStyleRow[] {
   const rows = db
     .prepare(
       `SELECT style, style_ja FROM tasks WHERE style IS NOT NULL ORDER BY id DESC LIMIT ?`

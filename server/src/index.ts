@@ -131,7 +131,7 @@ api.get("/settings", (c) => {
 });
 
 // 部分更新: { dailyEnabled?, adventureProbability?, dailyHour?, dailyTimezone?,
-//            contextNews?, wordMaxUses?, wordWindowDays? }
+//            dailyCount?, contextNews?, wordMaxUses?, wordWindowDays? }
 api.put("/settings", async (c) => {
   const body = await c.req.json().catch(() => null);
   if (body === null || typeof body !== "object") {
@@ -163,6 +163,13 @@ api.put("/settings", async (c) => {
       return c.json({ error: "dailyTimezone が不正です(IANA タイムゾーン名)" }, 400);
     }
     updates.push(["daily_timezone", body.dailyTimezone]);
+  }
+  if ("dailyCount" in body) {
+    const v = body.dailyCount;
+    if (!Number.isInteger(v) || v < 1 || v > 10) {
+      return c.json({ error: "dailyCount は 1〜10 の整数です" }, 400);
+    }
+    updates.push(["daily_count", String(v)]);
   }
   if ("contextNews" in body) {
     if (typeof body.contextNews !== "boolean") {

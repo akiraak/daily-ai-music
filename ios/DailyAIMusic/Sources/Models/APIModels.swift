@@ -190,6 +190,8 @@ struct ServerSettings: Decodable, Equatable {
     var adventureProbability: Double
     var dailyHour: Int
     var dailyTimezone: String
+    /// 1 日に生成する曲数(1〜10)
+    var dailyCount: Int
     var contextNews: Bool
 }
 
@@ -203,6 +205,7 @@ struct SettingsUpdateRequest: Encodable {
     var adventureProbability: Double?
     var dailyHour: Int?
     var dailyTimezone: String?
+    var dailyCount: Int?
     var contextNews: Bool?
 
     init(
@@ -210,12 +213,14 @@ struct SettingsUpdateRequest: Encodable {
         adventureProbability: Double? = nil,
         dailyHour: Int? = nil,
         dailyTimezone: String? = nil,
+        dailyCount: Int? = nil,
         contextNews: Bool? = nil
     ) {
         self.dailyEnabled = dailyEnabled
         self.adventureProbability = adventureProbability
         self.dailyHour = dailyHour
         self.dailyTimezone = dailyTimezone
+        self.dailyCount = dailyCount
         self.contextNews = contextNews
     }
 }

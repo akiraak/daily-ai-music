@@ -52,10 +52,21 @@ struct SettingsView: View {
     private var dailySection: some View {
         sectionHeader("毎日の自動生成")
         Group {
-            settingRow("自動生成", hint: "毎日 1 曲を自動生成する") {
+            settingRow("自動生成", hint: "毎日、設定した曲数を自動生成する") {
                 Toggle("自動生成", isOn: binding(\.dailyEnabled) { SettingsUpdateRequest(dailyEnabled: $0) })
                     .labelsHidden()
                     .accessibilityIdentifier("settings.dailyEnabled")
+            }
+            Divider()
+            settingRow("1 日の曲数", hint: "実行時刻から 1 曲ずつ順次生成する") {
+                Picker("1 日の曲数", selection: binding(\.dailyCount) { SettingsUpdateRequest(dailyCount: $0) }) {
+                    ForEach(1..<11, id: \.self) { count in
+                        Text("\(count) 曲").tag(count)
+                    }
+                }
+                .pickerStyle(.menu)
+                .tint(Color.accentDeep)
+                .accessibilityIdentifier("settings.dailyCount")
             }
             Divider()
             settingRow("実行時刻", hint: "タイムゾーン基準") {
@@ -308,6 +319,6 @@ private extension ServerSettings {
     /// settings 未読込時にバインディングの get が返すダミー(未読込中はコントロール自体を表示しない)
     static let placeholder = ServerSettings(
         dailyEnabled: false, adventureProbability: 0, dailyHour: 0,
-        dailyTimezone: "", contextNews: false
+        dailyTimezone: "", dailyCount: 1, contextNews: false
     )
 }

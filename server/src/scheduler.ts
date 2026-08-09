@@ -1,6 +1,7 @@
 // 毎日の自動生成スケジューラ。1 分間隔で現在時刻(設定のタイムゾーン)をチェックし、
-// 当日の実行時刻以降でまだ生成していなければ実行する。最終生成日は settings に記録し、
-// サーバー停止中に実行時刻を跨いだ場合も起動時のチェックで追い生成される
+// 当日の実行時刻以降で設定曲数(daily_count)に達していなければ 1 曲ずつ順次生成する。
+// 最終生成日とその日の生成済み数は settings(last_daily_date / last_daily_count)に記録し、
+// サーバー停止中に実行時刻を跨いだ場合や途中失敗時も、残数だけ追い生成される
 import { buildTodayContext } from "./context.ts";
 import * as db from "./db.ts";
 import { startGeneration } from "./generation.ts";
@@ -15,6 +16,7 @@ export interface DailySettings {
   adventureProbability: number; // 0〜1
   dailyHour: number; // 0〜23(dailyTimezone での実行時刻)
   dailyTimezone: string; // IANA タイムゾーン
+  dailyCount: number; // 1 日に生成する曲数
   lastDailyDate: string | null; // 最後に自動生成した日付(dailyTimezone での YYYY-MM-DD)
 }
 
@@ -23,6 +25,7 @@ export const SETTING_DEFAULTS = {
   adventureProbability: 0.2,
   dailyHour: 6,
   dailyTimezone: "America/Los_Angeles",
+  dailyCount: 3,
 } as const;
 
 export function getDailySettings(): DailySettings {
@@ -39,8 +42,17 @@ export function getDailySettings(): DailySettings {
     ),
     dailyHour: num(db.getSetting("daily_hour"), SETTING_DEFAULTS.dailyHour),
     dailyTimezone: db.getSetting("daily_timezone") ?? SETTING_DEFAULTS.dailyTimezone,
+    dailyCount: num(db.getSetting("daily_count"), SETTING_DEFAULTS.dailyCount),
     lastDailyDate: db.getSetting("last_daily_date") ?? null,
   };
+}
+
+// last_daily_date の日に生成済みの曲数。記録なし(1 日 1 曲時代の旧データ)は
+// その日を全数生成済み扱いにして、デプロイ当日の意図しない追い生成を防ぐ
+function getLastDailyCount(): number | null {
+  const v = db.getSetting("last_daily_count");
+  const n = Number(v);
+  return v !== undefined && Number.isFinite(n) ? n : null;
 }
 
 export function isValidTimezone(tz: string): boolean {
@@ -76,16 +88,25 @@ export function localDateAndHour(
 }
 
 // 時刻判定ロジック(テスト用に純粋関数として切り出し)。
-// 当日(タイムゾーン基準)の実行時刻以降で、まだその日の生成をしていなければ run
+// 当日(タイムゾーン基準)の実行時刻以降で、その日の生成が dailyCount 曲に達していなければ
+// 残数(remaining)分を run。lastDailyCount が null(旧データ・記録なし)の日は全数生成済み扱い
 export function shouldRunDaily(input: {
   now: Date;
   timezone: string;
   hour: number;
   lastDailyDate: string | null;
-}): { run: boolean; localDate: string } {
+  lastDailyCount: number | null;
+  dailyCount: number;
+}): { run: boolean; remaining: number; localDate: string } {
   const local = localDateAndHour(input.now, input.timezone);
+  const generatedToday =
+    input.lastDailyDate === local.date
+      ? (input.lastDailyCount ?? input.dailyCount)
+      : 0;
+  const remaining = Math.max(0, input.dailyCount - generatedToday);
   return {
-    run: local.hour >= input.hour && input.lastDailyDate !== local.date,
+    run: local.hour >= input.hour && remaining > 0,
+    remaining,
     localDate: local.date,
   };
 }
@@ -138,27 +159,40 @@ async function tick(): Promise<void> {
   try {
     const settings = getDailySettings();
     if (!settings.dailyEnabled) return;
-    const { run, localDate } = shouldRunDaily({
+    const { run, remaining, localDate } = shouldRunDaily({
       now: new Date(),
       timezone: settings.dailyTimezone,
       hour: settings.dailyHour,
       lastDailyDate: settings.lastDailyDate,
+      lastDailyCount: getLastDailyCount(),
+      dailyCount: settings.dailyCount,
     });
     if (!run) return;
     // 初回起動(記録なし)は当日分を生成済み扱いにする。導入直後の意図しない生成を避け、
     // 翌日の実行時刻から通常運転に入る
     if (settings.lastDailyDate === null) {
       db.setSetting("last_daily_date", localDate);
+      db.setSetting("last_daily_count", String(settings.dailyCount));
       console.log(`[daily] 初回起動のため ${localDate} を生成済み扱いにしました`);
       return;
     }
     if (Date.now() - lastFailedAt < RETRY_AFTER_FAILURE_MS) return;
-    console.log(`[daily] ${localDate} の自動生成を開始`);
-    const result = await runDaily();
-    db.setSetting("last_daily_date", localDate);
+    // 残数分を 1 曲ずつ順次生成する。順次なので 2 曲目以降のプロンプトには同日の前の曲の
+    // スタイル・リアルワードが既存の仕組みで注入され、曲間の重複を避けられる。
+    // 成功のたびに生成済み数を記録し、途中失敗・再起動時は 30 分後の再試行で残数だけ追い生成する
+    const generatedToday = settings.dailyCount - remaining;
     console.log(
-      `[daily] ${localDate} の自動生成完了 (task ${result.task.id}, adventure=${result.adventure})`
+      `[daily] ${localDate} の自動生成を開始(${generatedToday + 1}〜${settings.dailyCount} 曲目)`
     );
+    for (let i = 0; i < remaining; i++) {
+      const result = await runDaily();
+      db.setSetting("last_daily_date", localDate);
+      db.setSetting("last_daily_count", String(generatedToday + i + 1));
+      console.log(
+        `[daily] ${localDate} の ${generatedToday + i + 1}/${settings.dailyCount} 曲目を生成 (task ${result.task.id}, adventure=${result.adventure})`
+      );
+    }
+    console.log(`[daily] ${localDate} の自動生成完了`);
   } catch (err) {
     lastFailedAt = Date.now();
     console.error(`[daily] 自動生成に失敗(30 分後に再試行): ${err}`);

@@ -217,7 +217,7 @@ async function requestSongPlan(llmPrompt: string): Promise<SongPlan> {
     max_tokens: 16000,
     system:
       "あなたは優れた音楽プロデューサー兼作詞家です。AI 音楽生成サービス Suno に渡すスタイルプロンプトと歌詞を作ります。" +
-      "毎日 1 曲、ユーザーの生活に寄り添う新しい曲を届けるのが仕事です。ありきたりな表現を避け、具体的で音の想像がつくスタイル指定と、心に残る歌詞を書いてください。",
+      "毎日、ユーザーの生活に寄り添う新しい曲を届けるのが仕事です。ありきたりな表現を避け、具体的で音の想像がつくスタイル指定と、心に残る歌詞を書いてください。",
     messages: [{ role: "user", content: llmPrompt }],
     output_config: {
       format: { type: "json_schema", schema: SONG_PLAN_SCHEMA },
