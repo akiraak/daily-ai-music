@@ -1,5 +1,7 @@
 # DONE
 
+- [x] 2026-08-09 生成時の天気削除の本番反映 — サーバーを本番(music.chobi.me)へデプロイ(2d4b2c9)し、実機アプリを再インストール(`./run-ios-device.sh`)。旧アプリは新サーバー応答で設定タブ・生成パラメータ画面がエラー表示になるため両者をセットで実施。本番の settings / generation-params 応答から weather 系キーが消えたことをサーバー内 curl で確認済み
+
 - [x] 2026-08-09 生成時の天気を削除 — 毎日の自動生成の「今日のコンテキスト」から天気(Open-Meteo)を削除し、ニュースのみに一本化。サーバーは `context.ts` の天気ソースと weather 系設定(`context_weather` / `weather_city` / `weather_lat` / `weather_lon`)の読み書き・`PUT /api/settings` のバリデーション・`GET /api/generation-params` の contextWeather / weatherCity を削除(DB の既存 weather 系 settings 行は参照されない孤児として残置 — 廃止済み profile テーブルと同じ扱い)。管理画面設定ページの天気トグル・都市選択と、iOS の設定タブの天気トグル・都市ピッカー(47 都道府県リスト)・生成パラメータ画面の天気表示・生成タブ説明文も削除。旧アプリ×新サーバーは設定タブ・生成パラメータ画面のデコードエラー表示のみで他機能に影響しないが、**本番反映はサーバーデプロイ+実機再インストールをセットで行う(TODO 残し)**。spec 2 本(決定の記録は日付付き追記、flow は挙動書き換え+SVG 2 枚)と CLAUDE.md も更新。検証: typecheck+隔離 DB サーバーへの curl(settings / generation-params から weather 系が消え、weather キーのみの PUT は 400)+管理画面ヘッドレス Chrome+シミュレータビルド+SettingsUITests / ScreenshotUITests(設定・生成・生成パラメータ画面を目視)。プラン: [docs/plans/archive/remove-weather-context.md](docs/plans/archive/remove-weather-context.md)
 
 - [x] 2026-08-09 生成パラメータ表示の本番反映 — サーバーを本番(music.chobi.me)へデプロイし、実機アプリを再インストール(`./run-ios-device.sh`)して実機で生成パラメータ画面の表示を確認。これで生成パラメータ表示タスク(下記)は本番でも稼働
