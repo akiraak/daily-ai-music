@@ -23,6 +23,7 @@ struct TrackDetailView: View {
             VStack(alignment: .leading, spacing: 0) {
                 header
                 wordsSection
+                presetsSection
                 intentSection
                 styleSection
                 lyricsSection
@@ -105,6 +106,19 @@ struct TrackDetailView: View {
             WrappingPillLayout(spacing: 6) {
                 ForEach(Array(track.realWorldWords.enumerated()), id: \.offset) { _, word in
                     PillTag(text: word)
+                }
+            }
+        }
+    }
+
+    /// 使用プリセット(生成に使われた要素)。記録の無い旧データではセクションごと出さない
+    @ViewBuilder
+    private var presetsSection: some View {
+        if let presets = track.usedPresets, !presets.isEmpty {
+            sectionHeader("使用プリセット")
+            WrappingPillLayout(spacing: 6) {
+                ForEach(Array(presets.enumerated()), id: \.offset) { _, preset in
+                    PillTag(text: preset.labelJa)
                 }
             }
         }

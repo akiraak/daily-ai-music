@@ -26,10 +26,19 @@ struct Track: Identifiable, Decodable, Hashable {
     let llmPrompt: String?
     /// 曲の中心となった語(リアルワード)
     let realWorldWords: [String]
+    /// 使用プリセット(使用時点のスナップショット)。旧サーバーでは nil、記録の無い旧データでは空配列
+    let usedPresets: [UsedPreset]?
     let createdAt: Date
 
     var isAdventure: Bool { mode == "daily_adventure" }
     var modeLabel: String { generationModeLabel(mode) }
+}
+
+/// 曲の生成に使われたプリセット(使用時点のスナップショット。プリセットが編集・削除されても表示できる)
+struct UsedPreset: Decodable, Hashable {
+    let category: String
+    let value: String
+    let labelJa: String
 }
 
 func generationModeLabel(_ mode: String) -> String {

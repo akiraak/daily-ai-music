@@ -1,59 +1,50 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 640" font-family="-apple-system, 'Hiragino Sans', 'Noto Sans JP', sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 540" font-family="-apple-system, 'Hiragino Sans', 'Noto Sans JP', sans-serif">
   <defs>
     <marker id="arrow2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M0,0 L10,5 L0,10 z" fill="#787D2B"/>
     </marker>
   </defs>
 
-  <rect x="0" y="0" width="820" height="640" rx="14" fill="#FDF2E5"/>
+  <rect x="0" y="0" width="820" height="540" rx="14" fill="#FDF2E5"/>
 
   <!-- 手順 1 -->
   <rect x="64" y="32" width="620" height="76" rx="10" fill="#FFFFFF" stroke="#D9CBB4"/>
   <circle cx="98" cy="70" r="15" fill="#B4BA40"/>
   <text x="98" y="75" text-anchor="middle" font-size="14" font-weight="bold" fill="#FFFFFF">1</text>
-  <text x="128" y="60" font-size="14" font-weight="bold" fill="#3A382F">プロファイル更新(LLM コール①)</text>
-  <text x="128" y="80" font-size="12" fill="#3A382F">前回更新以降に付いた 👍/👎 があれば、好みプロファイル文書を更新して版を積む</text>
-  <text x="128" y="97" font-size="11" fill="#8A8578">新しい評価が無ければスキップ</text>
+  <text x="128" y="60" font-size="14" font-weight="bold" fill="#3A382F">冒険日判定</text>
+  <text x="128" y="80" font-size="12" fill="#3A382F">確率 20%(設定 adventure_probability)で mode=daily_adventure に</text>
+  <text x="128" y="97" font-size="11" fill="#8A8578">冒険日は好みから大きく外した意外な組み合わせに挑戦する日</text>
   <line x1="374" y1="108" x2="374" y2="128" stroke="#787D2B" stroke-width="1.5" marker-end="url(#arrow2)"/>
 
   <!-- 手順 2 -->
   <rect x="64" y="132" width="620" height="76" rx="10" fill="#FFFFFF" stroke="#D9CBB4"/>
   <circle cx="98" cy="170" r="15" fill="#B4BA40"/>
   <text x="98" y="175" text-anchor="middle" font-size="14" font-weight="bold" fill="#FFFFFF">2</text>
-  <text x="128" y="160" font-size="14" font-weight="bold" fill="#3A382F">冒険日判定</text>
-  <text x="128" y="180" font-size="12" fill="#3A382F">確率 20%(設定 adventure_probability)で mode=daily_adventure に</text>
-  <text x="128" y="197" font-size="11" fill="#8A8578">冒険日は好みから大きく外した意外な組み合わせに挑戦する日</text>
+  <text x="128" y="160" font-size="14" font-weight="bold" fill="#3A382F">今日のコンテキスト取得</text>
+  <text x="128" y="180" font-size="12" fill="#3A382F">ニュース(Google News RSS 見出し 8 件)と天気(Open-Meteo)を並行取得</text>
+  <text x="128" y="197" font-size="11" fill="#8A8578">OFF 設定・取得失敗はそのセクション無しで続行(生成は止めない)</text>
   <line x1="374" y1="208" x2="374" y2="228" stroke="#787D2B" stroke-width="1.5" marker-end="url(#arrow2)"/>
 
   <!-- 手順 3 -->
   <rect x="64" y="232" width="620" height="76" rx="10" fill="#FFFFFF" stroke="#D9CBB4"/>
   <circle cx="98" cy="270" r="15" fill="#B4BA40"/>
   <text x="98" y="275" text-anchor="middle" font-size="14" font-weight="bold" fill="#FFFFFF">3</text>
-  <text x="128" y="260" font-size="14" font-weight="bold" fill="#3A382F">今日のコンテキスト取得</text>
-  <text x="128" y="280" font-size="12" fill="#3A382F">ニュース(Google News RSS 見出し 8 件)と天気(Open-Meteo)を並行取得</text>
-  <text x="128" y="297" font-size="11" fill="#8A8578">OFF 設定・取得失敗はそのセクション無しで続行(生成は止めない)</text>
+  <text x="128" y="260" font-size="14" font-weight="bold" fill="#3A382F">LLM 生成(1 コール)</text>
+  <text x="128" y="280" font-size="12" fill="#3A382F">プリセット(評価 👍/👎 の集計を併記)+コンテキスト+直近スタイル+ワード制限を渡し、</text>
+  <text x="128" y="297" font-size="12" fill="#3A382F">スタイル・歌詞・タイトル・狙い・リアルワード・使用プリセットを構造化出力で受け取る</text>
   <line x1="374" y1="308" x2="374" y2="328" stroke="#787D2B" stroke-width="1.5" marker-end="url(#arrow2)"/>
 
   <!-- 手順 4 -->
   <rect x="64" y="332" width="620" height="76" rx="10" fill="#FFFFFF" stroke="#D9CBB4"/>
   <circle cx="98" cy="370" r="15" fill="#B4BA40"/>
   <text x="98" y="375" text-anchor="middle" font-size="14" font-weight="bold" fill="#FFFFFF">4</text>
-  <text x="128" y="360" font-size="14" font-weight="bold" fill="#3A382F">LLM 生成(LLM コール②)</text>
-  <text x="128" y="380" font-size="12" fill="#3A382F">プロファイル+プリセット+コンテキスト+直近スタイル+ワード制限を渡し、</text>
-  <text x="128" y="397" font-size="12" fill="#3A382F">スタイル・歌詞・タイトル・狙い・リアルワードを構造化出力で受け取る</text>
-  <line x1="374" y1="408" x2="374" y2="428" stroke="#787D2B" stroke-width="1.5" marker-end="url(#arrow2)"/>
-
-  <!-- 手順 5 -->
-  <rect x="64" y="432" width="620" height="76" rx="10" fill="#FFFFFF" stroke="#D9CBB4"/>
-  <circle cx="98" cy="470" r="15" fill="#B4BA40"/>
-  <text x="98" y="475" text-anchor="middle" font-size="14" font-weight="bold" fill="#FFFFFF">5</text>
-  <text x="128" y="460" font-size="14" font-weight="bold" fill="#3A382F">Suno へ送信・タスク記録</text>
-  <text x="128" y="480" font-size="12" fill="#3A382F">customMode で送信して tasks に記録し、リアルワードを保存</text>
-  <text x="128" y="497" font-size="11" fill="#8A8578">以降は 10 秒間隔のポーラーが完了を検知(→ タスクの状態遷移の図)</text>
+  <text x="128" y="360" font-size="14" font-weight="bold" fill="#3A382F">Suno へ送信・タスク記録</text>
+  <text x="128" y="380" font-size="12" fill="#3A382F">customMode で送信して tasks に記録し、リアルワードと使用プリセットを保存</text>
+  <text x="128" y="397" font-size="11" fill="#8A8578">以降は 10 秒間隔のポーラーが完了を検知(→ タスクの状態遷移の図)</text>
 
   <!-- 補足 -->
-  <line x1="64" y1="536" x2="684" y2="536" stroke="#D9CBB4"/>
-  <text x="64" y="562" font-size="11" fill="#8A8578">・スケジューラは 1 分間隔で時刻をチェックし、設定タイムゾーンの実行時刻(既定 6 時)以降で当日未生成なら実行する</text>
-  <text x="64" y="582" font-size="11" fill="#8A8578">・途中で失敗したら 30 分後に再試行(last_daily_date は成功時のみ更新)。サーバー停止中に跨いだ分は起動時に追い生成</text>
-  <text x="64" y="602" font-size="11" fill="#8A8578">・手動トリガ(POST /api/daily/run)も同じ①〜⑤を実行するが、last_daily_date は更新しない</text>
+  <line x1="64" y1="436" x2="684" y2="436" stroke="#D9CBB4"/>
+  <text x="64" y="462" font-size="11" fill="#8A8578">・スケジューラは 1 分間隔で時刻をチェックし、設定タイムゾーンの実行時刻(既定 6 時)以降で当日未生成なら実行する</text>
+  <text x="64" y="482" font-size="11" fill="#8A8578">・途中で失敗したら 30 分後に再試行(last_daily_date は成功時のみ更新)。サーバー停止中に跨いだ分は起動時に追い生成</text>
+  <text x="64" y="502" font-size="11" fill="#8A8578">・手動トリガ(POST /api/daily/run)も同じ①〜④を実行するが、last_daily_date は更新しない</text>
 </svg>
