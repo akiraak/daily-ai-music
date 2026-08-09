@@ -94,7 +94,6 @@ api.post("/generate", async (c) => {
     const { plan, llmModel, llmPrompt } = await generateSongPlan({
       mode: "manual",
       instrumental,
-      profile: db.getLatestProfile()?.content ?? null,
       selectedPresets,
       presetPool: db.listPresets(),
       freeText,
@@ -114,16 +113,6 @@ api.post("/generate", async (c) => {
     console.error(`[api] 生成リクエスト失敗: ${err}`);
     return c.json({ error: `生成リクエストに失敗しました: ${err}` }, 502);
   }
-});
-
-// 現行の好みプロファイル(まだ無ければ null)
-api.get("/profile", (c) => {
-  const profile = db.getLatestProfile();
-  return c.json({
-    profile: profile
-      ? { content: profile.content, createdAt: profile.created_at }
-      : null,
-  });
 });
 
 // --- 毎日の自動生成の設定・手動トリガ ---
@@ -242,8 +231,8 @@ api.get("/real-world-words", (c) => {
 // その日のスケジュール実行は別途行われる
 api.post("/daily/run", async (c) => {
   try {
-    const { task, adventure, profileUpdated } = await runDaily();
-    return c.json({ task: taskJson(task), adventure, profileUpdated }, 201);
+    const { task, adventure } = await runDaily();
+    return c.json({ task: taskJson(task), adventure }, 201);
   } catch (err) {
     console.error(`[api] daily/run 失敗: ${err}`);
     return c.json({ error: `自動生成に失敗しました: ${err}` }, 502);

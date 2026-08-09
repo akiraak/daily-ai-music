@@ -1,4 +1,4 @@
-// LLM(Claude API)クライアント。①スタイル+歌詞+訳+タイトル+狙いの生成 ②好みプロファイルの更新
+// LLM(Claude API)クライアント。スタイル+歌詞+訳+タイトル+狙いの生成
 // モデルは claude-sonnet-5(.env の LLM_MODEL で変更可)。構造化出力(output_config.format)で JSON を受け取る
 import Anthropic from "@anthropic-ai/sdk";
 import { ANTHROPIC_API_KEY, LLM_MODEL } from "./config.ts";
@@ -24,7 +24,7 @@ export interface SongPlan {
 export interface SongPlanResult {
   plan: SongPlan;
   llmModel: string;
-  llmPrompt: string; // LLM に送った user メッセージ全文(プロファイル・プリセット・直近スタイル等を含む)
+  llmPrompt: string; // LLM に送った user メッセージ全文(プリセット・直近スタイル等を含む)
 }
 
 const SONG_PLAN_SCHEMA = {
@@ -121,7 +121,6 @@ function firstText(message: Anthropic.Message): string {
 export interface SongPlanInput {
   mode: GenerationMode;
   instrumental: boolean;
-  profile: string | null;
   selectedPresets: PresetRow[];
   presetPool: PresetRow[];
   presetRatings?: PresetRatings; // プリセット別の 👍/👎 集計(daily 系で注入。manual は非注入)
@@ -149,9 +148,6 @@ export function currentWordLimits(): WordLimits {
 export function buildSongPlanPrompt(input: SongPlanInput, limits: WordLimits): string {
   const sections: string[] = [];
 
-  if (input.profile) {
-    sections.push(`## ユーザーの好みプロファイル\n${input.profile}`);
-  }
   if (input.mode === "manual") {
     if (input.selectedPresets.length > 0) {
       sections.push(
@@ -264,40 +260,4 @@ export async function generateSongPlan(input: SongPlanInput): Promise<SongPlanRe
 
   console.log(`[llm] 生成プラン: "${plan.title}" style=${plan.style.slice(0, 80)}...`);
   return { plan, llmModel: LLM_MODEL, llmPrompt };
-}
-
-// 評価(👍/👎)を好みプロファイル文書に反映し、更新後の文書全文を返す
-export async function updateProfile(input: {
-  currentProfile: string | null;
-  ratedTracks: {
-    title: string;
-    style: string | null;
-    rating: number | null;
-  }[];
-}): Promise<string> {
-  const trackLines = input.ratedTracks
-    .map(
-      (t) =>
-        `- ${t.rating === 1 ? "👍" : "👎"} "${t.title}" — style: ${t.style ?? "(不明)"}`
-    )
-    .join("\n");
-
-  const message = await client.messages.create({
-    model: LLM_MODEL,
-    max_tokens: 4096,
-    system:
-      "あなたはユーザーの音楽の好みプロファイル文書を管理しています。新しい評価を踏まえて文書を更新し、更新後の文書全文だけを出力してください(前置きや説明は不要)。" +
-      "プロファイルは日本語の簡潔な箇条書きで、好きな要素・避けたい要素・意外に好きだった要素を整理します。古い内容も evidence が覆らない限り保持し、全体で 500 字以内に収めてください。",
-    messages: [
-      {
-        role: "user",
-        content: [
-          `## 現在のプロファイル\n${input.currentProfile ?? "(まだ無い。今回の評価から新規作成する)"}`,
-          `## 新しい評価(👍=好き、👎=好みじゃない)\n${trackLines}`,
-        ].join("\n\n"),
-      },
-    ],
-  });
-
-  return firstText(message).trim();
 }

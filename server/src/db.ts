@@ -23,7 +23,7 @@ export interface TaskRow {
   title: string | null; // LLM が付けた曲名
   intent: string | null; // 狙いの説明(日本語)
   llm_model: string | null; // 生成に使った LLM のモデル名
-  llm_prompt: string | null; // LLM に送った入力全文(プロファイル・プリセット・直近スタイル等を含む)
+  llm_prompt: string | null; // LLM に送った入力全文(プリセット・直近スタイル等を含む)
   created_at: string;
   updated_at: string;
 }
@@ -76,6 +76,7 @@ db.exec(`
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     UNIQUE (category, value)
   );
+  -- 好みプロファイル文書(廃止済み。過去データの履歴としてテーブルは残す — 好みはプリセット評価集計に一本化)
   CREATE TABLE IF NOT EXISTS profile (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     content TEXT NOT NULL,
@@ -115,7 +116,7 @@ function addColumnIfMissing(table: string, column: string, ddl: string): void {
   }
 }
 addColumnIfMissing("tracks", "rating", "rating INTEGER");
-addColumnIfMissing("tracks", "rated_at", "rated_at TEXT"); // 最後に評価を変更した日時(プロファイル更新の差分検出用)
+addColumnIfMissing("tracks", "rated_at", "rated_at TEXT"); // 最後に評価を変更した日時
 
 // ★(favorite)は廃止し 👍/👎 の 2 択に統一。旧 DB の ★ は 👍 に変換してカラムを削除
 {
@@ -258,29 +259,6 @@ export function listTracks(limit = 200): TrackWithTaskRow[] {
     .all(limit) as unknown as TrackWithTaskRow[];
 }
 
-// --- 好みプロファイル(版を積む。最新行が現行) ---
-
-export interface ProfileRow {
-  id: number;
-  content: string;
-  created_at: string;
-}
-
-export function getLatestProfile(): ProfileRow | undefined {
-  return db.prepare(`SELECT * FROM profile ORDER BY id DESC LIMIT 1`).get() as
-    | ProfileRow
-    | undefined;
-}
-
-export function insertProfile(content: string): ProfileRow {
-  const result = db
-    .prepare(`INSERT INTO profile (content) VALUES (?)`)
-    .run(content);
-  return db
-    .prepare(`SELECT * FROM profile WHERE id = ?`)
-    .get(Number(result.lastInsertRowid)) as unknown as ProfileRow;
-}
-
 // 直近の生成スタイル(LLM の重複回避用)
 export function listRecentStyles(limit = 5): string[] {
   const rows = db
@@ -349,19 +327,6 @@ export function countRealWorldWordUses(windowDays: number): WordUsage[] {
        GROUP BY word ORDER BY uses DESC, word`
     )
     .all(`-${Math.floor(windowDays)} days`) as unknown as WordUsage[];
-}
-
-// 評価済みの楽曲(プロファイル更新用)。since 以降に評価が変更された楽曲を返す
-export function listRatedTracks(sinceIso?: string): TrackWithTaskRow[] {
-  return db
-    .prepare(
-      `SELECT ${TRACK_TASK_COLUMNS}
-       FROM tracks JOIN tasks ON tasks.id = tracks.task_id
-       WHERE tracks.rating IS NOT NULL
-         AND tracks.rated_at IS NOT NULL AND tracks.rated_at > ?
-       ORDER BY tracks.id`
-    )
-    .all(sinceIso ?? "") as unknown as TrackWithTaskRow[];
 }
 
 // --- 設定(key-value)---

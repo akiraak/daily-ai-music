@@ -29,7 +29,7 @@
     <section class="panel">
       <h2>音楽を生成</h2>
       <div class="form-row">
-        <p class="empty">毎日の自動生成と同じフローで 1 曲つくります(プロファイル更新 → 冒険日判定 → AI 作曲)</p>
+        <p class="empty">毎日の自動生成と同じフローで 1 曲つくります(冒険日判定 → AI 作曲)</p>
         <button type="button" id="generate-button">生成する</button>
       </div>
       <p id="form-message" class="form-message" hidden></p>
@@ -45,12 +45,6 @@
       <ul id="tracks" class="track-list"></ul>
       <p id="tracks-empty" class="empty">まだ楽曲がありません。上のボタンから生成してください。</p>
     </section>
-
-    <details class="panel" id="profile-panel">
-      <summary>好みプロファイル</summary>
-      <p id="profile-meta" class="empty"></p>
-      <pre id="profile-content" class="detail-text"></pre>
-    </details>
 
   </main>
   </div>

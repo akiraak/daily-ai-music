@@ -4,7 +4,7 @@
 import { buildTodayContext } from "./context.ts";
 import * as db from "./db.ts";
 import { startGeneration } from "./generation.ts";
-import { generateSongPlan, updateProfile } from "./llm.ts";
+import { generateSongPlan } from "./llm.ts";
 
 const CHECK_INTERVAL_MS = 60_000;
 // 失敗時の再試行間隔(毎分 LLM を叩き続けないため)
@@ -90,47 +90,27 @@ export function shouldRunDaily(input: {
   };
 }
 
-// 毎日の自動生成 1 回分: プロファイル更新 → 冒険日判定 → コンテキスト取得 → LLM 生成 → Suno 送信
+// 毎日の自動生成 1 回分: 冒険日判定 → コンテキスト取得 → LLM 生成 → Suno 送信
 export async function runDaily(): Promise<{
   task: db.TaskRow;
   adventure: boolean;
-  profileUpdated: boolean;
 }> {
-  // 1. プロファイル更新(前回のプロファイル更新以降に評価が変わった曲があれば)
-  const latestProfile = db.getLatestProfile();
-  const rated = db.listRatedTracks(latestProfile?.created_at);
-  let profileUpdated = false;
-  if (rated.length > 0) {
-    console.log(`[daily] 新しい評価 ${rated.length} 件でプロファイルを更新`);
-    const content = await updateProfile({
-      currentProfile: latestProfile?.content ?? null,
-      ratedTracks: rated.map((t) => ({
-        title: t.title,
-        style: t.style,
-        rating: t.rating,
-      })),
-    });
-    db.insertProfile(content);
-    profileUpdated = true;
-  }
-
-  // 2. 冒険日判定
+  // 1. 冒険日判定
   const settings = getDailySettings();
   const adventure = Math.random() < settings.adventureProbability;
   const mode = adventure ? "daily_adventure" : "daily";
   console.log(`[daily] mode=${mode} (冒険確率 ${settings.adventureProbability})`);
 
-  // 3. 外部コンテキスト(ニュース・天気)取得。失敗しても生成は続行(その場合セクション無し)
+  // 2. 外部コンテキスト(ニュース・天気)取得。失敗しても生成は続行(その場合セクション無し)
   const extraContext = await buildTodayContext();
   if (extraContext) {
     console.log(`[daily] 今日のコンテキストを注入(${extraContext.length} 文字)`);
   }
 
-  // 4〜5. LLM 生成 → Suno 送信
+  // 3〜4. LLM 生成 → Suno 送信
   const { plan, llmModel, llmPrompt } = await generateSongPlan({
     mode,
     instrumental: false,
-    profile: db.getLatestProfile()?.content ?? null,
     selectedPresets: [],
     presetPool: db.listPresets(),
     presetRatings: db.countPresetRatings(),
@@ -146,7 +126,7 @@ export async function runDaily(): Promise<{
     llmModel,
     llmPrompt,
   });
-  return { task, adventure, profileUpdated };
+  return { task, adventure };
 }
 
 let ticking = false;

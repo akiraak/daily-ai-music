@@ -121,7 +121,6 @@ struct GenerateResponse: Decodable {
 struct DailyRunResponse: Decodable {
     let task: GenerationTask
     let adventure: Bool
-    let profileUpdated: Bool
 }
 
 /// GET /api/credits。プロバイダから取れなかったときは null

@@ -67,7 +67,7 @@ struct GenerateView: View {
             Text("おまかせ生成")
                 .font(.title3.weight(.heavy))
                 .padding(.top, 8)
-            Text("今日のニュース・天気と好みプロファイルから、AI が 1 曲つくります")
+            Text("今日のニュース・天気とこれまでの評価(👍/👎)から、AI が 1 曲つくります")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -113,7 +113,7 @@ struct GenerateView: View {
         isRunningDaily = true
         defer { isRunningDaily = false }
         do {
-            // サーバー側でプロファイル更新 → LLM 生成 → Suno 送信まで待つため長め
+            // サーバー側で LLM 生成 → Suno 送信まで待つため長め
             _ = try await BackendAPI.postJSON(DailyRunResponse.self, path: "/api/daily/run", timeout: 180)
             dailyError = nil
             await loadTasks()

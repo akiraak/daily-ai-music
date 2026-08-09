@@ -224,7 +224,7 @@ async function refresh() {
   }
 }
 
-// 生成ボタン: 毎日の自動生成と同じフロー(プロファイル更新 → 冒険日判定 → LLM 生成 → Suno 送信)を
+// 生成ボタン: 毎日の自動生成と同じフロー(冒険日判定 → LLM 生成 → Suno 送信)を
 // 手動トリガする。last_daily_date は更新されないため、その日のスケジュール実行は別途行われる
 $("generate-button").addEventListener("click", async () => {
   const button = $("generate-button");
@@ -248,24 +248,6 @@ $("generate-button").addEventListener("click", async () => {
   }
 });
 
-// --- 好みプロファイル閲覧 ---
-async function loadProfile() {
-  try {
-    const { profile } = await fetchJson("/admin/api/profile");
-    $("profile-meta").textContent = profile
-      ? `更新: ${formatDate(profile.createdAt)}`
-      : "まだプロファイルがありません。曲を評価すると、毎日の自動生成時に作成されます。";
-    $("profile-content").textContent = profile?.content ?? "";
-  } catch (err) {
-    console.warn("profile load failed:", err);
-  }
-}
-// パネルを開いたときに最新を取り直す
-$("profile-panel").addEventListener("toggle", () => {
-  if ($("profile-panel").open) loadProfile();
-});
-
 refreshCredits();
 refresh();
-loadProfile();
 setInterval(refresh, POLL_MS);

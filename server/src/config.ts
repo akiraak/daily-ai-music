@@ -44,7 +44,7 @@ export const SUNO_MODEL = process.env.SUNO_MODEL ?? "V5";
 
 export const API_SECRET = process.env.API_SECRET ?? "";
 
-// LLM 生成パイプライン(スタイル・歌詞の生成、好みプロファイルの更新)
+// LLM 生成パイプライン(スタイル・歌詞の生成)
 export const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY ?? "";
 export const LLM_MODEL = process.env.LLM_MODEL ?? "claude-sonnet-5";
 
