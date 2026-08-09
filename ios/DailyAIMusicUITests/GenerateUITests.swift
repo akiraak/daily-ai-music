@@ -30,8 +30,32 @@ final class GenerateUITests: XCTestCase {
         prompt.typeText("テスト用プロンプト")
         XCTAssertTrue(submit.isEnabled, "入力すると生成するが有効になること")
 
+        // 複数行入力欄は return が改行になるため、キーボードツールバーの「閉じる」で閉じる
+        // (シミュレータにハードウェアキーボードが接続されているとソフトウェアキーボードが
+        // 出ないため、キーボード表示を前提条件にガードする)
+        if app.keyboards.firstMatch.exists {
+            let done = app.buttons["generate.keyboard.done"]
+            XCTAssertTrue(done.waitForExistence(timeout: 3), "キーボードツールバーに閉じるボタンが出ること")
+            attachScreenshot(app, name: "keyboard-open")
+            done.tap()
+            XCTAssertTrue(
+                app.keyboards.firstMatch.waitForNonExistence(timeout: 3),
+                "閉じるでキーボードが消えること"
+            )
+            attachScreenshot(app, name: "keyboard-dismissed")
+        }
+
         // 閉じると入力欄が隠れる
         toggle.tap()
         XCTAssertFalse(prompt.exists, "閉じると入力欄が隠れること")
+    }
+
+    /// キーボード開閉の目視確認用スクリーンショットを xcresult に添付する
+    @MainActor
+    private func attachScreenshot(_ app: XCUIApplication, name: String) {
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
     }
 }

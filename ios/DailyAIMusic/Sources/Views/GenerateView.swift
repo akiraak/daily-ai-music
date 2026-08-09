@@ -15,6 +15,8 @@ struct GenerateView: View {
     @State private var instrumental = false
     @State private var isSubmitting = false
     @State private var customError: String?
+    /// 複数行 TextField はリターンキーが改行になるため、キーボードツールバーの「閉じる」で外す
+    @FocusState private var promptFocused: Bool
 
     // 進行状況・クレジット
     @State private var tasks: [GenerationTask] = []
@@ -41,6 +43,7 @@ struct GenerateView: View {
                 .padding(.bottom, 24)
             }
             .background(Color.appBackground)
+            .scrollDismissesKeyboard(.interactively)
             .navigationTitle("生成")
             .toolbar {
                 if let credits {
@@ -53,6 +56,11 @@ struct GenerateView: View {
                             .background(Capsule().fill(Color.appAccent.opacity(0.18)))
                             .accessibilityIdentifier("generate.credits")
                     }
+                }
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("閉じる") { promptFocused = false }
+                        .accessibilityIdentifier("generate.keyboard.done")
                 }
             }
             .task { await pollWhileVisible() }
@@ -185,6 +193,7 @@ struct GenerateView: View {
         if showsCustom {
             VStack(alignment: .leading, spacing: 12) {
                 TextField("例: 朝にぴったりの爽やかなアコースティックポップ", text: $prompt, axis: .vertical)
+                    .focused($promptFocused)
                     .lineLimit(3...8)
                     .font(.subheadline)
                     .padding(10)
@@ -221,6 +230,7 @@ struct GenerateView: View {
     }
 
     private func submitCustom() async {
+        promptFocused = false
         isSubmitting = true
         defer { isSubmitting = false }
         do {

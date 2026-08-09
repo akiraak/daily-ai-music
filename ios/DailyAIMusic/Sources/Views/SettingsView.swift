@@ -41,6 +41,7 @@ struct SettingsView: View {
                 .padding(.bottom, 24)
             }
             .background(Color.appBackground)
+            .scrollDismissesKeyboard(.interactively)
             .navigationTitle("設定")
             .task { await loadSettings() }
         }
