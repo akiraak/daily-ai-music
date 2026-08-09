@@ -17,6 +17,7 @@ export interface SongPlan {
   lyricsJa: string;
   intent: string;
   realWorldWords: string[]; // この曲の中心となった語(保存して使用回数を制限する)
+  usedPresets: { category: string; value: string }[]; // 採用したプリセット(提示値の写し。サーバーで照合して保存)
 }
 
 // 生成結果と、生成に使用したパラメータ(記録・管理画面表示用)
@@ -59,8 +60,37 @@ const SONG_PLAN_SCHEMA = {
       description:
         "この曲の中心となった語(リアルワード)。今日のコンテキストから採ったテーマ語と、曲の中心要素(ジャンル・ムード・情景など)を英語小文字で 5〜8 個",
     },
+    usedPresets: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          category: {
+            type: "string",
+            description: "プロンプトに提示された要素の [ ] 内の category を一字一句そのまま写す",
+          },
+          value: {
+            type: "string",
+            description: "プロンプトに提示された要素の value(英語部分)を一字一句そのまま写す",
+          },
+        },
+        required: ["category", "value"],
+        additionalProperties: false,
+      },
+      description:
+        "この曲に採用したプリセット要素。プロンプトに提示された要素(「- [category] value(和名)」の行)から採用したものだけを、category と value を一字一句そのまま写して列挙する。提示に無い独自の要素は含めない(提示が無ければ空配列)",
+    },
   },
-  required: ["style", "styleJa", "title", "lyrics", "lyricsJa", "intent", "realWorldWords"],
+  required: [
+    "style",
+    "styleJa",
+    "title",
+    "lyrics",
+    "lyricsJa",
+    "intent",
+    "realWorldWords",
+    "usedPresets",
+  ],
   additionalProperties: false,
 };
 

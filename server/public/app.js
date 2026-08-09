@@ -131,6 +131,10 @@ function trackElement(t) {
     addSection("スタイル", t.style);
     addSection("スタイル(日本語訳)", t.styleJa);
     addSection("リアルワード", (t.realWorldWords ?? []).join(", "));
+    addSection(
+      "使用プリセット",
+      (t.usedPresets ?? []).map((p) => `[${p.category}] ${p.labelJa}`).join(", ")
+    );
     // 生成に使用したパラメータ(旧データで欠けている項目は出さない)
     const params = [
       ["モード", MODE_LABELS[t.mode] ?? t.mode],

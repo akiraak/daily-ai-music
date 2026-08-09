@@ -93,6 +93,16 @@ db.exec(`
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
   );
   CREATE INDEX IF NOT EXISTS idx_real_world_words_created ON real_world_words(created_at);
+  CREATE TABLE IF NOT EXISTS task_presets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id INTEGER NOT NULL REFERENCES tasks(id),
+    preset_id INTEGER,
+    category TEXT NOT NULL,
+    value TEXT NOT NULL,
+    label_ja TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_task_presets_task ON task_presets(task_id);
 `);
 
 // 既存 DB への後方互換マイグレーション(カラムが無ければ追加)
@@ -432,6 +442,38 @@ export function updatePreset(
 
 export function deletePreset(id: number): boolean {
   return db.prepare(`DELETE FROM presets WHERE id = ?`).run(id).changes > 0;
+}
+
+// --- 使用プリセット(タスク単位の記録。評価集計の元データ) ---
+// preset_id は集計用(プリセット削除後も行は残す)。category/value/label_ja は使用時点の
+// スナップショットで、プリセットが編集・削除されても表示できる
+
+export interface TaskPresetRow {
+  category: string;
+  value: string;
+  label_ja: string;
+}
+
+export function insertTaskPresets(taskId: number, presets: PresetRow[]): void {
+  const stmt = db.prepare(
+    `INSERT INTO task_presets (task_id, preset_id, category, value, label_ja)
+     VALUES (?, ?, ?, ?, ?)`
+  );
+  // manual はユーザー選択と LLM 出力の和集合で渡るため、preset_id で重複除去する
+  const seen = new Set<number>();
+  for (const p of presets) {
+    if (seen.has(p.id)) continue;
+    seen.add(p.id);
+    stmt.run(taskId, p.id, p.category, p.value, p.label_ja);
+  }
+}
+
+export function listTaskPresets(taskId: number): TaskPresetRow[] {
+  return db
+    .prepare(
+      `SELECT category, value, label_ja FROM task_presets WHERE task_id = ? ORDER BY id`
+    )
+    .all(taskId) as unknown as TaskPresetRow[];
 }
 
 // 評価の更新。更新後の行を返す

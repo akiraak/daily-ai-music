@@ -53,9 +53,15 @@ function taskJson(t: db.TaskRow) {
     llmModel: t.llm_model,
     llmPrompt: t.llm_prompt,
     realWorldWords: db.listRealWorldWords(t.id),
+    usedPresets: db.listTaskPresets(t.id).map(usedPresetJson),
     createdAt: t.created_at,
     updatedAt: t.updated_at,
   };
+}
+
+// 使用プリセット(使用時点のスナップショット)の API 表現
+function usedPresetJson(p: db.TaskPresetRow) {
+  return { category: p.category, value: p.value, labelJa: p.label_ja };
 }
 
 // LLM 経由の生成フロー: プリセット選択 + 自由テキスト → LLM がスタイル・歌詞を生成 → Suno へ customMode で送信
@@ -99,6 +105,7 @@ api.post("/generate", async (c) => {
       instrumental,
       mode: "manual",
       plan,
+      selectedPresets,
       llmModel,
       llmPrompt,
     });
@@ -268,6 +275,7 @@ function trackJson(t: db.TrackWithTaskRow, prefix: string) {
     llmModel: t.llm_model,
     llmPrompt: t.llm_prompt,
     realWorldWords: db.listRealWorldWords(t.task_id),
+    usedPresets: db.listTaskPresets(t.task_id).map(usedPresetJson),
     createdAt: t.created_at,
   };
 }

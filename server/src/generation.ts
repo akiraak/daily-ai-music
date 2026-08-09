@@ -13,6 +13,30 @@ const TASK_TIMEOUT_MS = 30 * 60_000;
 
 export const sunoClient: SunoClient = new KieAiClient(SUNO_API_KEY, SUNO_BASE_URL);
 
+// LLM が出力した usedPresets をプリセット表と照合して解決する(category は完全一致、
+// value は trim + 小文字化で比較)。一致しないものは写し間違い・独自要素として捨てる(警告ログのみ)
+function resolveUsedPresets(
+  used: { category: string; value: string }[]
+): db.PresetRow[] {
+  const pool = db.listPresets();
+  const resolved: db.PresetRow[] = [];
+  for (const u of used) {
+    const match = pool.find(
+      (p) =>
+        p.category === u.category &&
+        p.value.trim().toLowerCase() === u.value.trim().toLowerCase()
+    );
+    if (match) {
+      resolved.push(match);
+    } else {
+      console.warn(
+        `[generation] usedPresets がプリセットと一致しないため保存しません: [${u.category}] ${u.value}`
+      );
+    }
+  }
+  return resolved;
+}
+
 // LLM が生成したプラン(customMode)で Suno に送信し、タスクを記録する。
 // prompt にはユーザーのリクエスト内容(表示用)を渡す
 export async function startGeneration(input: {
@@ -27,7 +51,9 @@ export async function startGeneration(input: {
     lyricsJa: string;
     intent: string;
     realWorldWords: string[];
+    usedPresets: { category: string; value: string }[];
   };
+  selectedPresets?: db.PresetRow[]; // manual でユーザーが選んだ要素(必ず記録する)
   llmModel?: string;
   llmPrompt?: string;
 }): Promise<db.TaskRow> {
@@ -57,6 +83,11 @@ export async function startGeneration(input: {
   });
   // リアルワード(曲の中心となった語)を保存し、以後の生成の使用回数制限に使う
   db.insertRealWorldWords(task.id, input.plan.realWorldWords);
+  // 使用プリセット: ユーザー選択(manual)と LLM 出力の照合結果の和集合を保存する(重複は insert 側で除去)
+  db.insertTaskPresets(task.id, [
+    ...(input.selectedPresets ?? []),
+    ...resolveUsedPresets(input.plan.usedPresets),
+  ]);
   console.log(`[generation] task ${task.id} 作成 (provider taskId=${providerTaskId})`);
   return task;
 }
