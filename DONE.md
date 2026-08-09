@@ -1,5 +1,7 @@
 # DONE
 
+- [x] 2026-08-09 生成パラメータ表示の本番反映 — サーバーを本番(music.chobi.me)へデプロイし、実機アプリを再インストール(`./run-ios-device.sh`)して実機で生成パラメータ画面の表示を確認。これで生成パラメータ表示タスク(下記)は本番でも稼働
+
 - [x] 2026-08-09 アプリの生成タブに生成に使われるパラメータを表示する — おまかせ生成が LLM に注入する入力をアプリ単体で確認できるようにした(管理画面のパラメータ一覧の iOS 版)。サーバーは集約 API `GET /api/generation-params` を新設し、runDaily と同じ関数群(getDailySettings / getContextSettings / presetJson+countPresetRatings / currentWordLimits)から組み立てて表示と実際の生成入力のずれを防ぐ(冒険日確率・コンテキスト ON/OFF+都市・評価集計付き要素プール・直近スタイル(新設 `listRecentStyleRows()` で和訳付き)・禁止/残り 1 回ワード・追跡ワード数)。iOS は生成タブのヒーロー直下に「生成パラメータ」行(NavigationLink)を追加し、読み取り専用の `GenerationParamsView` を新設 — 生成の設定 3 行/カテゴリ別ピルの要素プール(評価があるものだけ 👍n/👎n 併記 = presetLines の suffix と同規則)/直近スタイル(styleJa 主・英語原文従、無い旧データは英語のみ)/リアルワード使用状況(使用禁止は強調ピル+追跡数フッター。全ワード一覧は管理画面の役割として持たない)。旧サーバー×新アプリは画面内エラー表示のみで他機能に影響なし。検証: typecheck+実 DB スナップショット(`sqlite3 .backup`。cp だと WAL 残留で別 DB になる罠を踏んだ)の隔離サーバー(daily_enabled=false にして意図しない実生成を防止)に ダミー task_presets を投入して curl で全フィールド確認+ScreenshotUITests に生成パラメータ 3 枚(トップ/中間/最下部)を追加しライト/ダークで目視。本番反映(サーバーデプロイ+実機再インストール)は TODO 残し。プラン: [docs/plans/archive/generate-tab-params.md](docs/plans/archive/generate-tab-params.md)
 
 - [x] 2026-08-09 プリセット優先度タスクの本番反映 — サーバーを本番(music.chobi.me)へデプロイし、実機アプリを再インストール(`./run-ios-device.sh`)。旧 iOS ビルドは /api/daily/run 応答の profileUpdated(削除済み)を non-optional デコードしていたため両者をセットで実施。以後の毎日の自動生成から使用プリセットの記録(`task_presets`)が始まり、評価(👍/👎)が溜まるにつれプリセット別集計が生成プロンプトに効いていく
