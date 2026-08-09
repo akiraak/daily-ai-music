@@ -1,5 +1,7 @@
 # DONE
 
+- [x] 2026-08-09 ニュースソース変更(英語メディア)の本番反映 — サーバーを本番(music.chobi.me)へデプロイ(1c3bf94)。API 不変更のため旧アプリ×新サーバーは完全互換で、今回はサーバーデプロイのみでクローズ(実機アプリの再インストールは設定タブのヒント文言が古いだけなので次の機会でよい)。以後の毎日の自動生成から「今日のコンテキスト」が Google News RSS 米国版(英語)の見出しになる
+
 - [x] 2026-08-09 ニュースのソースを海外の英語メディアに変更 — 毎日の自動生成の「今日のコンテキスト」に注入するニュースを Google News RSS 日本版から米国版(英語)`hl=en-US&gl=US&ceid=US:en` へ切り替え。歌詞は英語で生成するため、海外英語メディア(Reuters・The Guardian 等の見出しが集約されて返る)の方がテーマ語(リアルワード)や雰囲気が英語歌詞に自然に馴染む。XML 構造が日本版と同一のためコード変更は `context.ts` の URL 定数+コメントのみ(パーサ・件数上限 8 件・失敗時スキップ・設定キー `context_news` は不変更)。BBC 等の単一媒体 RSS は編集方針の偏り+CDATA 形式でパーサ調整が要るため不採用。ほかは文言(管理画面 settings.html と iOS 設定タブのヒント「日本版」→「米国版(英語)」)と spec 2 本(決定の記録は日付付き追記、flow は入力表を書き換え。SVG と CLAUDE.md はロケール記述が無く不変更)。API 不変更のため旧アプリ×新サーバーは完全互換 — 本番反映はサーバーデプロイのみ必須(TODO 残し)。検証: typecheck+隔離 DB(DB_PATH 指定のフレッシュ DB)で `buildTodayContext()` を直接呼ぶ使い捨てスクリプトを実行し英語見出し 8 件の整形を確認(daily 実生成なし)+隔離 DB サーバー(daily_enabled=false)で管理画面設定ページをヘッドレス Chrome 目視+シミュレータビルド+ScreenshotUITests で設定タブの文言を目視。プラン: [docs/plans/archive/news-source-english-media.md](docs/plans/archive/news-source-english-media.md)
 
 - [x] 2026-08-09 生成時の天気削除の本番反映 — サーバーを本番(music.chobi.me)へデプロイ(2d4b2c9)し、実機アプリを再インストール(`./run-ios-device.sh`)。旧アプリは新サーバー応答で設定タブ・生成パラメータ画面がエラー表示になるため両者をセットで実施。本番の settings / generation-params 応答から weather 系キーが消えたことをサーバー内 curl で確認済み
