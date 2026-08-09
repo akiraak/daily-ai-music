@@ -133,6 +133,7 @@ export async function runDaily(): Promise<{
     profile: db.getLatestProfile()?.content ?? null,
     selectedPresets: [],
     presetPool: db.listPresets(),
+    presetRatings: db.countPresetRatings(),
     freeText: "",
     recentStyles: db.listRecentStyles(),
     extraContext: extraContext ?? undefined,

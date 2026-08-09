@@ -94,9 +94,16 @@ const SONG_PLAN_SCHEMA = {
   additionalProperties: false,
 };
 
-function presetLines(presets: PresetRow[]): string {
+// プリセット別の 👍/👎 集計(preset_id → 件数)。daily 系のプール行に併記する
+export type PresetRatings = Map<number, { up: number; down: number }>;
+
+function presetLines(presets: PresetRow[], ratings?: PresetRatings): string {
   return presets
-    .map((p) => `- [${p.category}] ${p.value}(${p.label_ja})`)
+    .map((p) => {
+      const r = ratings?.get(p.id);
+      const suffix = r && (r.up > 0 || r.down > 0) ? ` 👍 ${r.up} / 👎 ${r.down}` : "";
+      return `- [${p.category}] ${p.value}(${p.label_ja})${suffix}`;
+    })
     .join("\n");
 }
 
@@ -117,6 +124,7 @@ export interface SongPlanInput {
   profile: string | null;
   selectedPresets: PresetRow[];
   presetPool: PresetRow[];
+  presetRatings?: PresetRatings; // プリセット別の 👍/👎 集計(daily 系で注入。manual は非注入)
   freeText: string;
   recentStyles: string[];
   extraContext?: string; // 「今日のコンテキスト」(ニュース・天気。毎日の自動生成のみ)
@@ -155,15 +163,15 @@ export function buildSongPlanPrompt(input: SongPlanInput, limits: WordLimits): s
     }
   } else {
     sections.push(
-      `## 利用できる要素プール(好みプロファイルを踏まえて自由に選ぶ)\n${presetLines(input.presetPool)}`
+      `## 利用できる要素プール(評価 👍/👎 の集計を踏まえて自由に選ぶ)\n${presetLines(input.presetPool, input.presetRatings)}`
     );
     if (input.mode === "daily_adventure") {
       sections.push(
-        `## モード: 冒険日\n今日は普段の好みから大きく外れた意外な組み合わせに挑戦する日。プロファイルに無い要素を大胆に使うこと。`
+        `## モード: 冒険日\n今日は普段の好みから大きく外れた意外な組み合わせに挑戦する日。評価集計(👍/👎)には従わなくてよく、むしろ未評価・低評価の要素への挑戦も歓迎。普段選ばれない要素を大胆に使うこと。`
       );
     } else {
       sections.push(
-        `## モード: 毎日の自動生成\n好みプロファイルに沿いつつ、1 要素だけは普段と違うものを入れてマンネリを避けること。`
+        `## モード: 毎日の自動生成\n👍/👎 はその要素を使った曲へのユーザー評価。👍 の多い要素を優先し、👎 の多い要素は避けること。ただし優先に従いすぎるとマンネリ化するため、1 要素だけは普段(👍 集計の上位)と違うものを入れること。`
       );
     }
   }

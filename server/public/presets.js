@@ -21,10 +21,16 @@ function renderPresetView(li, p) {
   li.innerHTML = `
     <span class="preset-label"></span>
     <span class="preset-value"></span>
+    <span class="preset-rating"></span>
     <button type="button" class="icon-btn" data-act="edit">編集</button>
     <button type="button" class="icon-btn" data-act="delete">削除</button>`;
   li.querySelector(".preset-label").textContent = p.labelJa;
   li.querySelector(".preset-value").textContent = p.value;
+  // この要素を使った曲への評価の集計(0 件同士は表示しない)
+  const up = p.upCount ?? 0;
+  const down = p.downCount ?? 0;
+  li.querySelector(".preset-rating").textContent =
+    up > 0 || down > 0 ? `👍 ${up} / 👎 ${down}` : "";
   li.querySelector('[data-act="edit"]').addEventListener("click", () =>
     renderPresetEdit(li, p)
   );

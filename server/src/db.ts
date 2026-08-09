@@ -476,6 +476,27 @@ export function listTaskPresets(taskId: number): TaskPresetRow[] {
     .all(taskId) as unknown as TaskPresetRow[];
 }
 
+export interface PresetRatingCount {
+  up: number;
+  down: number;
+}
+
+// プリセット別の 👍/👎 集計(全期間)。保存値は持たず毎回算出する(評価変更が次の生成に即反映)。
+// 参照側が現存プリセットの id で引くため、削除済みプリセットの行は自然に無視される
+export function countPresetRatings(): Map<number, PresetRatingCount> {
+  const rows = db
+    .prepare(
+      `SELECT tp.preset_id,
+              SUM(CASE WHEN tr.rating = 1  THEN 1 ELSE 0 END) AS up,
+              SUM(CASE WHEN tr.rating = -1 THEN 1 ELSE 0 END) AS down
+       FROM task_presets tp JOIN tracks tr ON tr.task_id = tp.task_id
+       WHERE tr.rating IS NOT NULL AND tp.preset_id IS NOT NULL
+       GROUP BY tp.preset_id`
+    )
+    .all() as unknown as { preset_id: number; up: number; down: number }[];
+  return new Map(rows.map((r) => [r.preset_id, { up: r.up, down: r.down }]));
+}
+
 // 評価の更新。更新後の行を返す
 export function updateTrackRating(
   id: number,

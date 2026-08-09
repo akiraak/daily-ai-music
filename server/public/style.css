@@ -264,6 +264,7 @@ details.panel summary {
 }
 .preset:first-child { border-top: none; }
 .preset-value { color: var(--muted); font-size: 0.8rem; flex: 1; overflow-wrap: anywhere; }
+.preset-rating { color: var(--muted); font-size: 0.8rem; white-space: nowrap; }
 .icon-btn {
   padding: 2px 10px;
   background: transparent;

@@ -311,12 +311,16 @@ api.get("/credits", async (c) => {
 
 // --- プリセット管理 ---
 
-function presetJson(p: db.PresetRow) {
+// ratings は countPresetRatings() の集計(省略時は 0 件扱い。iOS 既存コードは未知キーを無視するので後方互換)
+function presetJson(p: db.PresetRow, ratings?: Map<number, db.PresetRatingCount>) {
+  const r = ratings?.get(p.id);
   return {
     id: p.id,
     category: p.category,
     value: p.value,
     labelJa: p.label_ja,
+    upCount: r?.up ?? 0,
+    downCount: r?.down ?? 0,
     createdAt: p.created_at,
   };
 }
@@ -349,8 +353,9 @@ function parsePresetBody(
 }
 
 api.get("/presets", (c) => {
+  const ratings = db.countPresetRatings();
   return c.json({
-    presets: db.listPresets().map(presetJson),
+    presets: db.listPresets().map((p) => presetJson(p, ratings)),
     categoryLabels: CATEGORY_LABELS,
   });
 });
@@ -378,7 +383,8 @@ api.put("/presets/:id", async (c) => {
   try {
     const preset = db.updatePreset(id, parsed);
     if (!preset) return c.json({ error: "プリセットが見つかりません" }, 404);
-    return c.json({ preset: presetJson(preset) });
+    // 行内編集の保存後もページ側が集計表示を維持できるよう、集計付きで返す
+    return c.json({ preset: presetJson(preset, db.countPresetRatings()) });
   } catch {
     return c.json({ error: "同じカテゴリ・値のプリセットが既にあります" }, 409);
   }
