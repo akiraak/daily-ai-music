@@ -9,6 +9,7 @@ struct TrackDetailView: View {
     private let onRated: (Track) -> Void
 
     @State private var showsOriginalStyle = false
+    @State private var showsPrompt = false
     @State private var showsJapaneseLyrics: Bool
 
     init(track: Track, onRated: @escaping (Track) -> Void) {
@@ -25,6 +26,7 @@ struct TrackDetailView: View {
                 intentSection
                 styleSection
                 lyricsSection
+                promptSection
                 metaFooter
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -174,6 +176,86 @@ struct TrackDetailView: View {
                     .font(.footnote)
                     .lineSpacing(4)
             }
+        }
+    }
+
+    /// 生成に使った LLM への入力全文。折りたたみ(既定は閉)で、原文スタイルと同じ開閉パターン。
+    /// llmPrompt が無い旧データ・旧サーバーではセクションごと出さない
+    @ViewBuilder
+    private var promptSection: some View {
+        if let llmPrompt = track.llmPrompt {
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) { showsPrompt.toggle() }
+            } label: {
+                HStack(spacing: 3) {
+                    Text(showsPrompt ? "生成プロンプトを隠す" : "生成プロンプトを表示")
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 9, weight: .bold))
+                        .rotationEffect(.degrees(showsPrompt ? 180 : 0))
+                }
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Color.accentDeep)
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 18)
+            .accessibilityIdentifier("detail.prompt")
+
+            if showsPrompt {
+                promptBody(llmPrompt)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func promptBody(_ llmPrompt: String) -> some View {
+        if let sections = Self.promptSections(llmPrompt) {
+            ForEach(Array(sections.enumerated()), id: \.offset) { _, section in
+                Text(section.title)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 12)
+                Text(section.body)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .lineSpacing(3)
+                    .padding(.top, 4)
+            }
+        } else {
+            // 「## 」見出しの無い旧データは全文をそのまま見せる
+            Text(llmPrompt)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .lineSpacing(3)
+                .padding(.top, 12)
+        }
+    }
+
+    private struct PromptSection {
+        let title: String
+        let body: String
+    }
+
+    /// llmPrompt(buildSongPlanPrompt の出力)を行頭「## 」を境にセクション分解する。
+    /// 見出しが無い・見出し前に本文がある場合は nil(全文表示にフォールバック)。
+    /// 分解ルールは Web 管理画面(app.js の splitPromptSections)と同じ
+    private static func promptSections(_ text: String) -> [PromptSection]? {
+        var sections: [(title: String, body: [String])] = []
+        for line in text.components(separatedBy: "\n") {
+            if line.hasPrefix("## ") {
+                sections.append((String(line.dropFirst(3)).trimmingCharacters(in: .whitespaces), []))
+            } else if sections.isEmpty {
+                if !line.trimmingCharacters(in: .whitespaces).isEmpty { return nil }
+            } else {
+                sections[sections.count - 1].body.append(line)
+            }
+        }
+        if sections.isEmpty { return nil }
+        return sections.map {
+            PromptSection(
+                title: $0.title,
+                body: $0.body.joined(separator: "\n")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+            )
         }
     }
 

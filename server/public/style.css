@@ -198,6 +198,13 @@ ul { list-style: none; margin: 0; padding: 0; }
 .track-details { margin-top: 8px; font-size: 0.85rem; }
 .track-details summary { cursor: pointer; color: var(--muted); }
 .track-details h4 { margin: 10px 0 2px; font-size: 0.8rem; color: var(--muted); }
+/* LLM への入力全文のセクション分解表示(小見出し+本文をやや字下げ) */
+.track-details h5.prompt-section {
+  margin: 8px 0 2px 12px;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+.prompt-section-body { margin-left: 12px; }
 .detail-text {
   margin: 0;
   white-space: pre-wrap;

@@ -22,6 +22,8 @@ struct Track: Identifiable, Decodable, Hashable {
     let intent: String?
     let sunoModel: String?
     let llmModel: String?
+    /// LLM に送った入力全文(旧サーバー・旧データでは nil。optional デコードで後方互換)
+    let llmPrompt: String?
     /// 曲の中心となった語(リアルワード)
     let realWorldWords: [String]
     let createdAt: Date

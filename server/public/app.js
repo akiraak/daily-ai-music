@@ -32,6 +32,23 @@ function formatDate(iso) {
   });
 }
 
+// 生成プロンプト(buildSongPlanPrompt の出力)を行頭「## 」を境にセクション分解する。
+// 見出しが無い・見出し前に本文がある旧データは null を返し、全文表示にフォールバックする
+function splitPromptSections(text) {
+  const sections = [];
+  for (const line of text.split("\n")) {
+    if (line.startsWith("## ")) {
+      sections.push({ title: line.slice(3).trim(), body: [] });
+    } else if (sections.length === 0) {
+      if (line.trim()) return null;
+    } else {
+      sections.at(-1).body.push(line);
+    }
+  }
+  if (sections.length === 0) return null;
+  return sections.map((s) => ({ title: s.title, body: s.body.join("\n").trim() }));
+}
+
 async function fetchJson(url, options = {}) {
   const res = await fetch(url, options);
   const json = await res.json().catch(() => null);
@@ -147,7 +164,24 @@ function trackElement(t) {
       .map(([k, v]) => `${k}: ${v}`)
       .join("\n");
     addSection("生成パラメータ", params, true);
-    addSection("LLM への入力全文", t.llmPrompt, true);
+    // LLM への入力全文はセクション分解して小見出し+本文で表示する
+    const promptSections = t.llmPrompt ? splitPromptSections(t.llmPrompt) : null;
+    if (promptSections) {
+      const h = document.createElement("h4");
+      h.textContent = "LLM への入力全文";
+      details.append(h);
+      for (const s of promptSections) {
+        const title = document.createElement("h5");
+        title.className = "prompt-section";
+        title.textContent = s.title;
+        const body = document.createElement("pre");
+        body.className = "detail-text prompt-section-body";
+        body.textContent = s.body;
+        details.append(title, body);
+      }
+    } else {
+      addSection("LLM への入力全文", t.llmPrompt, true);
+    }
     li.querySelector(".track-body").append(details);
   }
   const audio = li.querySelector("audio");

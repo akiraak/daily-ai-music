@@ -54,6 +54,14 @@ final class ScreenshotUITests: XCTestCase {
                 attach(app, name: "\(style)-detail")
                 app.swipeUp()
                 attach(app, name: "\(style)-detail-scrolled")
+                // 生成プロンプトの折りたたみを開いた状態も撮る(llmPrompt 無し旧データではボタン自体が無い)
+                let prompt = app.buttons["detail.prompt"]
+                if prompt.exists {
+                    if !prompt.isHittable { app.swipeUp() }
+                    prompt.tap()
+                    app.swipeUp()
+                    attach(app, name: "\(style)-detail-prompt")
+                }
                 app.navigationBars.buttons.firstMatch.tap()
             }
         } else {
