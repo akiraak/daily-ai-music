@@ -31,6 +31,8 @@ struct GenerateView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     dailyHero
                     Divider()
+                    paramsRow
+                    Divider()
                     customSection
                     Divider()
                     progressSection
@@ -121,6 +123,35 @@ struct GenerateView: View {
         } catch {
             dailyError = error.localizedDescription
         }
+    }
+
+    // MARK: - 生成パラメータ(読み取り専用画面へ push)
+
+    /// おまかせ生成が LLM に注入する入力の一覧へ。カスタム生成トグルと同じ行スタイルだが、
+    /// こちらは push 遷移のため chevron は回転させない
+    private var paramsRow: some View {
+        NavigationLink {
+            GenerationParamsView()
+        } label: {
+            HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("生成パラメータ")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color.primary)
+                    Text("おまかせ生成に使われる入力")
+                        .font(.caption)
+                        .foregroundStyle(Color.secondary)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Color.secondary)
+            }
+            .contentShape(Rectangle())
+            .padding(.vertical, 13)
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("generate.params")
     }
 
     // MARK: - カスタム生成(折りたたみ)

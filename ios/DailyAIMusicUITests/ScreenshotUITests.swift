@@ -81,6 +81,18 @@ final class ScreenshotUITests: XCTestCase {
                 app.buttons["generate.custom.toggle"].tap()
                 attach(app, name: "\(style)-generate-custom")
                 app.buttons["generate.custom.toggle"].tap()
+                // 生成パラメータ画面(push)も、読み込み完了を待ってから撮る。
+                // 要素プールが長いため、中間(スタイル)と最下部(リアルワード)も撮る
+                app.buttons["generate.params"].tap()
+                if app.staticTexts["params.adventure"].waitForExistence(timeout: 10) {
+                    attach(app, name: "\(style)-generate-params")
+                    app.swipeUp()
+                    attach(app, name: "\(style)-generate-params-scrolled")
+                    app.swipeUp()
+                    app.swipeUp()
+                    attach(app, name: "\(style)-generate-params-bottom")
+                }
+                app.navigationBars.buttons.firstMatch.tap()
             }
             if name == "settings" {
                 app.swipeUp()

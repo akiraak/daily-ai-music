@@ -269,6 +269,21 @@ export function listRecentStyles(limit = 5): string[] {
   return rows.map((r) => r.style);
 }
 
+// 直近の生成スタイル(和訳付き。生成パラメータ表示用 — LLM への注入は英語のみの listRecentStyles)
+export interface RecentStyleRow {
+  style: string;
+  styleJa: string | null;
+}
+
+export function listRecentStyleRows(limit = 5): RecentStyleRow[] {
+  const rows = db
+    .prepare(
+      `SELECT style, style_ja FROM tasks WHERE style IS NOT NULL ORDER BY id DESC LIMIT ?`
+    )
+    .all(limit) as unknown as { style: string; style_ja: string | null }[];
+  return rows.map((r) => ({ style: r.style, styleJa: r.style_ja }));
+}
+
 // --- リアルワード(曲の中心となった語。使用回数を数えて重複生成を防ぐ) ---
 
 export const WORD_LIMIT_DEFAULTS = {

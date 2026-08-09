@@ -143,6 +143,47 @@ struct PingResponse: Decodable {
     let ok: Bool
 }
 
+/// GET /api/generation-params — おまかせ生成(毎日の自動生成)が LLM に注入する入力の一覧。
+/// サーバー側で runDaily と同じ関数群から組み立てるため、表示と実際の生成入力がずれない
+struct GenerationParams: Decodable {
+    let adventureProbability: Double
+    let contextNews: Bool
+    let contextWeather: Bool
+    let weatherCity: String
+    let presets: [PoolPreset]
+    /// category → 日本語ラベル(例: "genre" → "ジャンル")
+    let categoryLabels: [String: String]
+    let recentStyles: [RecentStyle]
+    let wordMaxUses: Int
+    let wordWindowDays: Int
+    /// 使用上限に達したリアルワード(曲の中心に据えない)
+    let bannedWords: [String]
+    /// 残り 1 回のリアルワード
+    let lastChanceWords: [String]
+    /// ウィンドウ内で追跡中のリアルワード総数
+    let trackedWordCount: Int
+}
+
+/// 要素プールのプリセット(評価 👍/👎 の集計付き)
+struct PoolPreset: Decodable, Identifiable {
+    let id: Int
+    let category: String
+    let value: String
+    let labelJa: String
+    let upCount: Int
+    let downCount: Int
+}
+
+/// 直近の生成スタイル(重複回避用にプロンプトへ注入される)。styleJa が無い旧データは英語のみ
+struct RecentStyle: Decodable {
+    let style: String
+    let styleJa: String?
+}
+
+struct GenerationParamsResponse: Decodable {
+    let params: GenerationParams
+}
+
 /// GET/PUT /api/settings のサーバー設定のうち iOS で扱う分(毎日の自動生成+今日のコンテキスト)。
 /// リアルワード制限(wordMaxUses 等)・座標(weatherLat/Lon)は表示しないため定義しない(余分なキーは無視される)。
 /// 変更の楽観反映(トグルの即時切替)のため var

@@ -58,12 +58,12 @@ esl-learning-assistant と同方式。`/api/*` は `X-API-Secret` ヘッダ必�
 - **`src/generation.ts`**: 生成ジョブ管理。10 秒間隔のポーラーが未完了タスクを照会し、完了したら音源・カバー画像を即 `data/` へダウンロード(プロバイダの URL は一時ファイルのため)。サーバー再起動時も DB から未完了タスクを拾って自動再開
 - **`src/llm.ts`**: Claude API(既定 `claude-sonnet-5`、`.env` の `LLM_MODEL` で変更可)。生成リクエストからスタイル・英語歌詞・日本語訳・タイトル・狙い・使用プリセットを構造化出力で生成し、Suno へ `customMode: true` で送信する。`.env` に `ANTHROPIC_API_KEY` 必須(起動時 fail-fast)
 - **`src/scheduler.ts`**: 毎日の自動生成。1 分間隔で設定タイムゾーン(既定 America/Los_Angeles)の現在時刻をチェックし、当日の実行時刻(既定 6 時)以降で未生成なら「冒険日判定(既定 20%)→ LLM 生成 → Suno 送信」を実行。最終生成日は `settings` に記録し、停止中に跨いだ場合は起動時に追い生成(初回起動は当日を生成済み扱い)。失敗時は 30 分後に再試行。設定は `settings` テーブル(key-value)で `GET/PUT /api/settings` から変更可
-- API: `POST /api/generate`(プリセット選択+自由テキスト → LLM 経由で生成。iOS の生成画面用 — 管理画面は `/daily/run` を使う)/ `GET /api/tasks` / `GET /api/tracks` / `POST /api/tracks/:id/rating` / `GET|POST|PUT|DELETE /api/presets` / `GET|PUT /api/settings` / `POST /api/daily/run`(自動生成の手動トリガ。管理画面の生成ボタンが使用。`last_daily_date` は更新しない)/ `GET /api/credits` / `GET /api/ping`(同じルートを `/admin/api/*` にも無認証でマウント — 管理画面用)
+- API: `POST /api/generate`(プリセット選択+自由テキスト → LLM 経由で生成。iOS の生成画面用 — 管理画面は `/daily/run` を使う)/ `GET /api/tasks` / `GET /api/tracks` / `POST /api/tracks/:id/rating` / `GET|POST|PUT|DELETE /api/presets` / `GET|PUT /api/settings` / `GET /api/generation-params`(おまかせ生成が LLM に注入する入力の一覧。iOS の生成パラメータ画面用 — runDaily と同じ関数群から組み立てて表示と生成入力のずれを防ぐ)/ `POST /api/daily/run`(自動生成の手動トリガ。管理画面の生成ボタンが使用。`last_daily_date` は更新しない)/ `GET /api/credits` / `GET /api/ping`(同じルートを `/admin/api/*` にも無認証でマウント — 管理画面用)
 
 ### iOS アプリ構成(`ios/`)
 
 - **XcodeGen + SwiftUI**(iOS 17+、Swift 6)。`project.yml` が真実源で `.xcodeproj` は生成物(gitignore)。esl-learning-assistant と同じ構成
-- 画面(デザインは案A ミニマル。経緯・実装メモ: [docs/plans/archive/ios-app-design.md](docs/plans/archive/ios-app-design.md)): ライブラリ(今日の一曲ヒーロー・進行中ジョブカード・日付グループ・行内再生+👍/👎)/ 楽曲詳細(歌詞 EN/JA 切替・狙い・スタイル・リアルワード・メタ情報)/ フルプレイヤー(シート。キュー連続再生・ロック画面 Now Playing、AVPlayer ストリーミング+バックグラウンド再生)/ 生成(おまかせ生成 POST /api/daily/run 主役+カスタム生成折りたたみ+残クレジット表示)/ 設定(サーバー設定 GET/PUT /api/settings の閲覧・編集+サーバー URL・API Secret・接続テスト)
+- 画面(デザインは案A ミニマル。経緯・実装メモ: [docs/plans/archive/ios-app-design.md](docs/plans/archive/ios-app-design.md)): ライブラリ(今日の一曲ヒーロー・進行中ジョブカード・日付グループ・行内再生+👍/👎)/ 楽曲詳細(歌詞 EN/JA 切替・狙い・スタイル・リアルワード・メタ情報)/ フルプレイヤー(シート。キュー連続再生・ロック画面 Now Playing、AVPlayer ストリーミング+バックグラウンド再生)/ 生成(おまかせ生成 POST /api/daily/run 主役+生成パラメータ画面への導線+カスタム生成折りたたみ+残クレジット表示)/ 生成パラメータ(GET /api/generation-params の読み取り専用表示 — 設定値・評価集計付き要素プール・直近スタイル・リアルワード制限)/ 設定(サーバー設定 GET/PUT /api/settings の閲覧・編集+サーバー URL・API Secret・接続テスト)
 - `Services/BackendAPI.swift`: `/api/*` 共通処理(UserDefaults → Info.plist 埋め込み値の順で URL/secret を解決、`X-API-Secret` 付与、os.Logger)
 - 接続先の既定はビルド時に Info.plist へ埋め込む(`run-ios-device.sh` が本番 `https://music.chobi.me` を注入。`--local` で Mac の LAN IP。空ならシミュレータ向けに `http://localhost:3014` へフォールバック)
 - UI テスト(`DailyAIMusicUITests`): 一覧 → タップ → 再生開始のスモークテスト

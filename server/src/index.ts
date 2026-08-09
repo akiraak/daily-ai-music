@@ -7,7 +7,7 @@ import { API_SECRET, AUDIO_DIR, IMAGE_DIR, PORT, PUBLIC_DIR } from "./config.ts"
 import { getContextSettings } from "./context.ts";
 import * as db from "./db.ts";
 import { startGeneration, startPoller, sunoClient } from "./generation.ts";
-import { generateSongPlan } from "./llm.ts";
+import { currentWordLimits, generateSongPlan } from "./llm.ts";
 import { CATEGORY_LABELS, SEED_PRESETS } from "./presets.ts";
 import {
   getDailySettings,
@@ -215,6 +215,32 @@ api.put("/settings", async (c) => {
   }
   for (const [key, value] of updates) db.setSetting(key, value);
   return c.json({ settings: allSettings() });
+});
+
+// おまかせ生成(runDaily)が LLM に注入する入力の一覧(iOS の生成パラメータ画面用)。
+// runDaily と同じ関数群から組み立てることで、表示と実際の生成入力のずれを防ぐ
+api.get("/generation-params", (c) => {
+  const daily = getDailySettings();
+  const context = getContextSettings();
+  const ratings = db.countPresetRatings();
+  const limits = currentWordLimits();
+  const { wordMaxUses, wordWindowDays } = db.getWordLimitSettings();
+  return c.json({
+    params: {
+      adventureProbability: daily.adventureProbability,
+      contextNews: context.contextNews,
+      contextWeather: context.contextWeather,
+      weatherCity: context.weatherCity,
+      presets: db.listPresets().map((p) => presetJson(p, ratings)),
+      categoryLabels: CATEGORY_LABELS,
+      recentStyles: db.listRecentStyleRows(),
+      wordMaxUses,
+      wordWindowDays,
+      bannedWords: limits.banned,
+      lastChanceWords: limits.lastChance,
+      trackedWordCount: db.countRealWorldWordUses(wordWindowDays).length,
+    },
+  });
 });
 
 // 直近ウィンドウ内のリアルワード使用状況(パラメータ一覧ページの表示用)
