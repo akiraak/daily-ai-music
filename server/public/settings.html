@@ -23,6 +23,31 @@
       <h1>設定</h1>
     </div>
     <section class="panel">
+      <h2>曲の生成(LLM)</h2>
+      <p class="empty">スタイル・歌詞を作る LLM の設定です。モデルはサーバーの .env で決まるため表示のみ、思考の深さは変更できます(次の生成から反映)。</p>
+      <div class="setting-row">
+        <div class="setting-label">LLM モデル<span class="setting-hint">.env の LLM_MODEL で変更(サーバーの再起動が必要)</span></div>
+        <div class="setting-value" data-readonly-field="llmModel">-</div>
+      </div>
+      <div class="setting-row">
+        <div class="setting-label">思考の深さ(effort)<span class="setting-hint">深いほど品質が上がるが、トークンと生成時間が増える。既定は high</span></div>
+        <div class="setting-inputs">
+          <select id="llm-effort" data-field="llmEffort">
+            <option value="low">low(浅い・速い)</option>
+            <option value="medium">medium</option>
+            <option value="high">high(既定)</option>
+            <option value="xhigh">xhigh</option>
+            <option value="max">max(深い・遅い)</option>
+          </select>
+        </div>
+      </div>
+      <div class="setting-row">
+        <div class="setting-label">Suno モデル<span class="setting-hint">.env の SUNO_MODEL で変更(サーバーの再起動が必要)</span></div>
+        <div class="setting-value" data-readonly-field="sunoModel">-</div>
+      </div>
+    </section>
+
+    <section class="panel">
       <h2>今日のコンテキスト(外部ソース)</h2>
       <p class="empty">毎日の自動生成のプロンプトに、その日のニュースを着想として注入します。変更は次の生成から反映されます。</p>
       <div class="setting-row">

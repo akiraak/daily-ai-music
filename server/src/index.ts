@@ -3,7 +3,7 @@ import crypto from "node:crypto";
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
-import { API_SECRET, AUDIO_DIR, IMAGE_DIR, PORT, PUBLIC_DIR } from "./config.ts";
+import { API_SECRET, AUDIO_DIR, IMAGE_DIR, PORT, PUBLIC_DIR, SUNO_MODEL } from "./config.ts";
 import { getContextSettings } from "./context.ts";
 import * as db from "./db.ts";
 import {
@@ -13,7 +13,7 @@ import {
   sunoClient,
 } from "./generation.ts";
 import * as itunes from "./itunes.ts";
-import { currentWordLimits } from "./llm.ts";
+import { LLM_EFFORTS, currentWordLimits, getLlmSettings } from "./llm.ts";
 import { CATEGORY_LABELS, SEED_PRESETS } from "./presets.ts";
 import {
   getDailySettings,
@@ -157,12 +157,15 @@ api.post("/generate", async (c) => {
 
 // --- 毎日の自動生成の設定・手動トリガ ---
 
-// 毎日の自動生成+外部コンテキスト+リアルワード制限の設定をまとめて返す
+// 毎日の自動生成+外部コンテキスト+リアルワード制限+生成モデルの設定をまとめて返す。
+// llmModel / sunoModel は .env が真実源のため読み取り専用(PUT では受け付けない)
 function allSettings() {
   return {
     ...getDailySettings(),
     ...getContextSettings(),
     ...db.getWordLimitSettings(),
+    ...getLlmSettings(),
+    sunoModel: SUNO_MODEL,
   };
 }
 
@@ -171,7 +174,7 @@ api.get("/settings", (c) => {
 });
 
 // 部分更新: { dailyEnabled?, adventureProbability?, dailyHour?, dailyTimezone?,
-//            dailyCount?, contextNews?, wordMaxUses?, wordWindowDays? }
+//            dailyCount?, contextNews?, wordMaxUses?, wordWindowDays?, llmEffort? }
 api.put("/settings", async (c) => {
   const body = await c.req.json().catch(() => null);
   if (body === null || typeof body !== "object") {
@@ -230,6 +233,15 @@ api.put("/settings", async (c) => {
       return c.json({ error: "wordWindowDays は 1〜365 の整数です" }, 400);
     }
     updates.push(["word_window_days", String(v)]);
+  }
+  if ("llmEffort" in body) {
+    if (!LLM_EFFORTS.some((e) => e === body.llmEffort)) {
+      return c.json(
+        { error: `llmEffort は ${LLM_EFFORTS.join(" / ")} のいずれかです` },
+        400
+      );
+    }
+    updates.push(["llm_effort", body.llmEffort]);
   }
   if (updates.length === 0) {
     return c.json({ error: "更新するフィールドを指定してください" }, 400);

@@ -7,6 +7,23 @@ import type { PresetRow } from "./db.ts";
 
 const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
 
+// 思考の深さ(output_config.effort)。深いほど品質が上がるがトークンと時間が増える。
+// API の既定が high なので、設定が入っていない既存 DB でも挙動が変わらないよう既定値も high にする
+export const LLM_EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
+export type LlmEffort = (typeof LLM_EFFORTS)[number];
+const DEFAULT_LLM_EFFORT: LlmEffort = "high";
+
+// 生成に使うモデルと思考の深さ(生成時の読み出しと、管理画面の設定ページ表示に使う)。
+// モデルは .env が真実源なので読み取り専用、effort だけ settings テーブルで切り替える。
+// 保存値をキャッシュしないので、設定変更は次の生成にそのまま効く
+export function getLlmSettings(): { llmModel: string; llmEffort: LlmEffort } {
+  const stored = db.getSetting("llm_effort");
+  return {
+    llmModel: LLM_MODEL,
+    llmEffort: LLM_EFFORTS.find((e) => e === stored) ?? DEFAULT_LLM_EFFORT,
+  };
+}
+
 export type GenerationMode = "manual" | "daily" | "daily_adventure" | "artist";
 
 export interface SongPlan {
@@ -268,6 +285,12 @@ const WEB_SEARCH_MAX_USES = 5;
 // server tool の反復上限で pause_turn が返ったときの再開回数の上限(無限ループ防止)
 const MAX_PAUSE_RESUMES = 3;
 
+// max_tokens は思考と本文の合算の上限。effort が高いほど思考がこの枠を食い、
+// 足りないと JSON が途中で切れて JSON.parse に失敗する(= タスクが FAILED)。
+// effort=max の実測は 1 曲目 15,639 / 2 曲目 20,139 トークンと振れ幅が大きく、
+// 旧上限の 16,000 では 2 曲目が切れていたため広く取る
+const MAX_TOKENS = 32000;
+
 // 検索の失敗は例外にならず、web_search_tool_result の content がエラーオブジェクト
 // (配列ではない)で返る。検索できなくても作風からの推定で書けるので警告だけ出して続行する
 function logSearchOutcome(message: Anthropic.Message): void {
@@ -300,19 +323,34 @@ async function requestSongPlan(
     ? [{ type: "web_search_20260209" as const, name: "web_search" as const, max_uses: WEB_SEARCH_MAX_USES }]
     : undefined;
 
+  const { llmModel, llmEffort } = getLlmSettings();
+  console.log(
+    `[llm] ${llmModel} で生成します(effort=${llmEffort}${tools ? " / web_search 有効" : ""})`
+  );
+
   let messages: Anthropic.MessageParam[] = [{ role: "user", content: llmPrompt }];
   for (let resumes = 0; ; resumes++) {
-    const message = await client.messages.create({
-      model: LLM_MODEL,
-      max_tokens: 16000,
-      system: SYSTEM_PROMPT,
-      messages,
-      ...(tools ? { tools } : {}),
-      output_config: {
-        format: { type: "json_schema", schema: SONG_PLAN_SCHEMA },
-      },
-    });
+    // ストリーミングで受ける(応答の扱いは finalMessage() で非ストリーミングと同じ)。
+    // SDK は max_tokens が 21,333 を超える非ストリーミング要求を「10 分を超える恐れ」として
+    // 送信前に例外にするため、上記の MAX_TOKENS ではこちらでないと通らない
+    const message = await client.messages
+      .stream({
+        model: llmModel,
+        max_tokens: MAX_TOKENS,
+        system: SYSTEM_PROMPT,
+        messages,
+        ...(tools ? { tools } : {}),
+        output_config: {
+          effort: llmEffort,
+          format: { type: "json_schema", schema: SONG_PLAN_SCHEMA },
+        },
+      })
+      .finalMessage();
     logSearchOutcome(message);
+    console.log(
+      `[llm] 応答 stop_reason=${message.stop_reason} ` +
+        `入力 ${message.usage.input_tokens} / 出力 ${message.usage.output_tokens}(上限 ${MAX_TOKENS})`
+    );
     // server tool がサーバー側の反復上限に達した合図。直前の応答を添えて送り直すと続きから再開する
     // (「続けて」のような追加メッセージは付けない — 付けると再開ではなく新しい指示として読まれる)
     if (message.stop_reason === "pause_turn" && resumes < MAX_PAUSE_RESUMES) {

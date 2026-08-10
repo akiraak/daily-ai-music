@@ -378,6 +378,13 @@ details.panel summary {
 }
 .setting-inputs input:focus,
 .setting-inputs select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+/* 変更できない値(モデル名など)の表示。入力欄と右端が揃うようにする */
+.setting-value {
+  flex: none;
+  font-size: 0.9rem;
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
 
 input[type="checkbox"].toggle {
   appearance: none;

@@ -23,6 +23,8 @@ function showMessage(text, isError) {
 }
 
 const controls = [...document.querySelectorAll("[data-field]")];
+// 変更できない値(モデル名など。真実源はサーバーの .env)は表示するだけ
+const readonlyFields = [...document.querySelectorAll("[data-readonly-field]")];
 
 function applySettings(settings) {
   for (const el of controls) {
@@ -30,6 +32,10 @@ function applySettings(settings) {
     if (value === undefined) continue;
     if (el.type === "checkbox") el.checked = value === true;
     else el.value = String(value);
+  }
+  for (const el of readonlyFields) {
+    const value = settings[el.dataset.readonlyField];
+    el.textContent = value === undefined || value === "" ? "-" : String(value);
   }
 }
 

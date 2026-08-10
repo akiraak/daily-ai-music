@@ -21,7 +21,7 @@ LLM(Claude API)がプリセット(要素プール)をもとに、毎回スタイ
 
 | 項目 | 決定 |
 |---|---|
-| プロンプトを組み立てる頭脳 | LLM(Claude API、`claude-sonnet-5`) |
+| プロンプトを組み立てる頭脳 | LLM(Claude API、`claude-sonnet-5`)。2026-08-10 追加: 思考の深さ(`output_config.effort`)を管理画面から切り替えられるようにした(下記) |
 | 歌詞 | LLM が英語で作詞し `customMode: true` で Suno に渡す。日本語訳も同時に生成し、両方保存 |
 | 評価 | 曲ごとに 👍/👎 の 2 択。未評価は「普通」扱い(当初あった ★ お気に入りは 2026-08-07 に廃止、既存の ★ は 👍 に変換) |
 | 評価の反映 | 使用プリセットをタスク単位で記録(`task_presets`)し、プリセット別の 👍/👎 を生成のたびに全期間集計して要素プール行に併記(👍 優先・👎 回避を指示。保存値なしのステートレス方式で、評価変更が次の生成に即反映)。2026-08-08 変更 — 当初の「好みプロファイル」文書を LLM が育てる方式は廃止(自由文書は妥当性を検証しにくく、データ+集計の方が挙動を追跡・制御しやすい。`profile` テーブルと過去データは履歴として残す) |
@@ -116,6 +116,19 @@ LLM(Claude API)がプリセット(要素プール)をもとに、毎回スタイ
 | API 設計 | `GET /api/artist-songs/search` と `POST /api/artist-songs` の追加のみ。`POST` の body は `{ itunesTrackId }` だけにして**クライアントの申告は信用せずサーバーが `lookup` で取り直す**。アーティストが登録済みなら追加の `lookup` を打たない。パス名は `artist_songs` テーブルに合わせ、生成曲の `/api/tracks` と紛れる `/api/songs` は避けた |
 | iOS の導線 | **生成タブに「曲名から生成」の行を新設**する(アーティスト追加シート内のモード切り替えにはしない)。曲名しか知らない人が「アーティスト」を 2 回通る導線になり、この機能の動機と噛み合わないため。管理画面は画面数を増やさず登録パネル内の切り替えにした |
 
+### 思考の深さ(effort)の切り替えとモデル表示(2026-08-10 追加)
+
+生成の頭脳が何なのかが管理画面から分からず、品質・コスト・所要時間を動かすつまみも無かった。Claude の `output_config.effort`(GA。`low` / `medium` / `high` / `xhigh` / `max` の 5 段階)を設定ページから切り替えられるようにし、あわせて使用モデルを表示した。
+
+| 項目 | 決定 |
+|---|---|
+| モデルの扱い | **読み取り専用の表示**。`LLM_MODEL` / `SUNO_MODEL` は `.env`(本番は環境変数)が真実源で、DB 設定にすると二重管理になりどちらが効いているか分からなくなる。存在しないモデル名を画面から保存できてしまう問題も避ける |
+| effort の保存先 | `settings` テーブルの `llm_effort`。既定は `high`(API の既定と同じなので、設定が無い既存 DB でも挙動が変わらない)。生成のたびに読むステートレス方式で、変更は次の生成から即反映 |
+| 適用範囲 | 全モード共通(daily / manual / artist)。参照曲あり/なしでの出し分けはしない |
+| `max_tokens` | **16,000 → 32,000 に拡大**。`max_tokens` は思考と本文の合算の上限で、effort を上げると思考がこの枠を食う。実測で effort=max の出力は 15,639 と 20,139 トークン(同じ設定でも振れ幅が大きい)で、**旧上限では 2 曲目が切れていた**。切れると JSON が途中で終わり `JSON.parse` に失敗してタスクが `FAILED` になる |
+| 呼び出し方 | **ストリーミング(`messages.stream().finalMessage()`)に変更**。TypeScript SDK は `max_tokens` が **21,333**(`60分 × max_tokens ÷ 128000 > 10分`)を超える非ストリーミング要求を「10 分を超える恐れ」として**送信前に例外**にする(クライアントに明示 timeout がある場合のみ回避される)。実測で発覚 — 32,000 のままでは全生成が失敗する。応答の扱いは `finalMessage()` で非ストリーミングと同じで、`web_search` の server tool ブロックも同じように積まれる(実測: ツール呼び出し 10 回を検出、入力 141,514 トークンで完走) |
+| 観測 | 生成のたびに使用モデル・effort・`stop_reason`・入出力トークン数をログに出す(上限に対する余裕が運用中に見える) |
+
 ## データモデル(追加・変更)
 
 - `tasks` に追加: `mode`('daily' | 'daily_adventure' | 'manual' | 'artist')、`style`、`style_ja`(スタイルの日本語訳。2026-08-07 追加)、`lyrics`(英語)、`lyrics_ja`、`title`、`intent`(LLM の狙い説明)、`llm_model`・`llm_prompt`(生成に使った LLM モデル名と入力全文。2026-08-07 追加、管理画面の楽曲詳細に生成パラメータとして表示)
@@ -123,7 +136,7 @@ LLM(Claude API)がプリセット(要素プール)をもとに、毎回スタイ
 - `presets`(新規): `category`(genre / mood / tempo / vocal。vocal は 2026-08-07 追加、instrument は 2026-08-09 廃止 — 既存行は起動時の一回限りマイグレーションで削除)、`value`(英語・プロンプト用)、`label_ja`(表示用)。初期セットはこちらで用意し、起動時に DB に 1 件も無いカテゴリだけ投入する(既存カテゴリ内の編集・削除は再投入で復活しない)
 - `profile`(新規 → 2026-08-08 廃止): プロファイル文書を版として積む方式だったが、更新・注入・閲覧の機能を削除。テーブルと過去データは履歴として残す
 - `task_presets`(新規、2026-08-08): `task_id`、`preset_id`(集計用。参照強制なし)+使用時点のスナップショット `category` / `value` / `label_ja`(プリセットが編集・削除されても表示できる)。生成に使ったプリセットをタスク単位で記録し、`tracks.rating` との join で評価集計の元になる
-- `settings`(新規): key-value(`adventure_probability`、`daily_enabled`、実行時刻・タイムゾーン等)。将来 iPhone から変更できるように DB 持ち。2026-08-07 追加: `context_news`(ニュース ON/OFF)、`word_max_uses` / `word_window_days`(リアルワード制限)。管理画面の設定ページ(/admin/settings.html)から変更でき、次の生成から即反映。`context_weather` / `weather_city` / `weather_lat` / `weather_lon`(天気の ON/OFF と都市)は天気注入の削除(2026-08-09)に伴い廃止 — 既存行はコードから参照されず残るだけ
+- `settings`(新規): key-value(`adventure_probability`、`daily_enabled`、実行時刻・タイムゾーン等)。将来 iPhone から変更できるように DB 持ち。2026-08-07 追加: `context_news`(ニュース ON/OFF)、`word_max_uses` / `word_window_days`(リアルワード制限)。管理画面の設定ページ(/admin/settings.html)から変更でき、次の生成から即反映。`context_weather` / `weather_city` / `weather_lat` / `weather_lon`(天気の ON/OFF と都市)は天気注入の削除(2026-08-09)に伴い廃止 — 既存行はコードから参照されず残るだけ。2026-08-10 追加: `llm_effort`(思考の深さ。未設定は `high` 扱い)
 - `real_world_words`(新規、2026-08-07): `task_id`、`word`、`created_at`。曲の中心となった語をタスク単位で記録し、使用回数制限の集計に使う
 - `artists` / `artist_songs`(新規、2026-08-09): アーティスト経由生成の登録アーティスト(`name` は iTunes の正式表記で UNIQUE、`itunes_artist_id`、`genre`)と、その楽曲(`artist_id`、`title`、`album`、`release_year`、`genre`、`itunes_track_id`。`UNIQUE (artist_id, title)` で再取得時は新譜だけ増える)
 - `tasks` に追加(2026-08-09): `artist_id` / `artist_song_id`(将来のアーティスト別集計用。参照強制なし)+ `ref_artist_name` / `ref_song_title`(表示用スナップショット。`task_presets` と同じ考え方で、アーティストを削除しても過去のタスク・楽曲詳細に出せる)
@@ -133,7 +146,7 @@ LLM(Claude API)がプリセット(要素プール)をもとに、毎回スタイ
 - `POST /api/tracks/:id/rating` — 👍/👎 の付与・解除
 - `GET/POST/PUT/DELETE /api/presets` — プリセット管理(2026-08-08: 各プリセットに評価集計 `upCount` / `downCount` を付与)
 - ~~`GET /api/profile`~~ — 現行プロファイルの閲覧(2026-08-08 廃止)
-- `GET/PUT /api/settings` — 設定(毎日の自動生成+外部コンテキスト+リアルワード制限)
+- `GET/PUT /api/settings` — 設定(毎日の自動生成+外部コンテキスト+リアルワード制限)。2026-08-10 追加: `llmEffort`(変更可)と `llmModel` / `sunoModel`(読み取り専用。`PUT` では受け付けない)。キーの追加のみで既存キーの形状は不変のため、旧 iOS アプリのデコードは通る
 - `GET /api/real-world-words` — 直近ウィンドウ内のリアルワード使用状況(パラメータ一覧ページ用)
 - `GET /api/generation-params`(2026-08-09 追加)— おまかせ生成が LLM に注入する入力の一覧(冒険日確率・コンテキスト ON/OFF・評価集計付き要素プール・直近スタイル(和訳付き)・リアルワード制限の禁止/残り 1 回)。iOS の生成パラメータ画面用。runDaily と同じ関数群から組み立てることで表示と実際の生成入力のずれを防ぐ
 - `POST /api/daily/run` — 自動生成の手動トリガ(検証・デバッグ用)
