@@ -3,8 +3,11 @@ import { DatabaseSync } from "node:sqlite";
 import { DB_PATH } from "./config.ts";
 
 // 進行中はプロバイダのステータス(PENDING / TEXT_SUCCESS / FIRST_SUCCESS / SUCCESS)を
-// そのまま保持し、音源の保存まで終えたら COMPLETE、失敗は FAILED にする
+// そのまま保持し、音源の保存まで終えたら COMPLETE、失敗は FAILED にする。
+// PLANNING は Suno へ送る前(LLM がスタイルと歌詞を考えている最中)の自前ステータスで、
+// この間は provider_task_id がまだ空のためポーラーの対象から外す
 export const TERMINAL_STATUSES = ["COMPLETE", "FAILED"] as const;
+export const PLANNING_STATUS = "PLANNING";
 
 export interface TaskRow {
   id: number;
@@ -24,6 +27,7 @@ export interface TaskRow {
   intent: string | null; // 狙いの説明(日本語)
   llm_model: string | null; // 生成に使った LLM のモデル名
   llm_prompt: string | null; // LLM に送った入力全文(プリセット・直近スタイル等を含む)
+  llm_sources: string | null; // web_search で参照した情報源(JSON 配列。検索しなかったモードは null)
   artist_id: number | null; // artist モードの参照アーティスト(将来の集計用。削除されると孤児になる)
   artist_song_id: number | null; // artist モードの参照曲(同上)
   ref_artist_name: string | null; // 表示用スナップショット(アーティスト削除後も残す)
@@ -161,15 +165,20 @@ addColumnIfMissing("tasks", "title", "title TEXT");
 addColumnIfMissing("tasks", "intent", "intent TEXT");
 addColumnIfMissing("tasks", "llm_model", "llm_model TEXT");
 addColumnIfMissing("tasks", "llm_prompt", "llm_prompt TEXT");
+// web_search で参照した情報源(2026-08-09 追加。参照曲ありの生成のみ)
+addColumnIfMissing("tasks", "llm_sources", "llm_sources TEXT");
 // artist モード(参照曲から生成)の記録。ref_* は表示用スナップショット
 addColumnIfMissing("tasks", "artist_id", "artist_id INTEGER");
 addColumnIfMissing("tasks", "artist_song_id", "artist_song_id INTEGER");
 addColumnIfMissing("tasks", "ref_artist_name", "ref_artist_name TEXT");
 addColumnIfMissing("tasks", "ref_song_title", "ref_song_title TEXT");
 
+// providerTaskId / status を省略すると PLANNING(Suno 送信前)のタスクになる。
+// LLM は最大 3 分かかるため、受付時点で行を作っておき完了後に埋める
 export function createTask(input: {
   provider: string;
-  providerTaskId: string;
+  providerTaskId?: string;
+  status?: string;
   prompt: string;
   instrumental: boolean;
   model: string;
@@ -192,14 +201,15 @@ export function createTask(input: {
       `INSERT INTO tasks (provider, provider_task_id, prompt, instrumental, model, status,
                           mode, style, style_ja, lyrics, lyrics_ja, title, intent, llm_model, llm_prompt,
                           artist_id, artist_song_id, ref_artist_name, ref_song_title)
-       VALUES (?, ?, ?, ?, ?, 'PENDING', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       input.provider,
-      input.providerTaskId,
+      input.providerTaskId ?? "",
       input.prompt,
       input.instrumental ? 1 : 0,
       input.model,
+      input.status ?? PLANNING_STATUS,
       input.mode,
       input.style ?? null,
       input.styleJa ?? null,
@@ -234,12 +244,78 @@ export function updateTaskStatus(
   ).run(status, error ?? null, id);
 }
 
+// LLM が作ったプランをタスクに書き込む(Suno 送信の直前)
+export function updateTaskPlan(
+  id: number,
+  plan: {
+    style: string;
+    styleJa?: string | null;
+    lyrics?: string | null;
+    lyricsJa?: string | null;
+    title: string;
+    intent: string;
+    sources?: string[];
+    llmModel?: string | null;
+    llmPrompt?: string | null;
+  }
+): void {
+  const sources = plan.sources?.filter((s) => s.trim()) ?? [];
+  db.prepare(
+    `UPDATE tasks SET style = ?, style_ja = ?, lyrics = ?, lyrics_ja = ?, title = ?, intent = ?,
+       llm_model = ?, llm_prompt = ?, llm_sources = ?,
+       updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?`
+  ).run(
+    plan.style,
+    plan.styleJa || null,
+    plan.lyrics || null,
+    plan.lyricsJa || null,
+    plan.title,
+    plan.intent,
+    plan.llmModel ?? null,
+    plan.llmPrompt ?? null,
+    sources.length > 0 ? JSON.stringify(sources) : null,
+    id
+  );
+}
+
+// llm_sources(JSON 配列)の読み出し。壊れていても表示を止めない
+export function parseSources(json: string | null): string[] {
+  if (!json) return [];
+  try {
+    const parsed: unknown = JSON.parse(json);
+    return Array.isArray(parsed) ? parsed.filter((s) => typeof s === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+// Suno へ送信できたらプロバイダのタスク ID を記録し、ポーラーの対象(PENDING)に入れる
+export function attachProviderTask(id: number, providerTaskId: string): void {
+  db.prepare(
+    `UPDATE tasks SET provider_task_id = ?, status = 'PENDING',
+     updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?`
+  ).run(providerTaskId, id);
+}
+
+// 起動時の後始末。PLANNING のまま残っているのはサーバーが LLM 呼び出しの途中で落ちた跡で、
+// 呼び出しは再開できないため FAILED にする(ポーラーが拾える PENDING 以降とは扱いが違う)
+export function failStalePlanningTasks(): number {
+  const result = db
+    .prepare(
+      `UPDATE tasks SET status = 'FAILED', error = ?,
+       updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE status = ?`
+    )
+    .run("サーバー再起動により中断されました", PLANNING_STATUS);
+  return Number(result.changes);
+}
+
+// ポーラーが照会する対象。PLANNING は provider_task_id がまだ空なので除外する
 export function listActiveTasks(): TaskRow[] {
   return db
     .prepare(
-      `SELECT * FROM tasks WHERE status NOT IN ('COMPLETE', 'FAILED') ORDER BY id`
+      `SELECT * FROM tasks WHERE status NOT IN ('COMPLETE', 'FAILED', ?) ORDER BY id`
     )
-    .all() as unknown as TaskRow[];
+    .all(PLANNING_STATUS) as unknown as TaskRow[];
 }
 
 export function listTasks(limit = 50): TaskRow[] {
@@ -282,13 +358,14 @@ export type TrackWithTaskRow = TrackRow & {
   intent: string | null;
   llm_model: string | null;
   llm_prompt: string | null;
+  llm_sources: string | null;
   ref_artist_name: string | null;
   ref_song_title: string | null;
 };
 
 const TRACK_TASK_COLUMNS = `tracks.*, tasks.mode, tasks.prompt, tasks.instrumental, tasks.model,
   tasks.style, tasks.style_ja, tasks.lyrics, tasks.lyrics_ja, tasks.intent, tasks.llm_model, tasks.llm_prompt,
-  tasks.ref_artist_name, tasks.ref_song_title`;
+  tasks.llm_sources, tasks.ref_artist_name, tasks.ref_song_title`;
 
 export function listTracks(limit = 200): TrackWithTaskRow[] {
   return db

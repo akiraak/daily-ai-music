@@ -169,14 +169,13 @@ struct SongSearchView: View {
             return
         }
 
-        progressText = "AI がスタイルと歌詞を作っています…"
+        progressText = "生成を開始しています…"
         do {
-            // サーバー側で LLM 生成 → Suno 送信まで待つため長め(おまかせ生成と同じ)
+            // サーバーは受付だけ済ませてすぐ返す(LLM の生成はサーバー側で続く)ので待ち時間は短い
             _ = try await BackendAPI.postJSON(
                 GenerateResponse.self,
                 path: "/api/generate",
-                body: GenerateRequest(prompt: "", instrumental: false, artistSongId: registered.song.id),
-                timeout: 180
+                body: GenerateRequest(prompt: "", instrumental: false, artistSongId: registered.song.id)
             )
             // 進行状況は生成タブに出るので、開始したら戻る
             dismiss()

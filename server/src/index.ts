@@ -6,9 +6,14 @@ import { Hono } from "hono";
 import { API_SECRET, AUDIO_DIR, IMAGE_DIR, PORT, PUBLIC_DIR } from "./config.ts";
 import { getContextSettings } from "./context.ts";
 import * as db from "./db.ts";
-import { startGeneration, startPoller, sunoClient } from "./generation.ts";
+import {
+  acceptGeneration,
+  completeGeneration,
+  startPoller,
+  sunoClient,
+} from "./generation.ts";
 import * as itunes from "./itunes.ts";
-import { currentWordLimits, generateSongPlan } from "./llm.ts";
+import { currentWordLimits } from "./llm.ts";
 import { CATEGORY_LABELS, SEED_PRESETS } from "./presets.ts";
 import {
   getDailySettings,
@@ -53,6 +58,8 @@ function taskJson(t: db.TaskRow) {
     intent: t.intent,
     llmModel: t.llm_model,
     llmPrompt: t.llm_prompt,
+    // web_search で参照した情報源(参照曲ありの生成のみ。他は空配列)
+    sources: db.parseSources(t.llm_sources),
     realWorldWords: db.listRealWorldWords(t.id),
     usedPresets: db.listTaskPresets(t.id).map(usedPresetJson),
     // artist モードの参照曲(他モードは null)
@@ -108,8 +115,26 @@ api.post("/generate", async (c) => {
   const displayPrompt = promptParts.join(" / ");
   const mode = song ? "artist" : "manual";
 
-  try {
-    const { plan, llmModel, llmPrompt } = await generateSongPlan({
+  // 受付だけ済ませて即座に返す。参照曲があると LLM が web_search で調べるため 3 分ほどかかり、
+  // 完了まで待つとエッジのプロキシタイムアウトに掛かる。進行状況は GET /api/tasks で追える
+  const task = acceptGeneration({
+    prompt: displayPrompt,
+    instrumental,
+    mode,
+    artist: song
+      ? {
+          artistId: song.artist_id,
+          artistSongId: song.id,
+          artistName: song.artist_name,
+          songTitle: song.title,
+        }
+      : undefined,
+  });
+  // 失敗は completeGeneration がタスクに記録するので、ここでは握って落とさないだけでよい
+  void completeGeneration(task.id, {
+    instrumental,
+    selectedPresets,
+    planInput: {
       mode,
       instrumental,
       selectedPresets,
@@ -125,29 +150,9 @@ api.post("/generate", async (c) => {
             genre: song.genre,
           }
         : undefined,
-    });
-    const task = await startGeneration({
-      prompt: displayPrompt,
-      instrumental,
-      mode,
-      plan,
-      selectedPresets,
-      llmModel,
-      llmPrompt,
-      artist: song
-        ? {
-            artistId: song.artist_id,
-            artistSongId: song.id,
-            artistName: song.artist_name,
-            songTitle: song.title,
-          }
-        : undefined,
-    });
-    return c.json({ task: taskJson(task) }, 201);
-  } catch (err) {
-    console.error(`[api] 生成リクエスト失敗: ${err}`);
-    return c.json({ error: `生成リクエストに失敗しました: ${err}` }, 502);
-  }
+    },
+  }).catch(() => {});
+  return c.json({ task: taskJson(task) }, 201);
 });
 
 // --- 毎日の自動生成の設定・手動トリガ ---
@@ -303,6 +308,8 @@ function trackJson(t: db.TrackWithTaskRow, prefix: string) {
     intent: t.intent,
     llmModel: t.llm_model,
     llmPrompt: t.llm_prompt,
+    // web_search で参照した情報源(参照曲ありの生成のみ。他は空配列)
+    sources: db.parseSources(t.llm_sources),
     realWorldWords: db.listRealWorldWords(t.task_id),
     usedPresets: db.listTaskPresets(t.task_id).map(usedPresetJson),
     // artist モードの参照曲(他モードは null)

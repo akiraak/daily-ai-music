@@ -26,6 +26,7 @@ struct TrackDetailView: View {
                 wordsSection
                 presetsSection
                 intentSection
+                sourcesSection
                 styleSection
                 lyricsSection
                 promptSection
@@ -140,6 +141,15 @@ struct TrackDetailView: View {
         if let intent = track.intent {
             sectionHeader("狙い")
             bodyText(intent)
+        }
+    }
+
+    /// web_search で参照した情報源。参照曲ありの生成でだけ入る(他モード・旧サーバーでは空)
+    @ViewBuilder
+    private var sourcesSection: some View {
+        if let sources = track.sources, !sources.isEmpty {
+            sectionHeader("参照した情報源")
+            bodyText(sources.joined(separator: "\n"))
         }
     }
 

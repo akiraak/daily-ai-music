@@ -57,10 +57,20 @@ final class ScreenshotUITests: XCTestCase {
                 // 生成プロンプトの折りたたみを開いた状態も撮る(llmPrompt 無し旧データではボタン自体が無い)
                 let prompt = app.buttons["detail.prompt"]
                 if prompt.exists {
-                    if !prompt.isHittable { app.swipeUp() }
-                    prompt.tap()
-                    app.swipeUp()
-                    attach(app, name: "\(style)-detail-prompt")
+                    // 画面下端はミニプレイヤーが覆っている。隠れたまま tap すると座標が
+                    // ミニプレイヤーに当たってフルプレイヤーのシートが開き、以降の操作が
+                    // すべてシートに吸われるので、押せるようになるまでスクロールする
+                    // (詳細画面はセクションが増えると伸びるため 1 回の swipe では足りない)
+                    var scrolls = 0
+                    while !prompt.isHittable && scrolls < 5 {
+                        app.swipeUp()
+                        scrolls += 1
+                    }
+                    if prompt.isHittable {
+                        prompt.tap()
+                        app.swipeUp()
+                        attach(app, name: "\(style)-detail-prompt")
+                    }
                 }
                 app.navigationBars.buttons.firstMatch.tap()
             }

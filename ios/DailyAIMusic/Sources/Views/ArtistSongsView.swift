@@ -41,7 +41,7 @@ struct ArtistSongsView: View {
                 if isGenerating {
                     HStack(spacing: 10) {
                         ProgressView()
-                        Text("AI がスタイルと歌詞を作っています…")
+                        Text("生成を開始しています…")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
@@ -142,12 +142,11 @@ struct ArtistSongsView: View {
         isGenerating = true
         defer { isGenerating = false }
         do {
-            // サーバー側で LLM 生成 → Suno 送信まで待つため長め(おまかせ生成と同じ)
+            // サーバーは受付だけ済ませてすぐ返す(LLM の生成はサーバー側で続く)ので待ち時間は短い
             _ = try await BackendAPI.postJSON(
                 GenerateResponse.self,
                 path: "/api/generate",
-                body: GenerateRequest(prompt: "", instrumental: false, artistSongId: song.id),
-                timeout: 180
+                body: GenerateRequest(prompt: "", instrumental: false, artistSongId: song.id)
             )
             // 進行状況は生成タブに出るので、開始したら一覧へ戻る
             dismiss()

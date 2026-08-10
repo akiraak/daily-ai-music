@@ -4,6 +4,8 @@ import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { AUDIO_DIR, IMAGE_DIR, SUNO_API_KEY, SUNO_BASE_URL, SUNO_MODEL } from "./config.ts";
 import * as db from "./db.ts";
+import { generateSongPlan } from "./llm.ts";
+import type { SongPlanInput } from "./llm.ts";
 import type { SunoClient, SunoTrack } from "./suno/client.ts";
 import { KieAiClient } from "./suno/kieai.ts";
 
@@ -37,25 +39,14 @@ function resolveUsedPresets(
   return resolved;
 }
 
-// LLM が生成したプラン(customMode)で Suno に送信し、タスクを記録する。
+// 生成の受付。LLM を呼ぶ前にタスク行だけ作る(status = PLANNING)。
+// 参照曲があると LLM が web_search で調べるため 3 分ほどかかることがあり、HTTP を待たせると
+// エッジのプロキシタイムアウトに掛かる。受付と本体(completeGeneration)を分けているのはそのため。
 // prompt にはユーザーのリクエスト内容(表示用)を渡す
-export async function startGeneration(input: {
+export function acceptGeneration(input: {
   prompt: string;
   instrumental: boolean;
   mode: string;
-  plan: {
-    style: string;
-    styleJa: string;
-    title: string;
-    lyrics: string;
-    lyricsJa: string;
-    intent: string;
-    realWorldWords: string[];
-    usedPresets: { category: string; value: string }[];
-  };
-  selectedPresets?: db.PresetRow[]; // manual でユーザーが選んだ要素(必ず記録する)
-  llmModel?: string;
-  llmPrompt?: string;
   // artist モードの参照曲。名前・曲名はスナップショットで、アーティスト削除後も表示に使える
   artist?: {
     artistId: number;
@@ -63,44 +54,60 @@ export async function startGeneration(input: {
     artistName: string;
     songTitle: string;
   };
-}): Promise<db.TaskRow> {
-  const providerTaskId = await sunoClient.createTask({
-    customMode: true,
-    style: input.plan.style,
-    title: input.plan.title,
-    prompt: input.plan.lyrics,
-    instrumental: input.instrumental,
-    model: SUNO_MODEL,
-  });
+}): db.TaskRow {
   const task = db.createTask({
     provider: sunoClient.provider,
-    providerTaskId,
     prompt: input.prompt,
     instrumental: input.instrumental,
     model: SUNO_MODEL,
     mode: input.mode,
-    style: input.plan.style,
-    styleJa: input.plan.styleJa || null,
-    lyrics: input.plan.lyrics || null,
-    lyricsJa: input.plan.lyricsJa || null,
-    title: input.plan.title,
-    intent: input.plan.intent,
-    llmModel: input.llmModel ?? null,
-    llmPrompt: input.llmPrompt ?? null,
     artistId: input.artist?.artistId ?? null,
     artistSongId: input.artist?.artistSongId ?? null,
     refArtistName: input.artist?.artistName ?? null,
     refSongTitle: input.artist?.songTitle ?? null,
   });
-  // リアルワード(曲の中心となった語)を保存し、以後の生成の使用回数制限に使う
-  db.insertRealWorldWords(task.id, input.plan.realWorldWords);
-  // 使用プリセット: ユーザー選択(manual)と LLM 出力の照合結果の和集合を保存する(重複は insert 側で除去)
-  db.insertTaskPresets(task.id, [
-    ...(input.selectedPresets ?? []),
-    ...resolveUsedPresets(input.plan.usedPresets),
-  ]);
-  console.log(`[generation] task ${task.id} 作成 (provider taskId=${providerTaskId})`);
+  console.log(`[generation] task ${task.id} 受付 (mode=${input.mode})`);
   return task;
+}
+
+// 受け付けたタスクの本体: LLM でプランを作り、customMode で Suno へ送信する。
+// 失敗したら必ずタスクを FAILED にしてから再送出する(投げっぱなしの呼び出しでも
+// エラーがタスクに残り、進行状況の画面で観測できる)
+export async function completeGeneration(
+  taskId: number,
+  input: {
+    planInput: SongPlanInput;
+    instrumental: boolean;
+    selectedPresets?: db.PresetRow[]; // manual でユーザーが選んだ要素(必ず記録する)
+  }
+): Promise<db.TaskRow> {
+  try {
+    const { plan, llmModel, llmPrompt } = await generateSongPlan(input.planInput);
+    db.updateTaskPlan(taskId, { ...plan, llmModel, llmPrompt });
+    const providerTaskId = await sunoClient.createTask({
+      customMode: true,
+      style: plan.style,
+      title: plan.title,
+      prompt: plan.lyrics,
+      instrumental: input.instrumental,
+      model: SUNO_MODEL,
+    });
+    db.attachProviderTask(taskId, providerTaskId);
+    // リアルワード(曲の中心となった語)を保存し、以後の生成の使用回数制限に使う
+    db.insertRealWorldWords(taskId, plan.realWorldWords);
+    // 使用プリセット: ユーザー選択(manual)と LLM 出力の照合結果の和集合を保存する(重複は insert 側で除去)
+    db.insertTaskPresets(taskId, [
+      ...(input.selectedPresets ?? []),
+      ...resolveUsedPresets(plan.usedPresets),
+    ]);
+    console.log(`[generation] task ${taskId} を Suno へ送信 (provider taskId=${providerTaskId})`);
+    return db.getTask(taskId)!;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    db.updateTaskStatus(taskId, "FAILED", message);
+    console.error(`[generation] task ${taskId} 失敗: ${message}`);
+    throw err;
+  }
 }
 
 async function download(url: string, file: string): Promise<boolean> {
@@ -186,6 +193,11 @@ async function pollOnce(): Promise<void> {
 
 // サーバ起動時に呼ぶ。DB の未完了タスクも自動的に拾うので、再起動しても再開できる
 export function startPoller(): void {
+  // LLM 呼び出しの途中で落ちた PLANNING タスクは再開できないので閉じる
+  const stale = db.failStalePlanningTasks();
+  if (stale > 0) {
+    console.log(`[generation] 中断された生成 ${stale} 件を FAILED にしました`);
+  }
   const active = db.listActiveTasks();
   if (active.length > 0) {
     console.log(`[generation] 未完了タスク ${active.length} 件をポーリング再開`);

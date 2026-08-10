@@ -3,6 +3,7 @@
 const POLL_MS = 5000;
 
 const STATUS_LABELS = {
+  PLANNING: "曲を考えています…",
   PENDING: "待機中",
   TEXT_SUCCESS: "歌詞生成完了・音声生成中",
   FIRST_SUCCESS: "1 曲目完了",
@@ -155,6 +156,8 @@ function trackElement(t) {
       addSection("リファレンス", `${t.refArtistName}「${t.refSongTitle}」`);
     }
     addSection("狙い", t.intent);
+    // web_search で参照した情報源(参照曲ありの生成のみ。旧データ・旧サーバーでは空)
+    addSection("参照した情報源", (t.sources ?? []).join("\n"), true);
     addSection("歌詞", t.lyrics, true);
     addSection("日本語訳", t.lyricsJa, true);
     addSection("スタイル", t.style);

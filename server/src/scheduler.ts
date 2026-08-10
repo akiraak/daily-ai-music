@@ -4,8 +4,7 @@
 // サーバー停止中に実行時刻を跨いだ場合や途中失敗時も、残数だけ追い生成される
 import { buildTodayContext } from "./context.ts";
 import * as db from "./db.ts";
-import { startGeneration } from "./generation.ts";
-import { generateSongPlan } from "./llm.ts";
+import { acceptGeneration, completeGeneration } from "./generation.ts";
 
 const CHECK_INTERVAL_MS = 60_000;
 // 失敗時の再試行間隔(毎分 LLM を叩き続けないため)
@@ -128,24 +127,25 @@ export async function runDaily(): Promise<{
     console.log(`[daily] 今日のコンテキストを注入(${extraContext.length} 文字)`);
   }
 
-  // 3〜4. LLM 生成 → Suno 送信
-  const { plan, llmModel, llmPrompt } = await generateSongPlan({
-    mode,
-    instrumental: false,
-    selectedPresets: [],
-    presetPool: db.listPresets(),
-    presetRatings: db.countPresetRatings(),
-    freeText: "",
-    recentStyles: db.listRecentStyles(),
-    extraContext: extraContext ?? undefined,
-  });
-  const task = await startGeneration({
+  // 3〜4. LLM 生成 → Suno 送信。スケジューラはサーバー内で動くので待ってよい
+  // (HTTP を経由しないためプロキシのタイムアウト制約が無い)
+  const accepted = acceptGeneration({
     prompt: adventure ? "毎日の自動生成(冒険日)" : "毎日の自動生成",
     instrumental: false,
     mode,
-    plan,
-    llmModel,
-    llmPrompt,
+  });
+  const task = await completeGeneration(accepted.id, {
+    instrumental: false,
+    planInput: {
+      mode,
+      instrumental: false,
+      selectedPresets: [],
+      presetPool: db.listPresets(),
+      presetRatings: db.countPresetRatings(),
+      freeText: "",
+      recentStyles: db.listRecentStyles(),
+      extraContext: extraContext ?? undefined,
+    },
   });
   return { task, adventure };
 }

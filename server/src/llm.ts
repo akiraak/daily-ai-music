@@ -18,6 +18,7 @@ export interface SongPlan {
   intent: string;
   realWorldWords: string[]; // この曲の中心となった語(保存して使用回数を制限する)
   usedPresets: { category: string; value: string }[]; // 採用したプリセット(提示値の写し。サーバーで照合して保存)
+  sources: string[]; // web_search で参照した情報源(検索しなかったモードでは空配列)
 }
 
 // 生成結果と、生成に使用したパラメータ(記録・管理画面表示用)
@@ -80,6 +81,12 @@ const SONG_PLAN_SCHEMA = {
       description:
         "この曲に採用したプリセット要素。プロンプトに提示された要素(「- [category] value(和名)」の行)から採用したものだけを、category と value を一字一句そのまま写して列挙する。提示に無い独自の要素は含めない(提示が無ければ空配列)",
     },
+    sources: {
+      type: "array",
+      items: { type: "string" },
+      description:
+        "web_search で実際に参照した情報源の URL またはタイトル。検索していない場合は空配列",
+    },
   },
   required: [
     "style",
@@ -90,6 +97,7 @@ const SONG_PLAN_SCHEMA = {
     "intent",
     "realWorldWords",
     "usedPresets",
+    "sources",
   ],
   additionalProperties: false,
 };
@@ -169,11 +177,14 @@ export function buildSongPlanPrompt(input: SongPlanInput, limits: WordLimits): s
     );
     sections.push(
       `## 作り方(厳守)
-- リファレンス楽曲の音楽的特徴(ジャンル、テンポ、リズム、コード進行の雰囲気、楽器編成、ボーカルの質感、プロダクションの質感)を具体的な英語の音楽用語に翻訳して style を書く。「〜風」と書くのではなく、音そのものを記述すること
-- **style・title・lyrics に実在の固有名詞(アーティスト名・バンド名・曲名)を一切含めない**。上記のアーティスト名・曲名も書いてはいけない。Suno のモデレーションが固有名詞を拒否し、生成そのものが失敗する
+- **まず web_search でリファレンス楽曲の音楽的特徴を調べる**(BPM、キー、コード進行、楽器編成、ボーカルの音域と質感、プロダクション)。記憶だけで書かず、調べられるものは調べること
+- 検索では**上に挙げたアーティスト名・アルバム・リリース年と一致する曲かを必ず確かめる**。同名の別の曲の情報を使ってはいけない
+- 調べた特徴を具体的な英語の音楽用語に翻訳して style を書く。「〜風」と書くのではなく、音そのものを記述すること
+- **style・title・lyrics に実在の固有名詞(アーティスト名・バンド名・曲名)を一切含めない**。上記のアーティスト名・曲名も、検索結果に出てきた名前も書いてはいけない。Suno のモデレーションが固有名詞を拒否し、生成そのものが失敗する
 - 歌詞は原曲の歌詞を複製・翻訳・言い換えしない。テーマや情景の方向性を参考にするのは構わないが、完全な新作の歌詞を書く
-- リファレンス楽曲を知らない場合は、そのアーティストの一般的な作風から推定してよい。その場合も推測であることを断らずに具体的に書き切ること
-- intent には、リファレンス楽曲のどの音楽的特徴を取り入れたかと、その根拠(その曲を知っている / アーティストの一般的な作風からの推定)を日本語で必ず書く`
+- 検索で確かめられなかった要素は、そのアーティストの一般的な作風から推定してよい。その場合も推測であることを断らずに具体的に書き切ること
+- intent には、取り入れた音楽的特徴と、その根拠を**項目ごとに書き分ける**(検索で確認した / 曲を知っている / 作風からの推定)
+- sources には、実際に参照した情報源の URL またはタイトルを列挙する(検索しなかった場合は空配列)`
     );
     if (input.freeText) {
       sections.push(`## 追加の要望(リファレンスに重ねて反映する)\n${input.freeText}`);
@@ -247,19 +258,72 @@ export function buildSongPlanPrompt(input: SongPlanInput, limits: WordLimits): s
   return sections.join("\n\n");
 }
 
-async function requestSongPlan(llmPrompt: string): Promise<SongPlan> {
-  const message = await client.messages.create({
-    model: LLM_MODEL,
-    max_tokens: 16000,
-    system:
-      "あなたは優れた音楽プロデューサー兼作詞家です。AI 音楽生成サービス Suno に渡すスタイルプロンプトと歌詞を作ります。" +
-      "毎日、ユーザーの生活に寄り添う新しい曲を届けるのが仕事です。ありきたりな表現を避け、具体的で音の想像がつくスタイル指定と、心に残る歌詞を書いてください。",
-    messages: [{ role: "user", content: llmPrompt }],
-    output_config: {
-      format: { type: "json_schema", schema: SONG_PLAN_SCHEMA },
-    },
-  });
-  return JSON.parse(firstText(message)) as SongPlan;
+const SYSTEM_PROMPT =
+  "あなたは優れた音楽プロデューサー兼作詞家です。AI 音楽生成サービス Suno に渡すスタイルプロンプトと歌詞を作ります。" +
+  "毎日、ユーザーの生活に寄り添う新しい曲を届けるのが仕事です。ありきたりな表現を避け、具体的で音の想像がつくスタイル指定と、心に残る歌詞を書いてください。";
+
+// 参照曲を調べる検索の上限。実測では 5 回で BPM・キー・コード進行・音域まで揃い、
+// 1 曲あたり 3 分ほど・入力 12 万トークンほどかかる。増やすと精度より先に時間とコストが伸びる
+const WEB_SEARCH_MAX_USES = 5;
+// server tool の反復上限で pause_turn が返ったときの再開回数の上限(無限ループ防止)
+const MAX_PAUSE_RESUMES = 3;
+
+// 検索の失敗は例外にならず、web_search_tool_result の content がエラーオブジェクト
+// (配列ではない)で返る。検索できなくても作風からの推定で書けるので警告だけ出して続行する
+function logSearchOutcome(message: Anthropic.Message): void {
+  let searches = 0;
+  const errors: string[] = [];
+  for (const block of message.content) {
+    if (block.type === "server_tool_use") searches++;
+    if (block.type === "web_search_tool_result" && !Array.isArray(block.content)) {
+      errors.push(
+        (block.content as { error_code?: string }).error_code ?? "unknown_error"
+      );
+    }
+  }
+  if (errors.length > 0) {
+    console.warn(`[llm] web_search が失敗しました(${errors.join(", ")})。推定で続行します`);
+  } else if (searches > 0) {
+    console.log(`[llm] web_search でリファレンス楽曲を調査(ツール呼び出し ${searches} 回)`);
+  }
+}
+
+async function requestSongPlan(
+  llmPrompt: string,
+  referenceSong?: ReferenceSong
+): Promise<SongPlan> {
+  // 参照曲があるときだけ web_search を有効にする。調べる対象があるのは実在の曲を指定された
+  // ときだけで、daily はニュース文脈が、manual はユーザーの自由記述が入力なので検索先が無い。
+  // code_execution は宣言しない — web_search_20260209 の動的フィルタリングが内部で使うため、
+  // 別途宣言すると実行環境が 2 つになりモデルが混乱する
+  const tools = referenceSong
+    ? [{ type: "web_search_20260209" as const, name: "web_search" as const, max_uses: WEB_SEARCH_MAX_USES }]
+    : undefined;
+
+  let messages: Anthropic.MessageParam[] = [{ role: "user", content: llmPrompt }];
+  for (let resumes = 0; ; resumes++) {
+    const message = await client.messages.create({
+      model: LLM_MODEL,
+      max_tokens: 16000,
+      system: SYSTEM_PROMPT,
+      messages,
+      ...(tools ? { tools } : {}),
+      output_config: {
+        format: { type: "json_schema", schema: SONG_PLAN_SCHEMA },
+      },
+    });
+    logSearchOutcome(message);
+    // server tool がサーバー側の反復上限に達した合図。直前の応答を添えて送り直すと続きから再開する
+    // (「続けて」のような追加メッセージは付けない — 付けると再開ではなく新しい指示として読まれる)
+    if (message.stop_reason === "pause_turn" && resumes < MAX_PAUSE_RESUMES) {
+      messages = [
+        { role: "user", content: llmPrompt },
+        { role: "assistant", content: message.content as Anthropic.ContentBlockParam[] },
+      ];
+      continue;
+    }
+    return JSON.parse(firstText(message)) as SongPlan;
+  }
 }
 
 function bannedWordsIn(plan: SongPlan, banned: string[]): string[] {
@@ -331,7 +395,7 @@ function planIssues(
 export async function generateSongPlan(input: SongPlanInput): Promise<SongPlanResult> {
   const limits = currentWordLimits();
   let llmPrompt = buildSongPlanPrompt(input, limits);
-  let plan = await requestSongPlan(llmPrompt);
+  let plan = await requestSongPlan(llmPrompt, input.referenceSong);
 
   // 検証リトライ: 禁止ワードの残留・固有名詞の混入があれば、指示を強めて 1 回だけ再生成する
   const issues = planIssues(plan, input, limits);
@@ -340,7 +404,7 @@ export async function generateSongPlan(input: SongPlanInput): Promise<SongPlanRe
       `[llm] ${issues.map((i) => i.label).join(" / ")}が含まれたため再生成します`
     );
     llmPrompt += `\n\n## 再生成の指示(厳守)\n${issues.map((i) => i.instruction).join("\n")}`;
-    plan = await requestSongPlan(llmPrompt);
+    plan = await requestSongPlan(llmPrompt, input.referenceSong);
     const still = planIssues(plan, input, limits);
     if (still.length > 0) {
       // 生成は止めない(警告のみ。固有名詞が残った場合は Suno 側で FAILED として観測できる)

@@ -225,7 +225,7 @@ async function loadArtists() {
 async function generate(song) {
   const extra = $("song-extra").value.trim();
   if (!confirm(`「${song.title}」に似た曲を生成しますか?`)) return;
-  showMessage("songs-message", "AI がスタイルと歌詞を作っています…(1 分ほどかかります)", true);
+  showMessage("songs-message", "生成を開始しています…", true);
   try {
     const { task } = await fetchJson("/admin/api/generate", {
       method: "POST",

@@ -24,6 +24,8 @@ struct Track: Identifiable, Decodable, Hashable {
     let llmModel: String?
     /// LLM に送った入力全文(旧サーバー・旧データでは nil。optional デコードで後方互換)
     let llmPrompt: String?
+    /// web_search で参照した情報源(参照曲ありの生成のみ。他モード・旧サーバーでは nil / 空)
+    let sources: [String]?
     /// 曲の中心となった語(リアルワード)
     let realWorldWords: [String]
     /// 使用プリセット(使用時点のスナップショット)。旧サーバーでは nil、記録の無い旧データでは空配列
@@ -102,6 +104,9 @@ struct GenerationTask: Identifiable, Decodable, Equatable {
     /// ライブラリの進行中ジョブカードの進行バー用。実進捗は取れないためステータス段階のおおよその値
     var progressFraction: Double {
         switch status {
+        // PLANNING は Suno へ送る前(LLM がスタイルと歌詞を考えている最中)。
+        // 参照曲ありの生成では web_search で調べるため 3 分ほどかかることがある
+        case "PLANNING": 0.05
         case "PENDING": 0.1
         case "TEXT_SUCCESS": 0.45
         case "FIRST_SUCCESS": 0.7
@@ -114,6 +119,7 @@ struct GenerationTask: Identifiable, Decodable, Equatable {
     /// Web 管理画面(public/app.js の STATUS_LABELS)と同じ日本語ラベル
     var statusLabel: String {
         switch status {
+        case "PLANNING": "曲を考えています…"
         case "PENDING": "待機中"
         case "TEXT_SUCCESS": "歌詞生成完了・音声生成中"
         case "FIRST_SUCCESS": "1 曲目完了"
