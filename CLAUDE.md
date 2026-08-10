@@ -19,7 +19,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 現状
 
-バックエンド + Web 管理画面(`server/`)と iOS アプリ最小版(`ios/`)が動く。ブラウザ・iPhone から生成リクエスト・進行状況の確認・楽曲の一覧と再生ができる。生成は LLM(Claude API)がプリセット(要素プール)からスタイル・歌詞を作って Suno に customMode で渡す方式で、使用プリセットをタスク単位で記録し、評価(👍/👎)はプリセット別の集計として次回生成のプロンプトに注入され(👍 の多い要素を優先・👎 を回避。好みの管理はこの評価集計に一本化 — かつての好みプロファイル文書は廃止済みで `profile` テーブルと過去データのみ残る)、毎朝 PT 6:00 に 3 曲(設定 `daily_count` で 1〜10 に変更可)が 1 曲ずつ順次自動生成される。毎日の自動生成には外部コンテキスト(ニュース)を「今日のコンテキスト」として注入し、曲の中心となった語(リアルワード)を保存して直近 30 日で同一ワード 2 回までの使用制限を掛ける(仕様: [docs/specs/music-generation.md](docs/specs/music-generation.md))。生成の経路は 3 つ — おまかせ(`daily` / `daily_adventure`)/ カスタム(`manual`: プリセット+自由テキスト)/ **アーティスト経由**(`artist`: 登録アーティストの曲を参照曲に選び、その音楽的特徴に似た新曲を作る。2026-08-09 追加)。
+バックエンド + Web 管理画面(`server/`)と iOS アプリ最小版(`ios/`)が動く。ブラウザ・iPhone から生成リクエスト・進行状況の確認・楽曲の一覧と再生ができる。生成は LLM(Claude API)がプリセット(要素プール)からスタイル・歌詞を作って Suno に customMode で渡す方式で、使用プリセットをタスク単位で記録し、評価(👍/👎)はプリセット別の集計として次回生成のプロンプトに注入され(👍 の多い要素を優先・👎 を回避。好みの管理はこの評価集計に一本化 — かつての好みプロファイル文書は廃止済みで `profile` テーブルと過去データのみ残る)、毎朝 PT 6:00 に 3 曲(設定 `daily_count` で 1〜10 に変更可)が 1 曲ずつ順次自動生成される。毎日の自動生成には外部コンテキスト(ニュース)を「今日のコンテキスト」として注入し、曲の中心となった語(リアルワード)を保存して直近 30 日で同一ワード 2 回までの使用制限を掛ける(仕様: [docs/specs/music-generation.md](docs/specs/music-generation.md))。生成の経路は 3 つ — おまかせ(`daily` / `daily_adventure`)/ カスタム(`manual`: プリセット+自由テキスト)/ **アーティスト経由**(`artist`: 登録済みの曲を参照曲に選び、その音楽的特徴に似た新曲を作る。2026-08-09 追加)。参照曲を登録する入口は 2 つ — アーティスト名から(その人の曲を最大 200 曲取り込む)と曲名から(選んだ曲の `artistId` でアーティストを逆引きし、まとめて登録。2026-08-09 追加)。
 
 ### コマンド
 
@@ -52,20 +52,20 @@ esl-learning-assistant と同方式。`/api/*` は `X-API-Secret` ヘッダ必�
 
 ### バックエンド構成(`server/`)
 
-- 管理画面のページ: 楽曲一覧(`index.html`)/ アーティスト(`artists.html`。登録・曲一覧・曲を選んで生成)/ パラメータ一覧(`presets.html`)/ 設定(`settings.html`)
+- 管理画面のページ: 楽曲一覧(`index.html`)/ アーティスト(`artists.html`。アーティスト名または曲名で検索して登録・曲一覧・曲を選んで生成)/ パラメータ一覧(`presets.html`)/ 設定(`settings.html`)
 - **Hono + @hono/node-server**: API・静的配信(`public/` の管理画面は `/admin` 配下。本番で Cloudflare Access をこのパスだけに掛けるため。`/` は `/admin/` へリダイレクト。音源・画像は `/api/audio/*` 等 + `/admin/audio/*` 等の二重マウントで Range 対応配信 — 上記「API 認証」参照)
 - **node:sqlite**(`data/db.sqlite`): `tasks`(生成ジョブ)と `tracks`(完成楽曲)。`data/` は gitignore
-- **`src/itunes.ts`**: iTunes Search API クライアント(アーティスト経由生成の楽曲データソース。API キー不要)。アーティスト候補の検索と楽曲一覧の取得(最大 200 曲・同名の重複は最古を残して除去)を行う
+- **`src/itunes.ts`**: iTunes Search API クライアント(アーティスト経由生成の楽曲データソース。API キー不要)。アーティスト候補の検索・曲候補の検索(曲名からの登録用。track 行の `artistId` でアーティストを逆引き)・楽曲一覧の取得(最大 200 曲・同名の重複は最古を残して除去)を行う
 - **`src/suno/client.ts`**: Suno 連携の抽象化インターフェース。実装は `kieai.ts`(kie.ai / sunoapi.org 互換)。公式 API が出たらここを差し替える
 - **`src/generation.ts`**: 生成ジョブ管理。10 秒間隔のポーラーが未完了タスクを照会し、完了したら音源・カバー画像を即 `data/` へダウンロード(プロバイダの URL は一時ファイルのため)。サーバー再起動時も DB から未完了タスクを拾って自動再開
 - **`src/llm.ts`**: Claude API(既定 `claude-sonnet-5`、`.env` の `LLM_MODEL` で変更可)。生成リクエストからスタイル・英語歌詞・日本語訳・タイトル・狙い・使用プリセットを構造化出力で生成し、Suno へ `customMode: true` で送信する。`.env` に `ANTHROPIC_API_KEY` 必須(起動時 fail-fast)
 - **`src/scheduler.ts`**: 毎日の自動生成。1 分間隔で設定タイムゾーン(既定 America/Los_Angeles)の現在時刻をチェックし、当日の実行時刻(既定 6 時)以降で 1 日の曲数(`daily_count`、既定 3)に達していなければ「冒険日判定(既定 20%。判定は 1 曲ごと)→ LLM 生成 → Suno 送信」を 1 曲ずつ順次実行。最終生成日とその日の生成済み数は `settings`(`last_daily_date` / `last_daily_count`)に記録し、停止中に跨いだ場合や途中失敗時は残数だけ追い生成(初回起動は当日を生成済み扱い)。失敗時は 30 分後に再試行。設定は `settings` テーブル(key-value)で `GET/PUT /api/settings` から変更可
-- API: `POST /api/generate`(プリセット選択+自由テキスト → LLM 経由で生成。`artistSongId` を付けるとアーティスト経由生成になる)/ `GET /api/tasks` / `GET /api/tracks` / `POST /api/tracks/:id/rating` / `GET|POST|PUT|DELETE /api/presets` / `GET /api/artists/search`・`GET|POST /api/artists`・`GET /api/artists/:id/songs`・`POST /api/artists/:id/refresh`・`DELETE /api/artists/:id`(アーティスト管理)/ `GET|PUT /api/settings` / `GET /api/generation-params`(おまかせ生成が LLM に注入する入力の一覧。iOS の生成パラメータ画面用 — runDaily と同じ関数群から組み立てて表示と生成入力のずれを防ぐ)/ `POST /api/daily/run`(自動生成の手動トリガ。管理画面の生成ボタンが使用。`last_daily_date` は更新しない)/ `GET /api/credits` / `GET /api/ping`(同じルートを `/admin/api/*` にも無認証でマウント — 管理画面用)
+- API: `POST /api/generate`(プリセット選択+自由テキスト → LLM 経由で生成。`artistSongId` を付けるとアーティスト経由生成になる)/ `GET /api/tasks` / `GET /api/tracks` / `POST /api/tracks/:id/rating` / `GET|POST|PUT|DELETE /api/presets` / `GET /api/artists/search`・`GET|POST /api/artists`・`GET /api/artists/:id/songs`・`POST /api/artists/:id/refresh`・`DELETE /api/artists/:id`(アーティスト管理)/ `GET /api/artist-songs/search`・`POST /api/artist-songs`(曲名からの登録。曲を選ぶとアーティストを逆引きしてまとめて登録する)/ `GET|PUT /api/settings` / `GET /api/generation-params`(おまかせ生成が LLM に注入する入力の一覧。iOS の生成パラメータ画面用 — runDaily と同じ関数群から組み立てて表示と生成入力のずれを防ぐ)/ `POST /api/daily/run`(自動生成の手動トリガ。管理画面の生成ボタンが使用。`last_daily_date` は更新しない)/ `GET /api/credits` / `GET /api/ping`(同じルートを `/admin/api/*` にも無認証でマウント — 管理画面用)
 
 ### iOS アプリ構成(`ios/`)
 
 - **XcodeGen + SwiftUI**(iOS 17+、Swift 6)。`project.yml` が真実源で `.xcodeproj` は生成物(gitignore)。esl-learning-assistant と同じ構成
-- 画面(デザインは案A ミニマル。経緯・実装メモ: [docs/plans/archive/ios-app-design.md](docs/plans/archive/ios-app-design.md)): ライブラリ(今日の一曲ヒーロー・進行中ジョブカード・日付グループ・行内再生+👍/👎)/ 楽曲詳細(歌詞 EN/JA 切替・狙い・スタイル・リアルワード・メタ情報)/ フルプレイヤー(シート。キュー連続再生・ロック画面 Now Playing、AVPlayer ストリーミング+バックグラウンド再生)/ 生成(おまかせ生成 POST /api/daily/run 主役+生成パラメータ画面への導線+アーティストから生成への導線+カスタム生成折りたたみ+残クレジット表示)/ 生成パラメータ(GET /api/generation-params の読み取り専用表示 — 設定値・評価集計付き要素プール・直近スタイル・リアルワード制限)/ アーティスト(登録済み一覧・追加シートで iTunes 検索 → 候補から登録・行メニューで再取得/削除)/ アーティストの曲一覧(絞り込み+曲をタップで確認 → その曲に似た曲を生成)/ 設定(サーバー設定 GET/PUT /api/settings の閲覧・編集+サーバー URL・API Secret・接続テスト)
+- 画面(デザインは案A ミニマル。経緯・実装メモ: [docs/plans/archive/ios-app-design.md](docs/plans/archive/ios-app-design.md)): ライブラリ(今日の一曲ヒーロー・進行中ジョブカード・日付グループ・行内再生+👍/👎)/ 楽曲詳細(歌詞 EN/JA 切替・狙い・スタイル・リアルワード・メタ情報)/ フルプレイヤー(シート。キュー連続再生・ロック画面 Now Playing、AVPlayer ストリーミング+バックグラウンド再生)/ 生成(おまかせ生成 POST /api/daily/run 主役+生成パラメータ画面への導線+曲名から生成への導線+アーティストから生成への導線+カスタム生成折りたたみ+残クレジット表示)/ 生成パラメータ(GET /api/generation-params の読み取り専用表示 — 設定値・評価集計付き要素プール・直近スタイル・リアルワード制限)/ 曲名から生成(曲名で iTunes 検索 → 候補を選ぶと登録(アーティストは逆引き)からその曲での生成まで一気に進む)/ アーティスト(登録済み一覧・追加シートで iTunes 検索 → 候補から登録・行メニューで再取得/削除)/ アーティストの曲一覧(絞り込み+曲をタップで確認 → その曲に似た曲を生成)/ 設定(サーバー設定 GET/PUT /api/settings の閲覧・編集+サーバー URL・API Secret・接続テスト)
 - `Services/BackendAPI.swift`: `/api/*` 共通処理(UserDefaults → Info.plist 埋め込み値の順で URL/secret を解決、`X-API-Secret` 付与、os.Logger)
 - 接続先の既定はビルド時に Info.plist へ埋め込む(`run-ios-device.sh` が本番 `https://music.chobi.me` を注入。`--local` で Mac の LAN IP。空ならシミュレータ向けに `http://localhost:3014` へフォールバック)
 - UI テスト(`DailyAIMusicUITests`): 一覧 → タップ → 再生開始のスモークテスト

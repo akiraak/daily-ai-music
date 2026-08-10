@@ -108,12 +108,14 @@ export function findArtistSongByTitle(artistId: number, title: string): ArtistSo
 
 ### Phase 3: iOS(`ios/DailyAIMusic/`)
 
+**導線は「生成タブに専用の行を新設」に決定(2026-08-09)**。当初案はアーティスト追加シート内のセグメント切り替えだったが、曲名しか知らない人が「アーティスト」を 2 回通ることになり、この機能の動機と噛み合わないため。
+
 - `Models/APIModels.swift`: `SongCandidate` / `SongSearchResponse` / `CreateArtistSongRequest` / `CreateArtistSongResponse` を追加
-- `Views/ArtistsView.swift` の `AddArtistSheet`: 上部に `Picker`(segmented: `アーティスト名` / `曲名`)を置き、モードで検索先と候補行の見た目を切り替える。検索語・候補・メッセージはモード切り替え時にクリアする
-- 登録後の導線: シートを閉じたあと **そのアーティストの曲一覧へ push** する
-  - `ArtistsView` に `@State private var pushedDestination: ...` を持たせ `navigationDestination(item:)` で push(シートを閉じてから遷移する必要があるため)
-  - `ArtistSongsView` に `initialKeyword: String = ""` を追加し、登録した曲名で絞り込んだ状態で開く(既存の呼び出しは既定値でそのまま動く)
+- `Views/SongSearchView.swift`(新規): 曲名の検索欄 → 候補一覧(曲名+アーティスト名 · 年 · アルバム)→ 候補タップで確認ダイアログ → 登録(`POST /api/artist-songs`)と生成(`POST /api/generate { artistSongId }`)を続けて実行 → 生成タブへ戻る(進行状況はそこに出る)
+- `Views/GenerateView.swift`: 生成パラメータ行とアーティスト行の間に「曲名から生成 / 知っている曲を指定してつくる」の push 行を足す
+- 生成だけ失敗した場合は登録済みである旨をメッセージに出す(アーティスト画面の曲一覧からやり直せる)
 - `List` を使わない画面構成なので `.searchable` は使わない(既存の絞り込み欄と同じ通常の `TextField`)
+- `ArtistsView` の追加シートは変更しない(アーティスト名検索のまま)
 
 ### Phase 4: ドキュメント更新と総合検証
 
@@ -154,4 +156,15 @@ export function findArtistSongByTitle(artistId: number, title: string): ArtistSo
 
 **管理画面** — ヘッドレス Chrome の CDP 操作で「曲名」モードに切り替え → 検索 → 候補から登録 → 曲一覧が絞り込み済みで開くところまでを目視(`--window-size` は 500px 以上、`--timeout` を付ける)。
 
-**iOS** — シミュレータビルド + `GenerateUITests` に曲名検索のスモークを追加(生成タブ → アーティスト → + → 曲名モード → 検索 → 候補が出る)。既存の UI テスト 3 クラスに回帰が無いこと。サーバーは同じ隔離 DB(ポート 3014)。
+**iOS** — シミュレータビルド + `GenerateUITests` に曲名検索のスモークを追加(生成タブ → 曲名から生成 → 検索 → 候補が出る)。既存の UI テストに回帰が無いこと。サーバーは同じ隔離 DB(ポート 3014)。
+
+## 実施結果(2026-08-09)
+
+全 Phase 完了。検証の要点:
+
+- サーバー: テスト方針 1〜7 と 9 をすべて実施(隔離 DB・ポート 3015・実 iTunes 通信込み)。登録名が正式表記になること(「Official髭男dism」→ `OFFICIAL HIGE DANDISM`、「DAOKO×米津玄師」→ `Daoko`)、重複除去(「Bohemian Rhapsody」25 → 18 件)、200 件から漏れた曲の個別 `INSERT`、大小文字違いの合流を確認。既存経路(`POST /api/artists` / `refresh`)の回帰も確認
+- テスト方針 8(実生成): 曲名「Pretender」から登録 → 生成が `COMPLETE`(3:09、`Almost Yours`)。style / title / 歌詞に固有名詞なし、`ref_artist_name` / `ref_song_title` のスナップショットも記録された
+- 管理画面: ヘッドレス Chrome の CDP 操作で 曲名モード → 検索 → 登録 → 曲一覧が絞り込み済みで開くまでを確認。**長い曲名が副題を 1 文字幅に潰すレイアウト崩れ**を発見し `style.css` を修正(`.artist-name` / `.song-title` に `flex: 1 1 auto`、行末ボタンに `flex: 0 0 auto`)
+- iOS: シミュレータビルド + UI テスト 9 件すべて成功(新規の `testSongSearchEntryPoint` を含む)
+
+**この機能とは別に見つかったこと**: 同じ参照曲でもう 1 曲生成したところ、Suno が style 内の `major7`(コード名)を「アーティスト名」と誤判定して `SENSITIVE_WORD_ERROR` で弾いた。artist モードのプロンプトはコード進行を音楽用語で書かせるため一定の確率で起こりうる。今回は再現 1 回のみで恒常的ではないため対処はしていない(頻発するようなら `llm.ts` の指示でコード名の書き方を制限する)。

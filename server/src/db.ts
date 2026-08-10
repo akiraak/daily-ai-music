@@ -566,6 +566,27 @@ export function getArtist(id: number): ArtistWithCountRow | undefined {
     .get(id) as ArtistWithCountRow | undefined;
 }
 
+// 曲名からの登録で「その曲のアーティストが既に登録済みか」を見るため。
+// itunes_artist_id に UNIQUE は無い(手動登録で NULL がありうる)ので最初の 1 件を返す
+export function getArtistByItunesId(itunesArtistId: number): ArtistWithCountRow | undefined {
+  return db
+    .prepare(
+      `SELECT a.*, (SELECT COUNT(*) FROM artist_songs s WHERE s.artist_id = a.id) AS song_count
+       FROM artists a WHERE a.itunes_artist_id = ? ORDER BY a.id LIMIT 1`
+    )
+    .get(itunesArtistId) as ArtistWithCountRow | undefined;
+}
+
+// name の UNIQUE 違反で登録に失敗したときに、その名前の既存行へ合流するため
+export function getArtistByName(name: string): ArtistWithCountRow | undefined {
+  return db
+    .prepare(
+      `SELECT a.*, (SELECT COUNT(*) FROM artist_songs s WHERE s.artist_id = a.id) AS song_count
+       FROM artists a WHERE a.name = ?`
+    )
+    .get(name) as ArtistWithCountRow | undefined;
+}
+
 export function createArtist(input: {
   name: string;
   itunesArtistId?: number | null;
@@ -621,6 +642,22 @@ export function listArtistSongs(artistId: number): ArtistSongRow[] {
        ORDER BY release_year IS NULL, release_year DESC, title`
     )
     .all(artistId) as unknown as ArtistSongRow[];
+}
+
+// 曲名で 1 曲を引く(曲名からの登録が既存行に合流するため)。artist_songs の UNIQUE は
+// 完全一致・BINARY 照合なので、大小文字だけ違う重複行ができないよう正規化して比べる
+// (SQLite の LOWER は ASCII のみだが、大小文字の別があるのは ASCII 側なので足りる)
+export function findArtistSongByTitle(
+  artistId: number,
+  title: string
+): ArtistSongRow | undefined {
+  return db
+    .prepare(
+      `SELECT * FROM artist_songs
+       WHERE artist_id = ? AND LOWER(TRIM(title)) = LOWER(TRIM(?))
+       ORDER BY id LIMIT 1`
+    )
+    .get(artistId, title) as ArtistSongRow | undefined;
 }
 
 export type ArtistSongWithArtistRow = ArtistSongRow & { artist_name: string };

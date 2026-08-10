@@ -298,6 +298,17 @@ details.panel summary {
 .preset-form input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
 .preset-form { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
 .preset-form button { padding: 6px 18px; }
+/* 検索対象の切り替え(アーティスト名 / 曲名)。入力欄と違い中身の幅に合わせる */
+.preset-form select {
+  font: inherit;
+  font-size: 0.9rem;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+}
+.preset-form select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
 
 /* --- アーティストページ(候補・登録済み一覧・曲一覧に共通の 1 行レイアウト) --- */
 .artist,
@@ -311,16 +322,21 @@ details.panel summary {
 }
 .artist:first-child,
 .song:first-child { border-top: none; }
+/* 見出しと副題は内容の長さに応じて分け合う(flex-basis を auto にしておかないと、
+   曲名候補のような長い見出しが副題を 1 文字幅まで潰してしまう) */
 .artist-name,
-.song-title { overflow-wrap: anywhere; }
+.song-title { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
 .artist-meta,
 .song-meta {
-  flex: 1;
+  flex: 1 1 auto;
   min-width: 0;
   color: var(--muted);
   font-size: 0.8rem;
   overflow-wrap: anywhere;
 }
+/* 行末のボタンは見出しが長くても縮めない(「登録」が 2 行に割れないように) */
+.artist .icon-btn,
+.song .icon-btn { flex: 0 0 auto; white-space: nowrap; }
 /* 曲は最大 200 件になるのでパネル内でスクロールさせる */
 #songs { max-height: 460px; overflow-y: auto; }
 .form-message a { color: var(--accent); }

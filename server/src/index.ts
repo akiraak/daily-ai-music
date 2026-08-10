@@ -555,6 +555,101 @@ api.delete("/artists/:id", (c) => {
   return c.json({ ok: true });
 });
 
+// --- 曲名からの登録(アーティストは iTunes の応答から逆引きする) ---
+// アーティスト名を思い出せなくても「この曲みたいな曲」を作れるようにするための入口。
+// パス名は artist_songs テーブルに合わせた(/api/tracks = 生成した曲と紛れないように)
+
+// 登録前の曖昧性解消用(DB には触らない)。カバー・ピアノ版が多く混ざるため候補から選ばせる
+api.get("/artist-songs/search", async (c) => {
+  const term = (c.req.query("term") ?? "").trim();
+  if (!term) return c.json({ error: "term を指定してください" }, 400);
+  try {
+    return c.json({ candidates: await itunes.searchSongs(term) });
+  } catch (err) {
+    console.error(`[api] 曲名検索失敗: ${err}`);
+    return c.json({ error: String(err instanceof Error ? err.message : err) }, 502);
+  }
+});
+
+// 曲を 1 曲登録する。body は { itunesTrackId } のみで、曲メタはサーバーが取り直す
+// (クライアントの申告は信用しない)。未登録のアーティストは同時に登録する
+api.post("/artist-songs", async (c) => {
+  const body = await c.req.json().catch(() => null);
+  const itunesTrackId = Number.isInteger(body?.itunesTrackId)
+    ? (body.itunesTrackId as number)
+    : undefined;
+  if (itunesTrackId === undefined) {
+    return c.json({ error: "itunesTrackId を指定してください" }, 400);
+  }
+  try {
+    const track = await itunes.fetchTrack(itunesTrackId);
+    if (!track) return c.json({ error: "指定された曲が iTunes で見つかりません" }, 404);
+
+    let artist = db.getArtistByItunesId(track.itunesArtistId);
+    let artistCreated = false;
+    let importedSongs = 0;
+    if (!artist) {
+      // 未登録なら曲一覧もまとめて取り込む。正式名とジャンルを取るために lookup は
+      // どのみち 1 回必要で、曲一覧は同じ応答に入っており追加コストがゼロのため
+      const { artistName, artistGenre, songs } = await itunes.fetchSongs(track.itunesArtistId);
+      // 登録名は lookup の artist 行(正式表記)から採る。検索の track 行の artistName は
+      // ローカライズされた表示名(「クイーン」)で、既存のアーティスト名検索経路と
+      // 名前が食い違い二重登録になるうえ、llm.ts の固有名詞混入チェックも効かなくなる
+      const name = artistName ?? track.artistName;
+      if (!name) return c.json({ error: "アーティスト名を特定できませんでした" }, 502);
+      try {
+        artist = db.createArtist({
+          name,
+          itunesArtistId: track.itunesArtistId,
+          genre: artistGenre,
+        });
+        artistCreated = true;
+      } catch {
+        // 同名が既に登録されている(iTunes ID を持たない手動登録など)→ その行に合流する
+        artist = db.getArtistByName(name);
+        if (!artist) return c.json({ error: `「${name}」の登録に失敗しました` }, 409);
+      }
+      importedSongs = db.insertArtistSongs(artist.id, songs);
+    }
+
+    // 選んだ曲が lookup の 200 件から漏れることがある(米津玄師は 162 曲だが Queen は
+    // 200 で打ち切り)ため、無ければこの 1 曲だけ足して「登録した曲が一覧に無い」を防ぐ
+    let song = db.findArtistSongByTitle(artist.id, track.title);
+    const songAdded = song === undefined;
+    if (!song) {
+      db.insertArtistSongs(artist.id, [
+        {
+          title: track.title,
+          album: track.album,
+          releaseYear: track.releaseYear,
+          genre: track.genre,
+          itunesTrackId: track.itunesTrackId,
+        },
+      ]);
+      song = db.findArtistSongByTitle(artist.id, track.title);
+      if (!song) return c.json({ error: "曲の登録に失敗しました" }, 500);
+    }
+
+    console.log(
+      `[artists] "${artist.name}" の「${song.title}」を登録しました` +
+        (artistCreated ? `(アーティストを新規登録し楽曲 ${importedSongs} 件を取り込み)` : "")
+    );
+    return c.json(
+      {
+        artist: artistJson(db.getArtist(artist.id)!),
+        song: artistSongJson(song),
+        artistCreated,
+        importedSongs,
+        songAdded,
+      },
+      201
+    );
+  } catch (err) {
+    console.error(`[api] 曲の登録失敗: ${err}`);
+    return c.json({ error: String(err instanceof Error ? err.message : err) }, 502);
+  }
+});
+
 // /api/* は X-API-Secret ヘッダ必須
 app.use("/api/*", async (c, next) => {
   if (!isValidApiSecret(c.req.header("x-api-secret"))) {

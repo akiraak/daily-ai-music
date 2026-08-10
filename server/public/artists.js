@@ -21,9 +21,58 @@ function showMessage(id, text, info = false) {
 let currentArtist = null;
 let currentSongs = [];
 
-// --- アーティストの検索・登録 ---
+// --- 検索・登録(アーティスト名 / 曲名の 2 経路) ---
 
-async function register(name, itunesArtistId) {
+// 検索対象ごとの文言と処理。曲名経路はアーティスト名を思い出せなくても入口に立てるためのもので、
+// 選んだ曲の iTunes の応答からアーティストを逆引きして一緒に登録する
+const SEARCH_KINDS = {
+  artist: {
+    placeholder: "アーティスト名(例: 米津玄師 / Radiohead)",
+    hint: "名前で検索して候補から選ぶと、その人の曲(最大 200 曲)を iTunes から取り込みます。日本語で検索できますが、登録名は iTunes の表記(ローマ字のことが多い)になります。",
+    notFound: (term) => `「${term}」に一致するアーティストが見つかりません。`,
+    prompt: "登録するアーティストを選んでください。",
+  },
+  song: {
+    placeholder: "曲名(例: Lemon / 夜に駆ける)",
+    hint: "曲名で検索して候補から選ぶと、その曲とアーティスト(最大 200 曲)をまとめて登録します。アーティスト名を足すと精度が上がります(例: 米津玄師 Lemon)。カバーやピアノ版も混ざるので、アーティスト名を見て選んでください。",
+    notFound: (term) => `「${term}」に一致する曲が見つかりません。`,
+    prompt: "登録する曲を選んでください。",
+  },
+};
+
+function currentKind() {
+  return SEARCH_KINDS[$("search-kind").value] ?? SEARCH_KINDS.artist;
+}
+
+function applyKind() {
+  const kind = currentKind();
+  $("search-term").placeholder = kind.placeholder;
+  $("search-hint").textContent = kind.hint;
+  $("candidates").replaceChildren();
+  showMessage("search-message", null);
+}
+
+// 候補行(アーティスト名 / 曲名で見出しと副題が入れ替わるだけ)
+function candidateRow({ title, meta, onRegister }) {
+  const li = document.createElement("li");
+  li.className = "artist";
+  li.innerHTML = `
+    <span class="artist-name"></span>
+    <span class="artist-meta"></span>
+    <button type="button" class="icon-btn" data-act="register">登録</button>`;
+  li.querySelector(".artist-name").textContent = title;
+  li.querySelector(".artist-meta").textContent = meta;
+  li.querySelector('[data-act="register"]').addEventListener("click", onRegister);
+  return li;
+}
+
+function afterRegister(message) {
+  $("candidates").replaceChildren();
+  $("search-term").value = "";
+  showMessage("search-message", message, true);
+}
+
+async function registerArtist(name, itunesArtistId) {
   showMessage("search-message", "登録しています…(iTunes から曲を取り込みます)", true);
   try {
     const { artist, added } = await fetchJson("/admin/api/artists", {
@@ -31,45 +80,80 @@ async function register(name, itunesArtistId) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name, itunesArtistId }),
     });
-    $("candidates").replaceChildren();
-    $("search-term").value = "";
-    showMessage("search-message", `「${artist.name}」を登録し、曲を ${added} 件取り込みました。`, true);
+    afterRegister(`「${artist.name}」を登録し、曲を ${added} 件取り込みました。`);
     loadArtists();
   } catch (err) {
     showMessage("search-message", err.message);
   }
 }
 
+// 曲名から登録する。サーバーは itunesTrackId だけを受け取って曲メタを取り直すため、
+// 候補の表示名(ローカライズ済み)ではなく iTunes の正式表記でアーティストが登録される
+async function registerSong(candidate) {
+  showMessage("search-message", "登録しています…(iTunes から曲を取り込みます)", true);
+  try {
+    const { artist, song, artistCreated, importedSongs } = await fetchJson(
+      "/admin/api/artist-songs",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ itunesTrackId: candidate.itunesTrackId }),
+      }
+    );
+    let message = `「${artist.name}」の「${song.title}」を登録しました`;
+    message += artistCreated ? `(曲 ${importedSongs} 件を取り込み)。` : "。";
+    // コラボ曲は片方の artistId しか返らないため、表示名と登録先が違うことがある
+    if (candidate.artistName && candidate.artistName !== artist.name) {
+      message += `「${candidate.artistName}」は ${artist.name} として登録しています。`;
+    }
+    afterRegister(message);
+    await loadArtists();
+    // 登録した曲をすぐ生成できる状態にする(曲一覧を開いて絞り込み欄に曲名を入れる)
+    $("song-filter").value = song.title;
+    await loadSongs(artist);
+    $("songs-panel").scrollIntoView({ behavior: "smooth", block: "start" });
+  } catch (err) {
+    showMessage("search-message", err.message);
+  }
+}
+
+$("search-kind").addEventListener("change", applyKind);
+
 $("search-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const term = $("search-term").value.trim();
   if (!term) return;
+  const kind = currentKind();
+  const isSong = kind === SEARCH_KINDS.song;
   showMessage("search-message", "検索しています…", true);
   $("candidates").replaceChildren();
   try {
+    const path = isSong ? "artist-songs/search" : "artists/search";
     const { candidates } = await fetchJson(
-      `/admin/api/artists/search?term=${encodeURIComponent(term)}`
+      `/admin/api/${path}?term=${encodeURIComponent(term)}`
     );
     if (candidates.length === 0) {
-      showMessage("search-message", `「${term}」に一致するアーティストが見つかりません。`);
+      showMessage("search-message", kind.notFound(term));
       return;
     }
-    showMessage("search-message", "登録するアーティストを選んでください。", true);
+    showMessage("search-message", kind.prompt, true);
     $("candidates").replaceChildren(
-      ...candidates.map((cand) => {
-        const li = document.createElement("li");
-        li.className = "artist";
-        li.innerHTML = `
-          <span class="artist-name"></span>
-          <span class="artist-meta"></span>
-          <button type="button" class="icon-btn" data-act="register">登録</button>`;
-        li.querySelector(".artist-name").textContent = cand.name;
-        li.querySelector(".artist-meta").textContent = cand.genre ?? "";
-        li.querySelector('[data-act="register"]').addEventListener("click", () =>
-          register(cand.name, cand.itunesArtistId)
-        );
-        return li;
-      })
+      ...candidates.map((cand) =>
+        isSong
+          ? candidateRow({
+              title: cand.title,
+              // 日本語検索は読みマッチで曲名の違う行も混ざるため、アーティスト名も必ず出す
+              meta: [cand.artistName, cand.releaseYear, cand.album]
+                .filter(Boolean)
+                .join(" / "),
+              onRegister: () => registerSong(cand),
+            })
+          : candidateRow({
+              title: cand.name,
+              meta: cand.genre ?? "",
+              onRegister: () => registerArtist(cand.name, cand.itunesArtistId),
+            })
+      )
     );
   } catch (err) {
     showMessage("search-message", err.message);
@@ -199,4 +283,5 @@ async function loadSongs(artist) {
 
 $("song-filter").addEventListener("input", renderSongs);
 
+applyKind();
 loadArtists();

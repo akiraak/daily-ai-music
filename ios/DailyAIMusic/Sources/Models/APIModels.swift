@@ -207,6 +207,44 @@ struct ArtistSongsResponse: Decodable {
     let songs: [ArtistSong]
 }
 
+// MARK: - 曲名からの登録(アーティストは iTunes の応答から逆引きする)
+
+/// GET /api/artist-songs/search の候補(まだ登録されていない。iTunes の検索結果)
+struct SongCandidate: Decodable, Hashable, Identifiable {
+    let itunesTrackId: Int
+    let title: String
+    /// iTunes の表示名(「クイーン」のようにローカライズされる)。表示専用で、
+    /// 実際の登録名はサーバーが iTunes の正式表記(「Queen」)から決める
+    let artistName: String
+    let album: String?
+    let releaseYear: Int?
+
+    var id: Int { itunesTrackId }
+
+    /// 候補行の副題。日本語検索は読みマッチで曲名の違う行も混ざるためアーティスト名を先頭に出す
+    var subtitle: String {
+        [artistName, releaseYear.map(String.init), album].compactMap { $0 }.joined(separator: " · ")
+    }
+}
+
+struct SongSearchResponse: Decodable {
+    let candidates: [SongCandidate]
+}
+
+/// POST /api/artist-songs の body。曲メタはサーバーが取り直すので trackId だけ送る
+struct CreateArtistSongRequest: Encodable {
+    let itunesTrackId: Int
+}
+
+struct CreateArtistSongResponse: Decodable {
+    let artist: Artist
+    let song: ArtistSong
+    /// アーティストも新規登録されたか(既に登録済みなら false)
+    let artistCreated: Bool
+    /// 新規登録時に取り込んだ曲数
+    let importedSongs: Int
+}
+
 /// GET /api/credits。プロバイダから取れなかったときは null
 struct CreditsResponse: Decodable {
     let credits: Int?

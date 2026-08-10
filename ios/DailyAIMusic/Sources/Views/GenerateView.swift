@@ -35,6 +35,8 @@ struct GenerateView: View {
                     Divider()
                     paramsRow
                     Divider()
+                    songSearchRow
+                    Divider()
                     artistsRow
                     Divider()
                     customSection
@@ -162,6 +164,33 @@ struct GenerateView: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("generate.params")
+    }
+
+    // MARK: - 曲名から生成(アーティスト名を知らなくても入口に立てるようにする)
+
+    private var songSearchRow: some View {
+        NavigationLink {
+            SongSearchView()
+        } label: {
+            HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("曲名から生成")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color.primary)
+                    Text("知っている曲を指定してつくる")
+                        .font(.caption)
+                        .foregroundStyle(Color.secondary)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Color.secondary)
+            }
+            .contentShape(Rectangle())
+            .padding(.vertical, 13)
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("generate.songSearch")
     }
 
     // MARK: - アーティストから生成(読み取り専用画面と同じ push 遷移の行)

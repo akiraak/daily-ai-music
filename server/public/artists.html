@@ -24,10 +24,14 @@
     </div>
 
     <section class="panel">
-      <h2>アーティストを登録</h2>
-      <p class="empty">名前で検索して候補から選ぶと、その人の曲(最大 200 曲)を iTunes から取り込みます。日本語で検索できますが、登録名は iTunes の表記(ローマ字のことが多い)になります。</p>
+      <h2>登録</h2>
+      <p class="empty" id="search-hint"></p>
       <form id="search-form" class="preset-form">
-        <input id="search-term" placeholder="アーティスト名(例: 米津玄師 / Radiohead)" required>
+        <select id="search-kind">
+          <option value="artist">アーティスト名</option>
+          <option value="song">曲名</option>
+        </select>
+        <input id="search-term" required>
         <button type="submit">検索</button>
       </form>
       <ul id="candidates"></ul>

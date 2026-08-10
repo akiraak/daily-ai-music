@@ -84,6 +84,39 @@ final class GenerateUITests: XCTestCase {
         attachScreenshot(app, name: "artists-list")
     }
 
+    /// 曲名からの生成への導線。検索して候補が並ぶところまでを確認する
+    /// (登録は iTunes からの取り込みと生成まで進んでクレジットを消費するため候補はタップしない。
+    /// サーバー側は curl シナリオでカバー済み)
+    @MainActor
+    func testSongSearchEntryPoint() throws {
+        let app = XCUIApplication()
+        app.launch()
+
+        app.tabBars.buttons["生成"].tap()
+        let row = app.buttons["generate.songSearch"]
+        XCTAssertTrue(row.waitForExistence(timeout: 5), "曲名から生成の行があること")
+
+        row.tap()
+        XCTAssertTrue(
+            app.navigationBars["曲名から生成"].waitForExistence(timeout: 5),
+            "曲名検索画面へ遷移すること"
+        )
+        let term = app.descendants(matching: .any)["song.search.term"].firstMatch
+        XCTAssertTrue(term.waitForExistence(timeout: 3), "曲名の入力欄があること")
+        let submit = app.buttons["song.search.submit"]
+        XCTAssertFalse(submit.isEnabled, "空のままでは検索できないこと")
+
+        term.tap()
+        term.typeText("Lemon")
+        XCTAssertTrue(submit.isEnabled, "入力すると検索が有効になること")
+        submit.tap()
+
+        // 候補は iTunes 経由なので待ち時間を長めに取る
+        let candidate = app.buttons["song.candidate"].firstMatch
+        XCTAssertTrue(candidate.waitForExistence(timeout: 20), "曲の候補が並ぶこと")
+        attachScreenshot(app, name: "song-search-candidates")
+    }
+
     /// キーボード開閉の目視確認用スクリーンショットを xcresult に添付する
     @MainActor
     private func attachScreenshot(_ app: XCUIApplication, name: String) {
