@@ -97,7 +97,7 @@ struct SettingsView: View {
             Divider()
             VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .firstTextBaseline) {
-                    rowLabel("冒険日の確率", hint: "好みから大きく外した曲に挑戦する日")
+                    rowLabel("冒険日の確率", hint: "好みから大きく外した曲に挑戦する日。参照曲の登録が無いときのみ有効")
                     Spacer(minLength: 12)
                     Text("\(Int((adventureValue * 100).rounded())) %")
                         .font(.subheadline.weight(.semibold))

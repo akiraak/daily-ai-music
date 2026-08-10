@@ -81,7 +81,7 @@ struct GenerateView: View {
             Text("おまかせ生成")
                 .font(.title3.weight(.heavy))
                 .padding(.top, 8)
-            Text("今日のニュースとこれまでの評価(👍/👎)から、AI が 1 曲つくります")
+            Text("登録した曲から 1 曲を選び、その曲調と今日のニュースから AI が 1 曲つくります")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -127,8 +127,9 @@ struct GenerateView: View {
         isRunningDaily = true
         defer { isRunningDaily = false }
         do {
-            // サーバー側で LLM 生成 → Suno 送信まで待つため長め
-            _ = try await BackendAPI.postJSON(DailyRunResponse.self, path: "/api/daily/run", timeout: 180)
+            // サーバーは受付だけ済ませて即座に返す(LLM 生成 → Suno 送信はバックグラウンド)。
+            // 以降の進行は下の進行中カード(「曲を考えています…」)が引き継ぐ
+            _ = try await BackendAPI.postJSON(DailyRunResponse.self, path: "/api/daily/run")
             dailyError = nil
             await loadTasks()
             await loadCredits()

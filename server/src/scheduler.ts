@@ -5,6 +5,7 @@
 import { buildTodayContext } from "./context.ts";
 import * as db from "./db.ts";
 import { acceptGeneration, completeGeneration } from "./generation.ts";
+import { selectReferenceSong } from "./reference.ts";
 
 const CHECK_INTERVAL_MS = 60_000;
 // 失敗時の再試行間隔(毎分 LLM を叩き続けないため)
@@ -110,44 +111,99 @@ export function shouldRunDaily(input: {
   };
 }
 
-// 毎日の自動生成 1 回分: 冒険日判定 → コンテキスト取得 → LLM 生成 → Suno 送信
-export async function runDaily(): Promise<{
+// 毎日の自動生成 1 回分の受付結果。complete() が LLM 生成 → Suno 送信の本体で、
+// スケジューラは await し、HTTP のトリガ(POST /api/daily/run)は投げっぱなしにする
+export interface DailyRunStart {
   task: db.TaskRow;
   adventure: boolean;
-}> {
-  // 1. 冒険日判定
-  const settings = getDailySettings();
-  const adventure = Math.random() < settings.adventureProbability;
-  const mode = adventure ? "daily_adventure" : "daily";
-  console.log(`[daily] mode=${mode} (冒険確率 ${settings.adventureProbability})`);
+  complete: () => Promise<db.TaskRow>;
+}
 
-  // 2. 外部コンテキスト(ニュース)取得。失敗しても生成は続行(その場合セクション無し)
+// 毎日の自動生成の受付: 参照曲の選択 → 冒険日判定 → コンテキスト取得 → タスク行の作成。
+// 登録済みの曲から 1 曲を参照曲に選び、その曲に似た新曲を作らせる(曲調は参照曲、
+// 歌詞のテーマは今日のコンテキストから)。登録が 0 件のときだけ従来のプリセット方式に落ちる
+export async function startDailyRun(): Promise<DailyRunStart> {
+  const settings = getDailySettings();
+
+  // 1. 参照曲の選択(サーバーが選ぶ。LRU + ランダムなので同じ日の 2 曲目は別アーティストになる)
+  const reference = selectReferenceSong();
+
+  // 2. 冒険日判定はフォールバック経路にだけ残す。「参照曲に似せる」目的と
+  //    「普段の好みから大きく外す」指示は矛盾するため、参照曲があるときは mode = daily 固定
+  const adventure = !reference && Math.random() < settings.adventureProbability;
+  const mode = adventure ? "daily_adventure" : "daily";
+  if (reference) {
+    console.log(
+      `[daily] 参照曲: ${reference.artistName}「${reference.title}」` +
+        `(最終使用 ${reference.lastUsedAt ?? "なし"})`
+    );
+  } else {
+    console.warn("[daily] 参照曲の登録が無いため、要素プールから生成します");
+    console.log(`[daily] mode=${mode} (冒険確率 ${settings.adventureProbability})`);
+  }
+
+  // 3. 外部コンテキスト(ニュース)取得。失敗しても生成は続行(その場合セクション無し)
   const extraContext = await buildTodayContext();
   if (extraContext) {
     console.log(`[daily] 今日のコンテキストを注入(${extraContext.length} 文字)`);
   }
 
-  // 3〜4. LLM 生成 → Suno 送信。スケジューラはサーバー内で動くので待ってよい
-  // (HTTP を経由しないためプロキシのタイムアウト制約が無い)
-  const accepted = acceptGeneration({
-    prompt: adventure ? "毎日の自動生成(冒険日)" : "毎日の自動生成",
+  const task = acceptGeneration({
+    prompt: reference
+      ? `毎日の自動生成 / ${reference.artistName}「${reference.title}」風`
+      : adventure
+        ? "毎日の自動生成(冒険日)"
+        : "毎日の自動生成",
     instrumental: false,
     mode,
+    artist: reference
+      ? {
+          artistId: reference.artistId,
+          artistSongId: reference.id,
+          artistName: reference.artistName,
+          songTitle: reference.title,
+        }
+      : undefined,
   });
-  const task = await completeGeneration(accepted.id, {
-    instrumental: false,
-    planInput: {
-      mode,
-      instrumental: false,
-      selectedPresets: [],
-      presetPool: db.listPresets(),
-      presetRatings: db.countPresetRatings(),
-      freeText: "",
-      recentStyles: db.listRecentStyles(),
-      extraContext: extraContext ?? undefined,
-    },
-  });
-  return { task, adventure };
+
+  return {
+    task,
+    adventure,
+    // 要素プール・直近スタイルは渡すだけで、実際に提示するかは llm.ts が参照曲の有無で決める
+    complete: () =>
+      completeGeneration(task.id, {
+        instrumental: false,
+        planInput: {
+          mode,
+          instrumental: false,
+          selectedPresets: [],
+          presetPool: db.listPresets(),
+          presetRatings: db.countPresetRatings(),
+          freeText: "",
+          recentStyles: db.listRecentStyles(),
+          extraContext: extraContext ?? undefined,
+          referenceSong: reference
+            ? {
+                artist: reference.artistName,
+                title: reference.title,
+                album: reference.album,
+                releaseYear: reference.releaseYear,
+                genre: reference.genre,
+              }
+            : undefined,
+        },
+      }),
+  };
+}
+
+// 受付から完了まで待つ(スケジューラ用)。サーバー内で動き HTTP を経由しないため
+// プロキシのタイムアウト制約が無く、順次生成と last_daily_count の記録の正しさもこれで保たれる
+export async function runDaily(): Promise<{
+  task: db.TaskRow;
+  adventure: boolean;
+}> {
+  const started = await startDailyRun();
+  return { task: await started.complete(), adventure: started.adventure };
 }
 
 let ticking = false;

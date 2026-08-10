@@ -87,7 +87,8 @@ enum BackendAPI {
         return try makeDecoder().decode(type, from: data)
     }
 
-    /// timeout はサーバー側で LLM 生成まで待つ長時間リクエスト向けの上書き(既定は URLSession の 60 秒)
+    /// timeout は iTunes への問い合わせ(アーティスト登録・曲の検索)のように
+    /// サーバー側で外部 API を待つリクエスト向けの上書き(既定は URLSession の 60 秒)
     static func postJSON<T: Decodable>(
         _ type: T.Type, path: String, body: some Encodable, timeout: TimeInterval? = nil
     ) async throws -> T {

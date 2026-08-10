@@ -15,10 +15,11 @@ import {
 import * as itunes from "./itunes.ts";
 import { LLM_EFFORTS, currentWordLimits, getLlmSettings } from "./llm.ts";
 import { CATEGORY_LABELS, SEED_PRESETS } from "./presets.ts";
+import { referenceCandidateSummary } from "./reference.ts";
 import {
   getDailySettings,
   isValidTimezone,
-  runDaily,
+  startDailyRun,
   startScheduler,
 } from "./scheduler.ts";
 
@@ -258,8 +259,18 @@ api.get("/generation-params", (c) => {
   const ratings = db.countPresetRatings();
   const limits = currentWordLimits();
   const { wordMaxUses, wordWindowDays } = db.getWordLimitSettings();
+  // 参照曲の候補が 1 件でもあれば参照曲ベースで動く(0 件のときだけ要素プール方式に落ちる)。
+  // 既存キーは残したまま追加する(旧アプリ互換)
+  const referenceCandidates = referenceCandidateSummary();
   return c.json({
     params: {
+      referenceMode: referenceCandidates.length > 0,
+      referenceCandidates,
+      recentReferences: db.listRecentReferences().map((r) => ({
+        artistName: r.artist_name,
+        title: r.title,
+        usedAt: r.last_used_at,
+      })),
       adventureProbability: daily.adventureProbability,
       contextNews: context.contextNews,
       presets: db.listPresets().map((p) => presetJson(p, ratings)),
@@ -284,11 +295,15 @@ api.get("/real-world-words", (c) => {
   });
 });
 
-// 自動生成の手動トリガ(管理画面の生成ボタンが使用)。last_daily_date は更新しないため
-// その日のスケジュール実行は別途行われる
+// 自動生成の手動トリガ(管理画面・iOS の「おまかせ生成」が使用)。last_daily_date は
+// 更新しないため、その日のスケジュール実行は別途行われる。
+// 受付だけ済ませて即座に返す(参照曲ありの生成は web_search で 3〜4 分かかり、
+// 完了まで待つとエッジのプロキシタイムアウトに掛かる)。進行状況は GET /api/tasks で追える
 api.post("/daily/run", async (c) => {
   try {
-    const { task, adventure } = await runDaily();
+    const { task, adventure, complete } = await startDailyRun();
+    // 失敗は completeGeneration がタスクに記録するので、ここでは握って落とさないだけでよい
+    void complete().catch(() => {});
     return c.json({ task: taskJson(task), adventure }, 201);
   } catch (err) {
     console.error(`[api] daily/run 失敗: ${err}`);

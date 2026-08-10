@@ -24,13 +24,14 @@ struct Track: Identifiable, Decodable, Hashable {
     let llmModel: String?
     /// LLM に送った入力全文(旧サーバー・旧データでは nil。optional デコードで後方互換)
     let llmPrompt: String?
-    /// web_search で参照した情報源(参照曲ありの生成のみ。他モード・旧サーバーでは nil / 空)
+    /// web_search で参照した情報源(参照曲ありの生成のみ。参照曲なし・旧サーバーでは nil / 空)
     let sources: [String]?
     /// 曲の中心となった語(リアルワード)
     let realWorldWords: [String]
     /// 使用プリセット(使用時点のスナップショット)。旧サーバーでは nil、記録の無い旧データでは空配列
     let usedPresets: [UsedPreset]?
-    /// artist モードで参照した曲(使用時点のスナップショット)。他モード・旧サーバーでは nil
+    /// 参照した曲(使用時点のスナップショット)。`artist` と、参照曲ベースの `daily` で入る。
+    /// 参照曲なしの生成・旧サーバーでは nil
     let refArtistName: String?
     let refSongTitle: String?
     let createdAt: Date
@@ -263,6 +264,14 @@ struct PingResponse: Decodable {
 /// GET /api/generation-params — おまかせ生成(毎日の自動生成)が LLM に注入する入力の一覧。
 /// サーバー側で runDaily と同じ関数群から組み立てるため、表示と実際の生成入力がずれない
 struct GenerationParams: Decodable {
+    /// 参照曲ベースで動いているか(= 参照曲の候補が 1 件以上あるか)。
+    /// false のときだけ要素プール・直近スタイル・冒険日確率が LLM に注入される。
+    /// キーを持たない旧サーバーでは nil = false 扱い(従来どおりの表示になる)
+    let referenceMode: Bool?
+    /// 参照曲の候補(アーティスト単位。最終使用が古い順 = 次に選ばれやすい順)
+    let referenceCandidates: [ReferenceCandidateSummary]?
+    /// 直近に参照した曲
+    let recentReferences: [RecentReference]?
     let adventureProbability: Double
     let contextNews: Bool
     let presets: [PoolPreset]
@@ -277,6 +286,24 @@ struct GenerationParams: Decodable {
     let lastChanceWords: [String]
     /// ウィンドウ内で追跡中のリアルワード総数
     let trackedWordCount: Int
+}
+
+/// 参照曲の候補(アーティスト単位)。songCount は別バージョン(Live / Remix 等)を除いた曲数
+struct ReferenceCandidateSummary: Decodable, Identifiable {
+    let artistId: Int
+    let artistName: String
+    let songCount: Int
+    /// このアーティストの曲を最後に参照した日時(未使用は nil = 次に選ばれる)
+    let lastUsedAt: Date?
+
+    var id: Int { artistId }
+}
+
+/// 直近に参照した曲(毎日の自動生成が選んだ曲)
+struct RecentReference: Decodable {
+    let artistName: String
+    let title: String
+    let usedAt: Date
 }
 
 /// 要素プールのプリセット(評価 👍/👎 の集計付き)

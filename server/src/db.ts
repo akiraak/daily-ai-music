@@ -748,6 +748,45 @@ export function getArtistSong(id: number): ArtistSongWithArtistRow | undefined {
     .get(id) as ArtistSongWithArtistRow | undefined;
 }
 
+// 毎日の自動生成が参照曲を選ぶための候補一覧(登録済みの全曲 + 最終使用日時)。
+// last_used_at はその曲を参照したタスクの最新 created_at(未使用は NULL)で、
+// 選択側が LRU(未使用 → 古い順)に使う。受付時点でタスク行に artist_song_id が入るため、
+// 同じ日の 2 曲目を選ぶときには 1 曲目が「使用済み」として見える
+export type ReferenceCandidateRow = ArtistSongWithArtistRow & {
+  last_used_at: string | null;
+};
+
+export function listReferenceCandidates(): ReferenceCandidateRow[] {
+  return db
+    .prepare(
+      `SELECT s.*, a.name AS artist_name,
+              (SELECT MAX(t.created_at) FROM tasks t WHERE t.artist_song_id = s.id) AS last_used_at
+       FROM artist_songs s JOIN artists a ON a.id = s.artist_id
+       ORDER BY s.id`
+    )
+    .all() as unknown as ReferenceCandidateRow[];
+}
+
+// 直近に参照した曲(生成パラメータ画面の表示用)。同じ曲が複数回使われていても 1 行にまとめる
+export interface RecentReferenceRow {
+  artist_name: string;
+  title: string;
+  last_used_at: string;
+}
+
+export function listRecentReferences(limit = 10): RecentReferenceRow[] {
+  return db
+    .prepare(
+      `SELECT t.ref_artist_name AS artist_name, t.ref_song_title AS title,
+              MAX(t.created_at) AS last_used_at
+       FROM tasks t
+       WHERE t.artist_song_id IS NOT NULL AND t.ref_artist_name IS NOT NULL
+       GROUP BY t.artist_song_id
+       ORDER BY last_used_at DESC LIMIT ?`
+    )
+    .all(limit) as unknown as RecentReferenceRow[];
+}
+
 // 評価の更新。更新後の行を返す
 export function updateTrackRating(
   id: number,

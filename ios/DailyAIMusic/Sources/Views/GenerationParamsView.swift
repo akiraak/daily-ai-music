@@ -1,7 +1,8 @@
 import SwiftUI
 
-/// 生成パラメータ画面。おまかせ生成(毎日の自動生成)が LLM に注入する入力
-/// (設定値・要素プールと評価集計・直近スタイル・リアルワード制限)を一望する読み取り専用画面。
+/// 生成パラメータ画面。おまかせ生成(毎日の自動生成)が LLM に注入する入力を一望する読み取り専用画面。
+/// 参照曲ベース(登録曲あり)なら設定値・参照曲の候補・リアルワード制限、
+/// フォールバック(登録曲なし)なら設定値・要素プールと評価集計・直近スタイル・リアルワード制限。
 /// 編集はさせない(プリセットは管理画面、設定は設定タブの役割)。
 /// レイアウトは案A ミニマル基準(ScrollView + VStack 横 22pt・ヘアライン区切り)
 struct GenerationParamsView: View {
@@ -13,8 +14,14 @@ struct GenerationParamsView: View {
             VStack(alignment: .leading, spacing: 0) {
                 if let params {
                     settingsSection(params)
-                    poolSection(params)
-                    stylesSection(params)
+                    // 参照曲ベースで動いているときは要素プールも直近スタイルも注入されない
+                    // (参照曲が曲調を決めるため)ので、代わりに参照曲の候補を見せる
+                    if params.referenceMode == true {
+                        referenceSection(params)
+                    } else {
+                        poolSection(params)
+                        stylesSection(params)
+                    }
                     wordsSection(params)
                 } else if let errorMessage {
                     Text(errorMessage)
@@ -43,9 +50,12 @@ struct GenerationParamsView: View {
     @ViewBuilder
     private func settingsSection(_ p: GenerationParams) -> some View {
         sectionHeader("生成の設定")
-        paramRow("冒険日確率", "\(Int((p.adventureProbability * 100).rounded())) %", identifier: "params.adventure")
-        Divider()
-        paramRow("今日のコンテキスト", contextValue(p))
+        // 冒険日は参照曲が無いときのフォールバック経路にだけ残っている
+        if p.referenceMode != true {
+            paramRow("冒険日確率", "\(Int((p.adventureProbability * 100).rounded())) %")
+            Divider()
+        }
+        paramRow("今日のコンテキスト", contextValue(p), identifier: "params.context")
         Divider()
         paramRow("リアルワード制限", "直近 \(p.wordWindowDays) 日で同一ワード \(p.wordMaxUses) 回まで")
     }
@@ -53,6 +63,44 @@ struct GenerationParamsView: View {
     private func contextValue(_ p: GenerationParams) -> String {
         "ニュース \(p.contextNews ? "ON" : "OFF")"
     }
+
+    // MARK: - 参照曲の候補
+
+    @ViewBuilder
+    private func referenceSection(_ p: GenerationParams) -> some View {
+        let candidates = p.referenceCandidates ?? []
+        sectionHeader("参照曲の候補(\(candidates.count) アーティスト・\(candidates.reduce(0) { $0 + $1.songCount }) 曲)")
+        Text("登録した曲から 1 曲を選び、その曲の BPM・キー・編成を web 検索で調べてから作曲する。アーティストを一巡するように、最後に使ってから最も時間が経った人・曲から選ばれる。")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .padding(.bottom, 4)
+        ForEach(Array(candidates.enumerated()), id: \.element.id) { index, candidate in
+            if index > 0 { Divider() }
+            paramRow(candidate.artistName, "\(candidate.songCount) 曲 · \(lastUsedText(candidate.lastUsedAt))")
+        }
+
+        let recent = p.recentReferences ?? []
+        if !recent.isEmpty {
+            subHeader("直近に参照した曲")
+            ForEach(Array(recent.enumerated()), id: \.offset) { index, reference in
+                if index > 0 { Divider() }
+                paramRow("\(reference.artistName)「\(reference.title)」", Self.dayFormatter.string(from: reference.usedAt))
+            }
+        }
+    }
+
+    /// 未使用のものが先に選ばれるため、日付より「未使用」であること自体が重要な情報
+    private func lastUsedText(_ date: Date?) -> String {
+        guard let date else { return "未使用" }
+        return "\(Self.dayFormatter.string(from: date)) 使用"
+    }
+
+    private static let dayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "ja_JP")
+        formatter.dateFormat = "M/d"
+        return formatter
+    }()
 
     // MARK: - 要素プール
 

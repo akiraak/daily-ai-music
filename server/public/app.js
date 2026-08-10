@@ -273,18 +273,16 @@ async function refresh() {
   }
 }
 
-// 生成ボタン: 毎日の自動生成と同じフロー(冒険日判定 → LLM 生成 → Suno 送信)を
-// 手動トリガする。last_daily_date は更新されないため、その日のスケジュール実行は別途行われる
+// 生成ボタン: 毎日の自動生成と同じフロー(参照曲の選択 → LLM 生成 → Suno 送信)を
+// 手動トリガする。last_daily_date は更新されないため、その日のスケジュール実行は別途行われる。
+// サーバーは受付だけで返すので、待機メッセージは出さず進行中カード(「曲を考えています…」)に引き継ぐ
 $("generate-button").addEventListener("click", async () => {
   const button = $("generate-button");
   const message = $("form-message");
   button.disabled = true;
-  message.classList.add("info");
-  message.textContent = "AI がスタイルと歌詞を考えています…(1〜2 分かかります)";
-  message.hidden = false;
+  message.hidden = true;
   try {
     await fetchJson("/admin/api/daily/run", { method: "POST" });
-    message.hidden = true;
     hadActiveTasks = true;
     await refresh();
     refreshCredits();
@@ -292,7 +290,6 @@ $("generate-button").addEventListener("click", async () => {
     message.textContent = err.message;
     message.hidden = false;
   } finally {
-    message.classList.remove("info");
     button.disabled = false;
   }
 });

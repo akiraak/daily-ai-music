@@ -94,7 +94,7 @@ final class ScreenshotUITests: XCTestCase {
                 // 生成パラメータ画面(push)も、読み込み完了を待ってから撮る。
                 // 要素プールが長いため、中間(スタイル)と最下部(リアルワード)も撮る
                 app.buttons["generate.params"].tap()
-                if app.staticTexts["params.adventure"].waitForExistence(timeout: 10) {
+                if app.staticTexts["params.context"].waitForExistence(timeout: 10) {
                     attach(app, name: "\(style)-generate-params")
                     app.swipeUp()
                     attach(app, name: "\(style)-generate-params-scrolled")
