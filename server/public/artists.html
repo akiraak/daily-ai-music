@@ -13,7 +13,6 @@
     <nav class="menu">
       <a href="/admin/">楽曲一覧</a>
       <a href="/admin/artists.html" class="active">アーティスト</a>
-      <a href="/admin/presets.html">パラメータ一覧</a>
       <a href="/admin/settings.html">設定</a>
     </nav>
   </aside>
@@ -26,7 +25,7 @@
     <section class="panel">
       <h2>登録</h2>
       <p class="empty" id="search-hint"></p>
-      <form id="search-form" class="preset-form">
+      <form id="search-form" class="inline-form">
         <select id="search-kind">
           <option value="artist">アーティスト名</option>
           <option value="song">曲名</option>
@@ -48,7 +47,7 @@
     <section class="panel" id="songs-panel" hidden>
       <h2 id="songs-title">曲を選ぶ</h2>
       <p class="empty">曲を選ぶと、その曲の音楽的な特徴に似た新曲を AI が作ります(原曲の歌詞は使わず、完全な新作になります)。</p>
-      <div class="preset-form">
+      <div class="inline-form">
         <input id="song-filter" placeholder="曲名で絞り込み">
         <input id="song-extra" placeholder="追加の要望(任意。例: テンポを速めに)">
       </div>

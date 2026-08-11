@@ -18,7 +18,7 @@ export interface TaskRow {
   model: string;
   status: string;
   error: string | null;
-  mode: string; // 'manual' | 'daily' | 'daily_adventure' | 'artist'
+  mode: string; // 'manual' | 'daily' | 'artist'
   style: string | null; // LLM が生成したスタイルプロンプト(英語)
   style_ja: string | null; // スタイルプロンプトの日本語訳
   lyrics: string | null; // 英語歌詞
@@ -44,8 +44,6 @@ export interface TrackRow {
   duration: number;
   audio_file: string;
   image_file: string | null;
-  rating: number | null; // 1 = 👍, -1 = 👎, NULL = 未評価
-  rated_at: string | null; // 最後に評価を変更した日時
   created_at: string;
 }
 
@@ -73,21 +71,6 @@ db.exec(`
     duration REAL NOT NULL DEFAULT 0,
     audio_file TEXT NOT NULL,
     image_file TEXT,
-    rating INTEGER,
-    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-  );
-  CREATE TABLE IF NOT EXISTS presets (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    category TEXT NOT NULL,
-    value TEXT NOT NULL,
-    label_ja TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    UNIQUE (category, value)
-  );
-  -- 好みプロファイル文書(廃止済み。過去データの履歴としてテーブルは残す — 好みはプリセット評価集計に一本化)
-  CREATE TABLE IF NOT EXISTS profile (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    content TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
   );
   CREATE TABLE IF NOT EXISTS settings (
@@ -102,17 +85,7 @@ db.exec(`
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
   );
   CREATE INDEX IF NOT EXISTS idx_real_world_words_created ON real_world_words(created_at);
-  CREATE TABLE IF NOT EXISTS task_presets (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    task_id INTEGER NOT NULL REFERENCES tasks(id),
-    preset_id INTEGER,
-    category TEXT NOT NULL,
-    value TEXT NOT NULL,
-    label_ja TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-  );
-  CREATE INDEX IF NOT EXISTS idx_task_presets_task ON task_presets(task_id);
-  -- 生成経路「アーティスト経由」の登録アーティストと、その楽曲リスト(iTunes Search API から取得)
+  -- 参照曲の登録アーティストと、その楽曲リスト(iTunes Search API から取得)
   CREATE TABLE IF NOT EXISTS artists (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE,
@@ -143,19 +116,6 @@ function addColumnIfMissing(table: string, column: string, ddl: string): void {
     db.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
   }
 }
-addColumnIfMissing("tracks", "rating", "rating INTEGER");
-addColumnIfMissing("tracks", "rated_at", "rated_at TEXT"); // 最後に評価を変更した日時
-
-// ★(favorite)は廃止し 👍/👎 の 2 択に統一。旧 DB の ★ は 👍 に変換してカラムを削除
-{
-  const cols = db
-    .prepare(`SELECT name FROM pragma_table_info('tracks')`)
-    .all() as unknown as { name: string }[];
-  if (cols.some((c) => c.name === "favorite")) {
-    db.exec(`UPDATE tracks SET rating = 1 WHERE favorite = 1 AND rating IS NULL`);
-    db.exec(`ALTER TABLE tracks DROP COLUMN favorite`);
-  }
-}
 addColumnIfMissing("tasks", "mode", "mode TEXT NOT NULL DEFAULT 'manual'");
 addColumnIfMissing("tasks", "style", "style TEXT");
 addColumnIfMissing("tasks", "style_ja", "style_ja TEXT");
@@ -172,6 +132,26 @@ addColumnIfMissing("tasks", "artist_id", "artist_id INTEGER");
 addColumnIfMissing("tasks", "artist_song_id", "artist_song_id INTEGER");
 addColumnIfMissing("tasks", "ref_artist_name", "ref_artist_name TEXT");
 addColumnIfMissing("tasks", "ref_song_title", "ref_song_title TEXT");
+
+// 参照曲ベース化(2026-08-10)で廃止した機能の後片付け。プリセット・評価(👍/👎)・
+// 好みプロファイル文書は生成にも表示にも使わなくなった。DROP / DROP COLUMN は
+// IF EXISTS / カラム存在チェックで冪等なので、settings への実施記録は要らない
+function dropColumnIfPresent(table: string, column: string): void {
+  const cols = db
+    .prepare(`SELECT name FROM pragma_table_info(?)`)
+    .all(table) as unknown as { name: string }[];
+  if (cols.some((c) => c.name === column)) {
+    db.exec(`ALTER TABLE ${table} DROP COLUMN ${column}`);
+  }
+}
+db.exec(`
+  DROP TABLE IF EXISTS presets;
+  DROP TABLE IF EXISTS task_presets;
+  DROP TABLE IF EXISTS profile;
+  DELETE FROM settings WHERE key IN ('adventure_probability', 'migration_drop_instrument_presets');
+`);
+dropColumnIfPresent("tracks", "rating");
+dropColumnIfPresent("tracks", "rated_at");
 
 // providerTaskId / status を省略すると PLANNING(Suno 送信前)のタスクになる。
 // LLM は最大 3 分かかるため、受付時点で行を作っておき完了後に埋める
@@ -377,31 +357,6 @@ export function listTracks(limit = 200): TrackWithTaskRow[] {
     .all(limit) as unknown as TrackWithTaskRow[];
 }
 
-// 直近の生成スタイル(LLM の重複回避用)。1 日 3 曲でも数日分を見渡せる件数にしてある
-export function listRecentStyles(limit = 10): string[] {
-  const rows = db
-    .prepare(
-      `SELECT style FROM tasks WHERE style IS NOT NULL ORDER BY id DESC LIMIT ?`
-    )
-    .all(limit) as unknown as { style: string }[];
-  return rows.map((r) => r.style);
-}
-
-// 直近の生成スタイル(和訳付き。生成パラメータ表示用 — LLM への注入は英語のみの listRecentStyles)
-export interface RecentStyleRow {
-  style: string;
-  styleJa: string | null;
-}
-
-export function listRecentStyleRows(limit = 10): RecentStyleRow[] {
-  const rows = db
-    .prepare(
-      `SELECT style, style_ja FROM tasks WHERE style IS NOT NULL ORDER BY id DESC LIMIT ?`
-    )
-    .all(limit) as unknown as { style: string; style_ja: string | null }[];
-  return rows.map((r) => ({ style: r.style, styleJa: r.style_ja }));
-}
-
 // --- リアルワード(曲の中心となった語。使用回数を数えて重複生成を防ぐ) ---
 
 export const WORD_LIMIT_DEFAULTS = {
@@ -487,117 +442,6 @@ export function getTrack(id: number): TrackWithTaskRow | undefined {
        WHERE tracks.id = ?`
     )
     .get(id) as TrackWithTaskRow | undefined;
-}
-
-export interface PresetRow {
-  id: number;
-  category: string;
-  value: string;
-  label_ja: string;
-  created_at: string;
-}
-
-export function listPresets(): PresetRow[] {
-  return db
-    .prepare(`SELECT * FROM presets ORDER BY category, id`)
-    .all() as unknown as PresetRow[];
-}
-
-export function getPreset(id: number): PresetRow | undefined {
-  return db.prepare(`SELECT * FROM presets WHERE id = ?`).get(id) as
-    | PresetRow
-    | undefined;
-}
-
-// (category, value) の UNIQUE 違反は SQLite の例外をそのまま投げる(API 層で 409 にする)
-export function createPreset(input: {
-  category: string;
-  value: string;
-  labelJa: string;
-}): PresetRow {
-  const result = db
-    .prepare(`INSERT INTO presets (category, value, label_ja) VALUES (?, ?, ?)`)
-    .run(input.category, input.value, input.labelJa);
-  return getPreset(Number(result.lastInsertRowid))!;
-}
-
-export function updatePreset(
-  id: number,
-  input: { category?: string; value?: string; labelJa?: string }
-): PresetRow | undefined {
-  const current = getPreset(id);
-  if (!current) return undefined;
-  db.prepare(
-    `UPDATE presets SET category = ?, value = ?, label_ja = ? WHERE id = ?`
-  ).run(
-    input.category ?? current.category,
-    input.value ?? current.value,
-    input.labelJa ?? current.label_ja,
-    id
-  );
-  return getPreset(id);
-}
-
-export function deletePreset(id: number): boolean {
-  return db.prepare(`DELETE FROM presets WHERE id = ?`).run(id).changes > 0;
-}
-
-// カテゴリ廃止のマイグレーション用(task_presets のスナップショットは残る)
-export function deletePresetsByCategory(category: string): number {
-  return Number(db.prepare(`DELETE FROM presets WHERE category = ?`).run(category).changes);
-}
-
-// --- 使用プリセット(タスク単位の記録。評価集計の元データ) ---
-// preset_id は集計用(プリセット削除後も行は残す)。category/value/label_ja は使用時点の
-// スナップショットで、プリセットが編集・削除されても表示できる
-
-export interface TaskPresetRow {
-  category: string;
-  value: string;
-  label_ja: string;
-}
-
-export function insertTaskPresets(taskId: number, presets: PresetRow[]): void {
-  const stmt = db.prepare(
-    `INSERT INTO task_presets (task_id, preset_id, category, value, label_ja)
-     VALUES (?, ?, ?, ?, ?)`
-  );
-  // manual はユーザー選択と LLM 出力の和集合で渡るため、preset_id で重複除去する
-  const seen = new Set<number>();
-  for (const p of presets) {
-    if (seen.has(p.id)) continue;
-    seen.add(p.id);
-    stmt.run(taskId, p.id, p.category, p.value, p.label_ja);
-  }
-}
-
-export function listTaskPresets(taskId: number): TaskPresetRow[] {
-  return db
-    .prepare(
-      `SELECT category, value, label_ja FROM task_presets WHERE task_id = ? ORDER BY id`
-    )
-    .all(taskId) as unknown as TaskPresetRow[];
-}
-
-export interface PresetRatingCount {
-  up: number;
-  down: number;
-}
-
-// プリセット別の 👍/👎 集計(全期間)。保存値は持たず毎回算出する(評価変更が次の生成に即反映)。
-// 参照側が現存プリセットの id で引くため、削除済みプリセットの行は自然に無視される
-export function countPresetRatings(): Map<number, PresetRatingCount> {
-  const rows = db
-    .prepare(
-      `SELECT tp.preset_id,
-              SUM(CASE WHEN tr.rating = 1  THEN 1 ELSE 0 END) AS up,
-              SUM(CASE WHEN tr.rating = -1 THEN 1 ELSE 0 END) AS down
-       FROM task_presets tp JOIN tracks tr ON tr.task_id = tp.task_id
-       WHERE tr.rating IS NOT NULL AND tp.preset_id IS NOT NULL
-       GROUP BY tp.preset_id`
-    )
-    .all() as unknown as { preset_id: number; up: number; down: number }[];
-  return new Map(rows.map((r) => [r.preset_id, { up: r.up, down: r.down }]));
 }
 
 // --- アーティスト・参照曲(生成経路「アーティスト経由」) ---
@@ -785,16 +629,4 @@ export function listRecentReferences(limit = 10): RecentReferenceRow[] {
        ORDER BY last_used_at DESC LIMIT ?`
     )
     .all(limit) as unknown as RecentReferenceRow[];
-}
-
-// 評価の更新。更新後の行を返す
-export function updateTrackRating(
-  id: number,
-  rating: 1 | -1 | null
-): TrackWithTaskRow | undefined {
-  if (!getTrack(id)) return undefined;
-  db.prepare(
-    `UPDATE tracks SET rating = ?, rated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?`
-  ).run(rating, id);
-  return getTrack(id);
 }

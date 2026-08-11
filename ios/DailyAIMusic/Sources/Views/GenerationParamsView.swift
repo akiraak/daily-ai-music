@@ -1,9 +1,7 @@
 import SwiftUI
 
 /// 生成パラメータ画面。おまかせ生成(毎日の自動生成)が LLM に注入する入力を一望する読み取り専用画面。
-/// 参照曲ベース(登録曲あり)なら設定値・参照曲の候補・リアルワード制限、
-/// フォールバック(登録曲なし)なら設定値・要素プールと評価集計・直近スタイル・リアルワード制限。
-/// 編集はさせない(プリセットは管理画面、設定は設定タブの役割)。
+/// 設定値・参照曲の候補・リアルワード制限を出す。編集はさせない(設定は設定タブの役割)。
 /// レイアウトは案A ミニマル基準(ScrollView + VStack 横 22pt・ヘアライン区切り)
 struct GenerationParamsView: View {
     @State private var params: GenerationParams?
@@ -14,14 +12,7 @@ struct GenerationParamsView: View {
             VStack(alignment: .leading, spacing: 0) {
                 if let params {
                     settingsSection(params)
-                    // 参照曲ベースで動いているときは要素プールも直近スタイルも注入されない
-                    // (参照曲が曲調を決めるため)ので、代わりに参照曲の候補を見せる
-                    if params.referenceMode == true {
-                        referenceSection(params)
-                    } else {
-                        poolSection(params)
-                        stylesSection(params)
-                    }
+                    referenceSection(params)
                     wordsSection(params)
                 } else if let errorMessage {
                     Text(errorMessage)
@@ -50,11 +41,6 @@ struct GenerationParamsView: View {
     @ViewBuilder
     private func settingsSection(_ p: GenerationParams) -> some View {
         sectionHeader("生成の設定")
-        // 冒険日は参照曲が無いときのフォールバック経路にだけ残っている
-        if p.referenceMode != true {
-            paramRow("冒険日確率", "\(Int((p.adventureProbability * 100).rounded())) %")
-            Divider()
-        }
         paramRow("今日のコンテキスト", contextValue(p), identifier: "params.context")
         Divider()
         paramRow("リアルワード制限", "直近 \(p.wordWindowDays) 日で同一ワード \(p.wordMaxUses) 回まで")
@@ -68,18 +54,25 @@ struct GenerationParamsView: View {
 
     @ViewBuilder
     private func referenceSection(_ p: GenerationParams) -> some View {
-        let candidates = p.referenceCandidates ?? []
+        let candidates = p.referenceCandidates
         sectionHeader("参照曲の候補(\(candidates.count) アーティスト・\(candidates.reduce(0) { $0 + $1.songCount }) 曲)")
-        Text("登録した曲から 1 曲を選び、その曲の BPM・キー・編成を web 検索で調べてから作曲する。アーティストを一巡するように、最後に使ってから最も時間が経った人・曲から選ばれる。")
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .padding(.bottom, 4)
+        if candidates.isEmpty {
+            // 候補が無いと参照曲を選べず、おまかせ生成はサーバー側で 409 になる
+            Text("アーティストが登録されていないため、おまかせ生成はできません。「アーティストから生成」または「曲名から生成」で登録してください。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        } else {
+            Text("登録した曲から 1 曲を選び、その曲の BPM・キー・編成を web 検索で調べてから作曲する。アーティストを一巡するように、最後に使ってから最も時間が経った人・曲から選ばれる。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.bottom, 4)
+        }
         ForEach(Array(candidates.enumerated()), id: \.element.id) { index, candidate in
             if index > 0 { Divider() }
             paramRow(candidate.artistName, "\(candidate.songCount) 曲 · \(lastUsedText(candidate.lastUsedAt))")
         }
 
-        let recent = p.recentReferences ?? []
+        let recent = p.recentReferences
         if !recent.isEmpty {
             subHeader("直近に参照した曲")
             ForEach(Array(recent.enumerated()), id: \.offset) { index, reference in
@@ -101,68 +94,6 @@ struct GenerationParamsView: View {
         formatter.dateFormat = "M/d"
         return formatter
     }()
-
-    // MARK: - 要素プール
-
-    @ViewBuilder
-    private func poolSection(_ p: GenerationParams) -> some View {
-        if !p.presets.isEmpty {
-            sectionHeader("要素プール(\(p.presets.count) 要素)")
-            Text("LLM はこのプールから評価集計(👍/👎)を踏まえて要素を選ぶ。冒険日は集計に従わず、普段選ばれない要素にも挑戦する。")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .padding(.bottom, 4)
-            ForEach(categories(p), id: \.self) { category in
-                subHeader(p.categoryLabels[category] ?? category)
-                WrappingPillLayout(spacing: 6) {
-                    ForEach(p.presets.filter { $0.category == category }) { preset in
-                        PillTag(text: pillText(preset))
-                    }
-                }
-            }
-        }
-    }
-
-    /// カテゴリの並びはサーバーの返却順(要素プールの提示順と同じ)を保つ
-    private func categories(_ p: GenerationParams) -> [String] {
-        var seen = Set<String>()
-        return p.presets.compactMap { seen.insert($0.category).inserted ? $0.category : nil }
-    }
-
-    /// 評価があるものだけ集計を添える(LLM への提示 = presetLines の suffix と同じ規則)
-    private func pillText(_ preset: PoolPreset) -> String {
-        guard preset.upCount > 0 || preset.downCount > 0 else { return preset.labelJa }
-        return "\(preset.labelJa) 👍\(preset.upCount)/👎\(preset.downCount)"
-    }
-
-    // MARK: - 直近の生成スタイル
-
-    @ViewBuilder
-    private func stylesSection(_ p: GenerationParams) -> some View {
-        if !p.recentStyles.isEmpty {
-            sectionHeader("直近の生成スタイル")
-            Text("重複を避けるため、直近の曲のスタイルがプロンプトに注入される。")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .padding(.bottom, 2)
-            ForEach(Array(p.recentStyles.enumerated()), id: \.offset) { index, style in
-                if index > 0 { Divider() }
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(style.styleJa ?? style.style)
-                        .font(.footnote)
-                        .lineSpacing(2)
-                    if style.styleJa != nil {
-                        // 実際に注入されるのは英語 style のため原文も添える
-                        Text(style.style)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(2)
-                    }
-                }
-                .padding(.vertical, 8)
-            }
-        }
-    }
 
     // MARK: - リアルワードの使用状況
 

@@ -15,14 +15,12 @@ const STATUS_LABELS = {
 const MODE_LABELS = {
   manual: "手動",
   daily: "毎日の自動生成",
-  daily_adventure: "毎日の自動生成(冒険日)",
   artist: "アーティスト経由",
 };
 
 // 進行中カードのバッジ用の短い表記(manual は既定なのでバッジを出さない)
 const MODE_BADGES = {
   daily: "毎日",
-  daily_adventure: "冒険日",
   artist: "アーティスト",
 };
 
@@ -117,10 +115,6 @@ function trackElement(t) {
       <div class="track-title"></div>
       <div class="track-meta">${formatDuration(t.duration)}<span> · ${formatDate(t.createdAt)}</span></div>
       <audio controls preload="none" src="${t.audioUrl}"></audio>
-      <div class="rating">
-        <button type="button" class="rate-btn" data-kind="up" title="好き">👍</button>
-        <button type="button" class="rate-btn" data-kind="down" title="好みじゃない">👎</button>
-      </div>
       <div class="word-tags" hidden></div>
     </div>`;
   li.querySelector(".track-title").textContent = t.title;
@@ -163,10 +157,6 @@ function trackElement(t) {
     addSection("スタイル", t.style);
     addSection("スタイル(日本語訳)", t.styleJa);
     addSection("リアルワード", (t.realWorldWords ?? []).join(", "));
-    addSection(
-      "使用プリセット",
-      (t.usedPresets ?? []).map((p) => `[${p.category}] ${p.labelJa}`).join(", ")
-    );
     // 生成に使用したパラメータ(旧データで欠けている項目は出さない)
     const params = [
       ["モード", MODE_LABELS[t.mode] ?? t.mode],
@@ -206,41 +196,6 @@ function trackElement(t) {
     }
   });
 
-  const buttons = li.querySelectorAll(".rate-btn");
-  const syncRating = () => {
-    for (const btn of buttons) {
-      const kind = btn.dataset.kind;
-      btn.classList.toggle(
-        "active",
-        kind === "up" ? t.rating === 1 : t.rating === -1
-      );
-    }
-  };
-  syncRating();
-  for (const btn of buttons) {
-    btn.addEventListener("click", async () => {
-      // トグル式: 押されている状態でもう一度押すと解除
-      const kind = btn.dataset.kind;
-      const payload =
-        kind === "up"
-          ? { rating: t.rating === 1 ? null : 1 }
-          : { rating: t.rating === -1 ? null : -1 };
-      for (const b of buttons) b.disabled = true;
-      try {
-        const { track } = await fetchJson(`/admin/api/tracks/${t.id}/rating`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-        t.rating = track.rating;
-        syncRating();
-      } catch (err) {
-        console.warn("rating failed:", err);
-      } finally {
-        for (const b of buttons) b.disabled = false;
-      }
-    });
-  }
   return li;
 }
 

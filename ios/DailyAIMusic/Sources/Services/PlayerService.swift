@@ -118,14 +118,6 @@ final class PlayerService: ObservableObject {
         }
     }
 
-    /// 評価 API の結果を再生中の曲・キューへ反映する(一覧側への反映は各画面が行う)
-    func applyRated(_ updated: Track) {
-        if currentTrack?.id == updated.id { currentTrack = updated }
-        if let index = queue.firstIndex(where: { $0.id == updated.id }) {
-            queue[index] = updated
-        }
-    }
-
     /// 曲終了: 次の曲があれば自動送り、キュー末尾なら曲頭に戻して停止
     private func handleTrackEnded() {
         if let nextTrack {

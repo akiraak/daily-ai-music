@@ -4,8 +4,6 @@ import SwiftUI
 /// 本体タップでフルプレイヤー(シート)を開く。レイアウトは案A ミニマル基準
 struct MiniPlayerView: View {
     @ObservedObject private var player = PlayerService.shared
-    /// 評価 API の結果を一覧へ反映するコールバック(フルプレイヤーへ引き継ぐ)
-    let onRated: (Track) -> Void
 
     @State private var showsFullPlayer = false
 
@@ -70,7 +68,7 @@ struct MiniPlayerView: View {
             .background(Color.appBackground)
             .overlay(alignment: .top) { Divider() }
             .sheet(isPresented: $showsFullPlayer) {
-                FullPlayerView(onRated: onRated)
+                FullPlayerView()
             }
         }
     }

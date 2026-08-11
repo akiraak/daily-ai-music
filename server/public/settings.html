@@ -13,7 +13,6 @@
     <nav class="menu">
       <a href="/admin/">楽曲一覧</a>
       <a href="/admin/artists.html">アーティスト</a>
-      <a href="/admin/presets.html">パラメータ一覧</a>
       <a href="/admin/settings.html" class="active">設定</a>
     </nav>
   </aside>
@@ -78,12 +77,6 @@
         <div class="setting-label">タイムゾーン<span class="setting-hint">IANA 名(例: America/Los_Angeles, Asia/Tokyo)</span></div>
         <div class="setting-inputs">
           <input type="text" id="daily-timezone" data-field="dailyTimezone" class="wide">
-        </div>
-      </div>
-      <div class="setting-row">
-        <div class="setting-label">冒険日の確率<span class="setting-hint">0〜1。好みから大きく外した曲に挑戦する日。参照曲(アーティスト)の登録が無いときのみ有効</span></div>
-        <div class="setting-inputs">
-          <input type="number" id="adventure-probability" data-field="adventureProbability" step="0.05" min="0" max="1">
         </div>
       </div>
     </section>

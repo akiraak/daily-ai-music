@@ -13,7 +13,6 @@ const RETRY_AFTER_FAILURE_MS = 30 * 60_000;
 
 export interface DailySettings {
   dailyEnabled: boolean;
-  adventureProbability: number; // 0〜1
   dailyHour: number; // 0〜23(dailyTimezone での実行時刻)
   dailyTimezone: string; // IANA タイムゾーン
   dailyCount: number; // 1 日に生成する曲数
@@ -22,7 +21,6 @@ export interface DailySettings {
 
 export const SETTING_DEFAULTS = {
   dailyEnabled: true,
-  adventureProbability: 0.2,
   dailyHour: 6,
   dailyTimezone: "America/Los_Angeles",
   dailyCount: 3,
@@ -36,10 +34,6 @@ export function getDailySettings(): DailySettings {
   return {
     dailyEnabled:
       (db.getSetting("daily_enabled") ?? String(SETTING_DEFAULTS.dailyEnabled)) === "true",
-    adventureProbability: num(
-      db.getSetting("adventure_probability"),
-      SETTING_DEFAULTS.adventureProbability
-    ),
     dailyHour: num(db.getSetting("daily_hour"), SETTING_DEFAULTS.dailyHour),
     dailyTimezone: db.getSetting("daily_timezone") ?? SETTING_DEFAULTS.dailyTimezone,
     dailyCount: num(db.getSetting("daily_count"), SETTING_DEFAULTS.dailyCount),
@@ -115,82 +109,63 @@ export function shouldRunDaily(input: {
 // スケジューラは await し、HTTP のトリガ(POST /api/daily/run)は投げっぱなしにする
 export interface DailyRunStart {
   task: db.TaskRow;
-  adventure: boolean;
   complete: () => Promise<db.TaskRow>;
 }
 
-// 毎日の自動生成の受付: 参照曲の選択 → 冒険日判定 → コンテキスト取得 → タスク行の作成。
-// 登録済みの曲から 1 曲を参照曲に選び、その曲に似た新曲を作らせる(曲調は参照曲、
-// 歌詞のテーマは今日のコンテキストから)。登録が 0 件のときだけ従来のプリセット方式に落ちる
-export async function startDailyRun(): Promise<DailyRunStart> {
-  const settings = getDailySettings();
+// 参照曲の候補が 1 件も無い(アーティスト未登録)。呼び出し側が 409 と再試行の判断に使う
+export class NoReferenceSongError extends Error {
+  constructor() {
+    super("参照曲が登録されていないため生成できません。アーティストを登録してください");
+    this.name = "NoReferenceSongError";
+  }
+}
 
+// 毎日の自動生成の受付: 参照曲の選択 → コンテキスト取得 → タスク行の作成。
+// 登録済みの曲から 1 曲を参照曲に選び、その曲に似た新曲を作らせる(曲調は参照曲、
+// 歌詞のテーマは今日のコンテキストから)。登録が 0 件なら生成しない(NoReferenceSongError)
+export async function startDailyRun(): Promise<DailyRunStart> {
   // 1. 参照曲の選択(サーバーが選ぶ。LRU + ランダムなので同じ日の 2 曲目は別アーティストになる)
   const reference = selectReferenceSong();
+  if (!reference) throw new NoReferenceSongError();
+  console.log(
+    `[daily] 参照曲: ${reference.artistName}「${reference.title}」` +
+      `(最終使用 ${reference.lastUsedAt ?? "なし"})`
+  );
 
-  // 2. 冒険日判定はフォールバック経路にだけ残す。「参照曲に似せる」目的と
-  //    「普段の好みから大きく外す」指示は矛盾するため、参照曲があるときは mode = daily 固定
-  const adventure = !reference && Math.random() < settings.adventureProbability;
-  const mode = adventure ? "daily_adventure" : "daily";
-  if (reference) {
-    console.log(
-      `[daily] 参照曲: ${reference.artistName}「${reference.title}」` +
-        `(最終使用 ${reference.lastUsedAt ?? "なし"})`
-    );
-  } else {
-    console.warn("[daily] 参照曲の登録が無いため、要素プールから生成します");
-    console.log(`[daily] mode=${mode} (冒険確率 ${settings.adventureProbability})`);
-  }
-
-  // 3. 外部コンテキスト(ニュース)取得。失敗しても生成は続行(その場合セクション無し)
+  // 2. 外部コンテキスト(ニュース)取得。失敗しても生成は続行(その場合セクション無し)
   const extraContext = await buildTodayContext();
   if (extraContext) {
     console.log(`[daily] 今日のコンテキストを注入(${extraContext.length} 文字)`);
   }
 
   const task = acceptGeneration({
-    prompt: reference
-      ? `毎日の自動生成 / ${reference.artistName}「${reference.title}」風`
-      : adventure
-        ? "毎日の自動生成(冒険日)"
-        : "毎日の自動生成",
+    prompt: `毎日の自動生成 / ${reference.artistName}「${reference.title}」風`,
     instrumental: false,
-    mode,
-    artist: reference
-      ? {
-          artistId: reference.artistId,
-          artistSongId: reference.id,
-          artistName: reference.artistName,
-          songTitle: reference.title,
-        }
-      : undefined,
+    mode: "daily",
+    artist: {
+      artistId: reference.artistId,
+      artistSongId: reference.id,
+      artistName: reference.artistName,
+      songTitle: reference.title,
+    },
   });
 
   return {
     task,
-    adventure,
-    // 要素プール・直近スタイルは渡すだけで、実際に提示するかは llm.ts が参照曲の有無で決める
     complete: () =>
       completeGeneration(task.id, {
         instrumental: false,
         planInput: {
-          mode,
           instrumental: false,
-          selectedPresets: [],
-          presetPool: db.listPresets(),
-          presetRatings: db.countPresetRatings(),
           freeText: "",
-          recentStyles: db.listRecentStyles(),
           extraContext: extraContext ?? undefined,
-          referenceSong: reference
-            ? {
-                artist: reference.artistName,
-                title: reference.title,
-                album: reference.album,
-                releaseYear: reference.releaseYear,
-                genre: reference.genre,
-              }
-            : undefined,
+          referenceSong: {
+            artist: reference.artistName,
+            title: reference.title,
+            album: reference.album,
+            releaseYear: reference.releaseYear,
+            genre: reference.genre,
+          },
         },
       }),
   };
@@ -198,12 +173,9 @@ export async function startDailyRun(): Promise<DailyRunStart> {
 
 // 受付から完了まで待つ(スケジューラ用)。サーバー内で動き HTTP を経由しないため
 // プロキシのタイムアウト制約が無く、順次生成と last_daily_count の記録の正しさもこれで保たれる
-export async function runDaily(): Promise<{
-  task: db.TaskRow;
-  adventure: boolean;
-}> {
+export async function runDaily(): Promise<{ task: db.TaskRow }> {
   const started = await startDailyRun();
-  return { task: await started.complete(), adventure: started.adventure };
+  return { task: await started.complete() };
 }
 
 let ticking = false;
@@ -245,11 +217,13 @@ async function tick(): Promise<void> {
       db.setSetting("last_daily_date", localDate);
       db.setSetting("last_daily_count", String(generatedToday + i + 1));
       console.log(
-        `[daily] ${localDate} の ${generatedToday + i + 1}/${settings.dailyCount} 曲目を生成 (task ${result.task.id}, adventure=${result.adventure})`
+        `[daily] ${localDate} の ${generatedToday + i + 1}/${settings.dailyCount} 曲目を生成 (task ${result.task.id})`
       );
     }
     console.log(`[daily] ${localDate} の自動生成完了`);
   } catch (err) {
+    // 参照曲が 0 件のときもここに来る。last_daily_* を進めないので、アーティストを
+    // 登録すればその日のうちに追い生成される
     lastFailedAt = Date.now();
     console.error(`[daily] 自動生成に失敗(30 分後に再試行): ${err}`);
   } finally {

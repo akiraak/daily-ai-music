@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// 生成タブ。管理画面と同じく daily フロー(おまかせ生成 = POST /api/daily/run)を主役にし、
-/// 自由テキストのカスタム生成(POST /api/generate)は折りたたみで残す。
+/// 曲名・アーティストからの生成(参照曲を選ぶ経路)への導線を並べる。
 /// 残クレジット(GET /api/credits)はナビゲーションバー右のピルに表示。
 /// レイアウトは案A ミニマル(docs/plans/ios-app-design-mocks/01-minimal.html)基準
 struct GenerateView: View {
@@ -9,23 +9,10 @@ struct GenerateView: View {
     @State private var isRunningDaily = false
     @State private var dailyError: String?
 
-    // カスタム生成(折りたたみ)
-    @State private var showsCustom = false
-    @State private var prompt = ""
-    @State private var instrumental = false
-    @State private var isSubmitting = false
-    @State private var customError: String?
-    /// 複数行 TextField はリターンキーが改行になるため、キーボードツールバーの「閉じる」で外す
-    @FocusState private var promptFocused: Bool
-
     // 進行状況・クレジット
     @State private var tasks: [GenerationTask] = []
     @State private var tracksByTaskId: [Int: Track] = [:]
     @State private var credits: Int?
-
-    private var canSubmitCustom: Bool {
-        !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isSubmitting
-    }
 
     var body: some View {
         NavigationStack {
@@ -39,15 +26,12 @@ struct GenerateView: View {
                     Divider()
                     artistsRow
                     Divider()
-                    customSection
-                    Divider()
                     progressSection
                 }
                 .padding(.horizontal, 22)
                 .padding(.bottom, 24)
             }
             .background(Color.appBackground)
-            .scrollDismissesKeyboard(.interactively)
             .navigationTitle("生成")
             .toolbar {
                 if let credits {
@@ -60,11 +44,6 @@ struct GenerateView: View {
                             .background(Capsule().fill(Color.appAccent.opacity(0.18)))
                             .accessibilityIdentifier("generate.credits")
                     }
-                }
-                ToolbarItemGroup(placement: .keyboard) {
-                    Spacer()
-                    Button("閉じる") { promptFocused = false }
-                        .accessibilityIdentifier("generate.keyboard.done")
                 }
             }
             .task { await pollWhileVisible() }
@@ -221,95 +200,6 @@ struct GenerateView: View {
         .accessibilityIdentifier("generate.artists")
     }
 
-    // MARK: - カスタム生成(折りたたみ)
-
-    @ViewBuilder
-    private var customSection: some View {
-        Button {
-            withAnimation(.easeInOut(duration: 0.2)) { showsCustom.toggle() }
-        } label: {
-            HStack(spacing: 8) {
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("カスタム生成")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(Color.primary)
-                    Text("どんな曲にするかを自分で指定")
-                        .font(.caption)
-                        .foregroundStyle(Color.secondary)
-                }
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(Color.secondary)
-                    .rotationEffect(.degrees(showsCustom ? 90 : 0))
-            }
-            .contentShape(Rectangle())
-            .padding(.vertical, 13)
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("generate.custom.toggle")
-
-        if showsCustom {
-            VStack(alignment: .leading, spacing: 12) {
-                TextField("例: 朝にぴったりの爽やかなアコースティックポップ", text: $prompt, axis: .vertical)
-                    .focused($promptFocused)
-                    .lineLimit(3...8)
-                    .font(.subheadline)
-                    .padding(10)
-                    .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color(.separator)))
-                    .accessibilityIdentifier("generate.custom.prompt")
-
-                Toggle("インストゥルメンタル(歌なし)", isOn: $instrumental)
-                    .font(.subheadline)
-
-                HStack {
-                    if let customError {
-                        Text(customError)
-                            .font(.footnote)
-                            .foregroundStyle(.red)
-                    }
-                    Spacer()
-                    Button {
-                        Task { await submitCustom() }
-                    } label: {
-                        if isSubmitting {
-                            ProgressView()
-                        } else {
-                            Text("生成する")
-                                .font(.subheadline.weight(.bold))
-                        }
-                    }
-                    .tint(.accentDeep)
-                    .disabled(!canSubmitCustom)
-                    .accessibilityIdentifier("generate.custom.submit")
-                }
-            }
-            .padding(.bottom, 16)
-        }
-    }
-
-    private func submitCustom() async {
-        promptFocused = false
-        isSubmitting = true
-        defer { isSubmitting = false }
-        do {
-            _ = try await BackendAPI.postJSON(
-                GenerateResponse.self,
-                path: "/api/generate",
-                body: GenerateRequest(
-                    prompt: prompt.trimmingCharacters(in: .whitespacesAndNewlines),
-                    instrumental: instrumental
-                )
-            )
-            prompt = ""
-            customError = nil
-            await loadTasks()
-            await loadCredits()
-        } catch {
-            customError = error.localizedDescription
-        }
-    }
-
     // MARK: - 進行状況
 
     /// 進行中すべて+1 時間以内の失敗(Web 管理画面と同条件)+今日完了した分(最大 5 件)
@@ -395,9 +285,7 @@ struct GenerateView: View {
     }
 
     private func doneLabel(for task: GenerationTask) -> String {
-        var label = "今日 \(Self.timeFormatter.string(from: task.updatedAt)) 完了"
-        if task.mode == "daily_adventure" { label += " · 冒険日" }
-        return label
+        "今日 \(Self.timeFormatter.string(from: task.updatedAt)) 完了"
     }
 
     private static let timeFormatter: DateFormatter = {

@@ -14,9 +14,9 @@ import {
 } from "./generation.ts";
 import * as itunes from "./itunes.ts";
 import { LLM_EFFORTS, currentWordLimits, getLlmSettings } from "./llm.ts";
-import { CATEGORY_LABELS, SEED_PRESETS } from "./presets.ts";
 import { referenceCandidateSummary } from "./reference.ts";
 import {
+  NoReferenceSongError,
   getDailySettings,
   isValidTimezone,
   startDailyRun,
@@ -62,8 +62,7 @@ function taskJson(t: db.TaskRow) {
     // web_search で参照した情報源(参照曲ありの生成のみ。他は空配列)
     sources: db.parseSources(t.llm_sources),
     realWorldWords: db.listRealWorldWords(t.id),
-    usedPresets: db.listTaskPresets(t.id).map(usedPresetJson),
-    // artist モードの参照曲(他モードは null)
+    // 参照曲(daily / artist のどちらも持つ。旧データでは null)
     refArtistName: t.ref_artist_name,
     refSongTitle: t.ref_song_title,
     createdAt: t.created_at,
@@ -71,86 +70,57 @@ function taskJson(t: db.TaskRow) {
   };
 }
 
-// 使用プリセット(使用時点のスナップショット)の API 表現
-function usedPresetJson(p: db.TaskPresetRow) {
-  return { category: p.category, value: p.value, labelJa: p.label_ja };
-}
-
-// LLM 経由の生成フロー: プリセット選択 + 自由テキスト → LLM がスタイル・歌詞を生成 → Suno へ customMode で送信。
-// artistSongId を指定すると「その曲に似た新曲」モード(artist)になり、presetIds は無視して
-// 自由テキストは「追加の要望」として併用する
+// アーティスト経由の生成フロー: 参照曲(artistSongId)+ 任意の追加要望 → LLM が web_search で
+// その曲の音楽的特徴を調べてスタイル・歌詞を生成 → Suno へ customMode で送信。
+// 参照曲は必須(自由テキストだけで作る経路は 2026-08-10 に廃止)
 api.post("/generate", async (c) => {
   const body = await c.req.json().catch(() => null);
   const freeText = typeof body?.prompt === "string" ? body.prompt.trim() : "";
-  const presetIds: number[] = Array.isArray(body?.presetIds)
-    ? body.presetIds.filter((id: unknown) => Number.isInteger(id))
-    : [];
   const instrumental = body?.instrumental === true;
   const artistSongId = Number.isInteger(body?.artistSongId)
     ? (body.artistSongId as number)
     : undefined;
-  if (artistSongId === undefined && !freeText && presetIds.length === 0) {
-    return c.json({ error: "プリセットか自由テキストを指定してください" }, 400);
+  if (artistSongId === undefined) {
+    return c.json({ error: "artistSongId を指定してください" }, 400);
   }
   if (freeText.length > 2000) {
     return c.json({ error: "自由テキストが長すぎます(2000 文字以内)" }, 400);
   }
-  const song = artistSongId !== undefined ? db.getArtistSong(artistSongId) : undefined;
-  if (artistSongId !== undefined && !song) {
+  const song = db.getArtistSong(artistSongId);
+  if (!song) {
     return c.json({ error: "参照する楽曲が見つかりません" }, 404);
   }
-  // artist モードでは要素プールを LLM に提示しないため、プリセット選択は使わない
-  const selectedPresets = song
-    ? []
-    : presetIds
-        .map((id) => db.getPreset(id))
-        .filter((p): p is db.PresetRow => p !== undefined);
 
   // タスク一覧に出す表示用のリクエスト内容
-  const promptParts: string[] = [];
-  if (song) promptParts.push(`${song.artist_name}「${song.title}」風`);
+  const promptParts = [`${song.artist_name}「${song.title}」風`];
   if (freeText) promptParts.push(freeText);
-  if (selectedPresets.length > 0) {
-    promptParts.push(`プリセット: ${selectedPresets.map((p) => p.label_ja).join("、")}`);
-  }
-  const displayPrompt = promptParts.join(" / ");
-  const mode = song ? "artist" : "manual";
 
-  // 受付だけ済ませて即座に返す。参照曲があると LLM が web_search で調べるため 3 分ほどかかり、
+  // 受付だけ済ませて即座に返す。LLM が web_search で調べるため 3 分ほどかかり、
   // 完了まで待つとエッジのプロキシタイムアウトに掛かる。進行状況は GET /api/tasks で追える
   const task = acceptGeneration({
-    prompt: displayPrompt,
+    prompt: promptParts.join(" / "),
     instrumental,
-    mode,
-    artist: song
-      ? {
-          artistId: song.artist_id,
-          artistSongId: song.id,
-          artistName: song.artist_name,
-          songTitle: song.title,
-        }
-      : undefined,
+    mode: "artist",
+    artist: {
+      artistId: song.artist_id,
+      artistSongId: song.id,
+      artistName: song.artist_name,
+      songTitle: song.title,
+    },
   });
   // 失敗は completeGeneration がタスクに記録するので、ここでは握って落とさないだけでよい
   void completeGeneration(task.id, {
     instrumental,
-    selectedPresets,
     planInput: {
-      mode,
       instrumental,
-      selectedPresets,
-      presetPool: db.listPresets(),
       freeText,
-      recentStyles: db.listRecentStyles(),
-      referenceSong: song
-        ? {
-            artist: song.artist_name,
-            title: song.title,
-            album: song.album,
-            releaseYear: song.release_year,
-            genre: song.genre,
-          }
-        : undefined,
+      referenceSong: {
+        artist: song.artist_name,
+        title: song.title,
+        album: song.album,
+        releaseYear: song.release_year,
+        genre: song.genre,
+      },
     },
   }).catch(() => {});
   return c.json({ task: taskJson(task) }, 201);
@@ -174,7 +144,7 @@ api.get("/settings", (c) => {
   return c.json({ settings: allSettings() });
 });
 
-// 部分更新: { dailyEnabled?, adventureProbability?, dailyHour?, dailyTimezone?,
+// 部分更新: { dailyEnabled?, dailyHour?, dailyTimezone?,
 //            dailyCount?, contextNews?, wordMaxUses?, wordWindowDays?, llmEffort? }
 api.put("/settings", async (c) => {
   const body = await c.req.json().catch(() => null);
@@ -187,13 +157,6 @@ api.put("/settings", async (c) => {
       return c.json({ error: "dailyEnabled は boolean です" }, 400);
     }
     updates.push(["daily_enabled", String(body.dailyEnabled)]);
-  }
-  if ("adventureProbability" in body) {
-    const p = body.adventureProbability;
-    if (typeof p !== "number" || !(p >= 0 && p <= 1)) {
-      return c.json({ error: "adventureProbability は 0〜1 の数値です" }, 400);
-    }
-    updates.push(["adventure_probability", String(p)]);
   }
   if ("dailyHour" in body) {
     const h = body.dailyHour;
@@ -254,28 +217,19 @@ api.put("/settings", async (c) => {
 // おまかせ生成(runDaily)が LLM に注入する入力の一覧(iOS の生成パラメータ画面用)。
 // runDaily と同じ関数群から組み立てることで、表示と実際の生成入力のずれを防ぐ
 api.get("/generation-params", (c) => {
-  const daily = getDailySettings();
   const context = getContextSettings();
-  const ratings = db.countPresetRatings();
   const limits = currentWordLimits();
   const { wordMaxUses, wordWindowDays } = db.getWordLimitSettings();
-  // 参照曲の候補が 1 件でもあれば参照曲ベースで動く(0 件のときだけ要素プール方式に落ちる)。
-  // 既存キーは残したまま追加する(旧アプリ互換)
-  const referenceCandidates = referenceCandidateSummary();
   return c.json({
     params: {
-      referenceMode: referenceCandidates.length > 0,
-      referenceCandidates,
+      // 候補が空 = 参照曲が無く、おまかせ生成できない状態(POST /daily/run は 409)
+      referenceCandidates: referenceCandidateSummary(),
       recentReferences: db.listRecentReferences().map((r) => ({
         artistName: r.artist_name,
         title: r.title,
         usedAt: r.last_used_at,
       })),
-      adventureProbability: daily.adventureProbability,
       contextNews: context.contextNews,
-      presets: db.listPresets().map((p) => presetJson(p, ratings)),
-      categoryLabels: CATEGORY_LABELS,
-      recentStyles: db.listRecentStyleRows(),
       wordMaxUses,
       wordWindowDays,
       bannedWords: limits.banned,
@@ -285,28 +239,22 @@ api.get("/generation-params", (c) => {
   });
 });
 
-// 直近ウィンドウ内のリアルワード使用状況(パラメータ一覧ページの表示用)
-api.get("/real-world-words", (c) => {
-  const { wordMaxUses, wordWindowDays } = db.getWordLimitSettings();
-  return c.json({
-    wordMaxUses,
-    wordWindowDays,
-    words: db.countRealWorldWordUses(wordWindowDays),
-  });
-});
-
 // 自動生成の手動トリガ(管理画面・iOS の「おまかせ生成」が使用)。last_daily_date は
 // 更新しないため、その日のスケジュール実行は別途行われる。
 // 受付だけ済ませて即座に返す(参照曲ありの生成は web_search で 3〜4 分かかり、
 // 完了まで待つとエッジのプロキシタイムアウトに掛かる)。進行状況は GET /api/tasks で追える
 api.post("/daily/run", async (c) => {
   try {
-    const { task, adventure, complete } = await startDailyRun();
+    const { task, complete } = await startDailyRun();
     // 失敗は completeGeneration がタスクに記録するので、ここでは握って落とさないだけでよい
     void complete().catch(() => {});
-    return c.json({ task: taskJson(task), adventure }, 201);
+    return c.json({ task: taskJson(task) }, 201);
   } catch (err) {
     console.error(`[api] daily/run 失敗: ${err}`);
+    // 参照曲が 1 件も無いのは設定の問題(アーティスト未登録)なので 409 で区別する
+    if (err instanceof NoReferenceSongError) {
+      return c.json({ error: err.message }, 409);
+    }
     return c.json({ error: `自動生成に失敗しました: ${err}` }, 502);
   }
 });
@@ -323,7 +271,6 @@ function trackJson(t: db.TrackWithTaskRow, prefix: string) {
     duration: t.duration,
     audioUrl: `${prefix}/audio/${t.audio_file}`,
     imageUrl: t.image_file ? `${prefix}/images/${t.image_file}` : null,
-    rating: t.rating,
     mode: t.mode,
     prompt: t.prompt,
     instrumental: t.instrumental === 1,
@@ -338,8 +285,7 @@ function trackJson(t: db.TrackWithTaskRow, prefix: string) {
     // web_search で参照した情報源(参照曲ありの生成のみ。他は空配列)
     sources: db.parseSources(t.llm_sources),
     realWorldWords: db.listRealWorldWords(t.task_id),
-    usedPresets: db.listTaskPresets(t.task_id).map(usedPresetJson),
-    // artist モードの参照曲(他モードは null)
+    // 参照曲(daily / artist のどちらも持つ。旧データでは null)
     refArtistName: t.ref_artist_name,
     refSongTitle: t.ref_song_title,
     createdAt: t.created_at,
@@ -355,112 +301,8 @@ api.get("/tracks", (c) => {
   return c.json({ tracks: db.listTracks().map((t) => trackJson(t, urlPrefix(c))) });
 });
 
-// 👍/👎 の付与・解除。body は { rating: 1 | -1 | null }(null で解除)
-api.post("/tracks/:id/rating", async (c) => {
-  const id = Number(c.req.param("id"));
-  if (!Number.isInteger(id)) return c.json({ error: "不正な id です" }, 400);
-  const body = await c.req.json().catch(() => null);
-  if (body === null || typeof body !== "object" || !("rating" in body)) {
-    return c.json({ error: "rating を指定してください" }, 400);
-  }
-  if (body.rating !== 1 && body.rating !== -1 && body.rating !== null) {
-    return c.json({ error: "rating は 1 / -1 / null のいずれかです" }, 400);
-  }
-  const track = db.updateTrackRating(id, body.rating);
-  if (!track) return c.json({ error: "楽曲が見つかりません" }, 404);
-  return c.json({ track: trackJson(track, urlPrefix(c)) });
-});
-
 api.get("/credits", async (c) => {
   return c.json({ credits: await sunoClient.getCredits() });
-});
-
-// --- プリセット管理 ---
-
-// ratings は countPresetRatings() の集計(省略時は 0 件扱い。iOS 既存コードは未知キーを無視するので後方互換)
-function presetJson(p: db.PresetRow, ratings?: Map<number, db.PresetRatingCount>) {
-  const r = ratings?.get(p.id);
-  return {
-    id: p.id,
-    category: p.category,
-    value: p.value,
-    labelJa: p.label_ja,
-    upCount: r?.up ?? 0,
-    downCount: r?.down ?? 0,
-    createdAt: p.created_at,
-  };
-}
-
-// body の各フィールドを検証して trim 済み値を返す。partial=true なら未指定フィールドを許す
-function parsePresetBody(
-  body: unknown,
-  partial: boolean
-): { category?: string; value?: string; labelJa?: string } | { error: string } {
-  if (body === null || typeof body !== "object") {
-    return { error: "JSON body を指定してください" };
-  }
-  const b = body as Record<string, unknown>;
-  const result: { category?: string; value?: string; labelJa?: string } = {};
-  for (const key of ["category", "value", "labelJa"] as const) {
-    if (b[key] === undefined) {
-      if (!partial) return { error: `${key} を指定してください` };
-      continue;
-    }
-    if (typeof b[key] !== "string") return { error: `${key} は文字列です` };
-    const trimmed = (b[key] as string).trim();
-    if (!trimmed) return { error: `${key} が空です` };
-    if (trimmed.length > 100) return { error: `${key} が長すぎます(100 文字以内)` };
-    result[key] = trimmed;
-  }
-  if (partial && Object.keys(result).length === 0) {
-    return { error: "更新するフィールドを指定してください" };
-  }
-  return result;
-}
-
-api.get("/presets", (c) => {
-  const ratings = db.countPresetRatings();
-  return c.json({
-    presets: db.listPresets().map((p) => presetJson(p, ratings)),
-    categoryLabels: CATEGORY_LABELS,
-  });
-});
-
-api.post("/presets", async (c) => {
-  const parsed = parsePresetBody(await c.req.json().catch(() => null), false);
-  if ("error" in parsed) return c.json({ error: parsed.error }, 400);
-  try {
-    const preset = db.createPreset({
-      category: parsed.category!,
-      value: parsed.value!,
-      labelJa: parsed.labelJa!,
-    });
-    return c.json({ preset: presetJson(preset) }, 201);
-  } catch {
-    return c.json({ error: "同じカテゴリ・値のプリセットが既にあります" }, 409);
-  }
-});
-
-api.put("/presets/:id", async (c) => {
-  const id = Number(c.req.param("id"));
-  if (!Number.isInteger(id)) return c.json({ error: "不正な id です" }, 400);
-  const parsed = parsePresetBody(await c.req.json().catch(() => null), true);
-  if ("error" in parsed) return c.json({ error: parsed.error }, 400);
-  try {
-    const preset = db.updatePreset(id, parsed);
-    if (!preset) return c.json({ error: "プリセットが見つかりません" }, 404);
-    // 行内編集の保存後もページ側が集計表示を維持できるよう、集計付きで返す
-    return c.json({ preset: presetJson(preset, db.countPresetRatings()) });
-  } catch {
-    return c.json({ error: "同じカテゴリ・値のプリセットが既にあります" }, 409);
-  }
-});
-
-api.delete("/presets/:id", (c) => {
-  const id = Number(c.req.param("id"));
-  if (!Number.isInteger(id)) return c.json({ error: "不正な id です" }, 400);
-  if (!db.deletePreset(id)) return c.json({ error: "プリセットが見つかりません" }, 404);
-  return c.json({ ok: true });
 });
 
 // --- アーティスト管理(生成経路「アーティスト経由」) ---
@@ -725,34 +567,6 @@ app.use(
     rewriteRequestPath: (p) => p.replace(/^\/admin/, ""),
   })
 );
-
-// 楽器カテゴリ廃止(2026-08-09)の一回限りマイグレーション。既存 DB の instrument
-// プリセットを削除する(task_presets のスナップショット・評価履歴は残る)。実施済みを
-// settings に記録し、ユーザーが後から手動で再追加したものは再起動で消さない
-{
-  const MIGRATION_KEY = "migration_drop_instrument_presets";
-  if (db.getSetting(MIGRATION_KEY) === undefined) {
-    const removed = db.deletePresetsByCategory("instrument");
-    db.setSetting(MIGRATION_KEY, "1");
-    if (removed > 0) {
-      console.log(`[presets] 楽器カテゴリ廃止に伴い instrument プリセット ${removed} 件を削除しました`);
-    }
-  }
-}
-
-// 初期プリセット投入(DB に 1 件も無いカテゴリだけ。既存カテゴリ内でユーザーが
-// 編集・削除した内容は再投入せず、後から追加された新カテゴリは既存 DB にも入る)
-{
-  const existing = new Set(db.listPresets().map((p) => p.category));
-  const toSeed = SEED_PRESETS.filter((p) => !existing.has(p.category));
-  if (toSeed.length > 0) {
-    for (const p of toSeed) db.createPreset(p);
-    const categories = [...new Set(toSeed.map((p) => p.category))].join(", ");
-    console.log(
-      `[presets] 初期プリセット ${toSeed.length} 件を投入しました(カテゴリ: ${categories})`
-    );
-  }
-}
 
 serve({ fetch: app.fetch, port: PORT }, (info) => {
   console.log(`Music Plant admin: http://localhost:${info.port}/admin/`);

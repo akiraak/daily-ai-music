@@ -1,20 +1,18 @@
 import SwiftUI
 
-/// 楽曲詳細。API が返す未活用データ(リアルワード・狙い・スタイル・歌詞と訳)を見せる画面。
+/// 楽曲詳細。API が返す未活用データ(リファレンス・リアルワード・狙い・スタイル・歌詞と訳)を見せる画面。
 /// レイアウトは案A ミニマル(docs/plans/ios-app-design-mocks/01-minimal.html)基準。
 /// LLM 導入前の旧データはメタデータが nil のため、該当セクションは出さない
 struct TrackDetailView: View {
     @ObservedObject private var player = PlayerService.shared
-    @State private var track: Track
-    private let onRated: (Track) -> Void
+    private let track: Track
 
     @State private var showsOriginalStyle = false
     @State private var showsPrompt = false
     @State private var showsJapaneseLyrics: Bool
 
-    init(track: Track, onRated: @escaping (Track) -> Void) {
-        _track = State(initialValue: track)
-        self.onRated = onRated
+    init(track: Track) {
+        self.track = track
         _showsJapaneseLyrics = State(initialValue: track.lyricsJa != nil)
     }
 
@@ -24,7 +22,6 @@ struct TrackDetailView: View {
                 header
                 referenceSection
                 wordsSection
-                presetsSection
                 intentSection
                 sourcesSection
                 styleSection
@@ -63,14 +60,8 @@ struct TrackDetailView: View {
                 .foregroundStyle(.secondary)
                 .padding(.top, 3)
 
-            HStack(spacing: 18) {
-                playButton
-                RatingButtons(track: track, identifierPrefix: "detail", large: true) { updated in
-                    track = updated
-                    onRated(updated)
-                }
-            }
-            .padding(.top, 14)
+            playButton
+                .padding(.top, 14)
         }
         .frame(maxWidth: .infinity)
     }
@@ -118,19 +109,6 @@ struct TrackDetailView: View {
             WrappingPillLayout(spacing: 6) {
                 ForEach(Array(track.realWorldWords.enumerated()), id: \.offset) { _, word in
                     PillTag(text: word)
-                }
-            }
-        }
-    }
-
-    /// 使用プリセット(生成に使われた要素)。記録の無い旧データではセクションごと出さない
-    @ViewBuilder
-    private var presetsSection: some View {
-        if let presets = track.usedPresets, !presets.isEmpty {
-            sectionHeader("使用プリセット")
-            WrappingPillLayout(spacing: 6) {
-                ForEach(Array(presets.enumerated()), id: \.offset) { _, preset in
-                    PillTag(text: preset.labelJa)
                 }
             }
         }

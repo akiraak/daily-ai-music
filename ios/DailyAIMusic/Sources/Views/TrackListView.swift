@@ -34,7 +34,7 @@ struct TrackListView: View {
             .background(Color.appBackground)
             .navigationTitle("ライブラリ")
             .navigationDestination(for: Track.self) { track in
-                TrackDetailView(track: track, onRated: applyRating)
+                TrackDetailView(track: track)
             }
             .refreshable { await load() }
             .task { await pollWhileVisible() }
@@ -42,7 +42,7 @@ struct TrackListView: View {
         // NavigationStack 側に付けて、詳細画面へ遷移してもミニプレイヤーが残るようにする
         .safeAreaInset(edge: .bottom) {
             if player.currentTrack != nil {
-                MiniPlayerView(onRated: applyRating)
+                MiniPlayerView()
             }
         }
     }
@@ -82,8 +82,7 @@ struct TrackListView: View {
                             isCurrent: player.currentTrack?.id == track.id,
                             isPlaying: player.isPlaying,
                             onPlay: { playOrToggle(track) },
-                            onOpen: { path.append(track) },
-                            onRated: applyRating
+                            onOpen: { path.append(track) }
                         )
                         Divider()
                     }
@@ -101,14 +100,6 @@ struct TrackListView: View {
             // ライブラリからの再生は一覧の表示順を再生キューにする(曲終了で次の曲へ自動送り)
             player.play(track, queue: tracks)
         }
-    }
-
-    /// 評価 API の結果(行・楽曲詳細・フルプレイヤーのどこから来ても)を一覧と再生中の曲へ反映する
-    private func applyRating(_ updated: Track) {
-        if let index = tracks.firstIndex(where: { $0.id == updated.id }) {
-            tracks[index] = updated
-        }
-        player.applyRated(updated)
     }
 
     // MARK: - 今日の一曲・日付グループ
@@ -288,11 +279,8 @@ private struct HeroCard: View {
             }
 
             let words = track.realWorldWords
-            if track.isAdventure || !words.isEmpty {
+            if !words.isEmpty {
                 SingleLinePillLayout(spacing: 6) {
-                    if track.isAdventure {
-                        PillTag(text: "冒険日", emphasized: true)
-                    }
                     ForEach(Array(words.prefix(4).enumerated()), id: \.offset) { _, word in
                         PillTag(text: word)
                     }
@@ -312,15 +300,13 @@ private struct HeroCard: View {
 
 // MARK: - リスト行
 
-/// 一覧の 1 行。行本体のタップで楽曲詳細へ、再生/一時停止は行内の再生ボタン、
-/// 👍/👎 は独立したトグルボタン(管理画面と同じ仕様)
+/// 一覧の 1 行。行本体のタップで楽曲詳細へ、再生/一時停止は行内の再生ボタン
 private struct TrackRow: View {
     let track: Track
     let isCurrent: Bool
     let isPlaying: Bool
     let onPlay: () -> Void
     let onOpen: () -> Void
-    let onRated: (Track) -> Void
 
     var body: some View {
         HStack(spacing: 10) {
@@ -349,10 +335,7 @@ private struct TrackRow: View {
             .buttonStyle(.plain)
             .accessibilityIdentifier("track.row")
 
-            VStack(spacing: 4) {
-                playButton
-                RatingButtons(track: track, onRated: onRated)
-            }
+            playButton
         }
         .padding(.vertical, 10)
     }
@@ -360,11 +343,8 @@ private struct TrackRow: View {
     @ViewBuilder
     private var pillsRow: some View {
         let words = track.realWorldWords
-        if track.isAdventure || !words.isEmpty {
+        if !words.isEmpty {
             SingleLinePillLayout(spacing: 5) {
-                if track.isAdventure {
-                    PillTag(text: "冒険日", emphasized: true)
-                }
                 ForEach(Array(words.prefix(3).enumerated()), id: \.offset) { _, word in
                     PillTag(text: word)
                 }

@@ -15,9 +15,8 @@ struct SettingsView: View {
     @State private var settings: ServerSettings?
     @State private var settingsError: String?
     @State private var isSavingSettings = false
-    /// タイムゾーン・冒険日確率は編集途中の値をローカルに持ち、確定時(return / ドラッグ終了)に保存する
+    /// タイムゾーンは編集途中の値をローカルに持ち、確定時(return)に保存する
     @State private var timezoneText = ""
-    @State private var adventureValue = 0.0
 
     var body: some View {
         NavigationStack {
@@ -92,22 +91,6 @@ struct SettingsView: View {
                     .padding(10)
                     .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color(.separator)))
                     .accessibilityIdentifier("settings.dailyTimezone")
-            }
-            .padding(.vertical, 10)
-            Divider()
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(alignment: .firstTextBaseline) {
-                    rowLabel("冒険日の確率", hint: "好みから大きく外した曲に挑戦する日。参照曲の登録が無いときのみ有効")
-                    Spacer(minLength: 12)
-                    Text("\(Int((adventureValue * 100).rounded())) %")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(Color.accentDeep)
-                        .monospacedDigit()
-                }
-                Slider(value: $adventureValue, in: 0...1, step: 0.05) { editing in
-                    if !editing { saveAdventure() }
-                }
-                .accessibilityIdentifier("settings.adventure")
             }
             .padding(.vertical, 10)
         }
@@ -263,11 +246,6 @@ struct SettingsView: View {
         save(SettingsUpdateRequest(dailyTimezone: tz))
     }
 
-    private func saveAdventure() {
-        guard let settings, adventureValue != settings.adventureProbability else { return }
-        save(SettingsUpdateRequest(adventureProbability: adventureValue))
-    }
-
     /// 変更を即 PUT し、応答のサーバー値で表示を上書きする。失敗時はエラーを表示して現在値を読み直す
     private func save(_ update: SettingsUpdateRequest) {
         Task {
@@ -295,7 +273,6 @@ struct SettingsView: View {
     private func apply(_ new: ServerSettings) {
         settings = new
         timezoneText = new.dailyTimezone
-        adventureValue = new.adventureProbability
     }
 
     private func test() async {
@@ -319,7 +296,7 @@ struct SettingsView: View {
 private extension ServerSettings {
     /// settings 未読込時にバインディングの get が返すダミー(未読込中はコントロール自体を表示しない)
     static let placeholder = ServerSettings(
-        dailyEnabled: false, adventureProbability: 0, dailyHour: 0,
+        dailyEnabled: false, dailyHour: 0,
         dailyTimezone: "", dailyCount: 1, contextNews: false
     )
 }

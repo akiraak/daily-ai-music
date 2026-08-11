@@ -87,12 +87,8 @@ final class ScreenshotUITests: XCTestCase {
             }
             attach(app, name: "\(style)-\(name)")
             if name == "generate" {
-                // カスタム生成を開いた状態も撮る(生成ボタンはタップしない)
-                app.buttons["generate.custom.toggle"].tap()
-                attach(app, name: "\(style)-generate-custom")
-                app.buttons["generate.custom.toggle"].tap()
                 // 生成パラメータ画面(push)も、読み込み完了を待ってから撮る。
-                // 要素プールが長いため、中間(スタイル)と最下部(リアルワード)も撮る
+                // 参照曲の候補が長いため、スクロール後と最下部(リアルワード)も撮る
                 app.buttons["generate.params"].tap()
                 if app.staticTexts["params.context"].waitForExistence(timeout: 10) {
                     attach(app, name: "\(style)-generate-params")

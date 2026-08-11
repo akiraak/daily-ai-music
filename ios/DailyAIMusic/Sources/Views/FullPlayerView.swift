@@ -1,12 +1,10 @@
 import SwiftUI
 
-/// フルプレイヤー(シート)。大カバー・シークバー・前後の曲・再生/停止・歌詞への導線・評価。
+/// フルプレイヤー(シート)。大カバー・シークバー・前後の曲・再生/停止・歌詞への導線。
 /// 表示対象は常に PlayerService.currentTrack(自動送りで曲が替わっても追従する)。
 /// レイアウトは案A ミニマル(docs/plans/ios-app-design-mocks/01-minimal.html)基準
 struct FullPlayerView: View {
     @ObservedObject private var player = PlayerService.shared
-    /// 評価 API の結果を一覧へ反映するコールバック(再生中の曲・キューへは PlayerService が反映)
-    let onRated: (Track) -> Void
 
     var body: some View {
         NavigationStack {
@@ -65,15 +63,10 @@ struct FullPlayerView: View {
             }
             .padding(.top, 20)
 
-            HStack(spacing: 28) {
-                if track.lyrics != nil || track.lyricsJa != nil {
-                    lyricsLink(for: track)
-                }
-                RatingButtons(track: track, identifierPrefix: "player", large: true) { updated in
-                    onRated(updated)
-                }
+            if track.lyrics != nil || track.lyricsJa != nil {
+                lyricsLink(for: track)
+                    .padding(.top, 22)
             }
-            .padding(.top, 22)
 
             Spacer(minLength: 12)
         }

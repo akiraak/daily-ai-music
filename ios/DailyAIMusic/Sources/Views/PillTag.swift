@@ -81,8 +81,8 @@ struct WrappingPillLayout: Layout {
     }
 }
 
-/// リアルワード・冒険日のピルタグ。案A ミニマルに沿い枠線のみの控えめ表示
-/// (通常はヘアライン枠+secondary 文字、冒険日など強調時は AccentDeep)
+/// リアルワードのピルタグ。案A ミニマルに沿い枠線のみの控えめ表示
+/// (通常はヘアライン枠+secondary 文字、強調時は AccentDeep)
 struct PillTag: View {
     let text: String
     var emphasized = false

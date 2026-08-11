@@ -9,9 +9,7 @@ struct Track: Identifiable, Decodable, Hashable {
     let duration: Double
     let audioUrl: String
     let imageUrl: String?
-    /// 1 = 👍, -1 = 👎, nil = 未評価
-    let rating: Int?
-    /// "manual"(カスタム生成)| "daily" | "daily_adventure"(冒険日)| "artist"(アーティスト経由)
+    /// "manual"(カスタム生成)| "daily" | "artist"(アーティスト経由)
     let mode: String
     let instrumental: Bool
     /// 以下は LLM 生成のメタデータ。LLM 導入前の旧データでは nil
@@ -28,15 +26,12 @@ struct Track: Identifiable, Decodable, Hashable {
     let sources: [String]?
     /// 曲の中心となった語(リアルワード)
     let realWorldWords: [String]
-    /// 使用プリセット(使用時点のスナップショット)。旧サーバーでは nil、記録の無い旧データでは空配列
-    let usedPresets: [UsedPreset]?
     /// 参照した曲(使用時点のスナップショット)。`artist` と、参照曲ベースの `daily` で入る。
-    /// 参照曲なしの生成・旧サーバーでは nil
+    /// 参照曲なしの旧データでは nil
     let refArtistName: String?
     let refSongTitle: String?
     let createdAt: Date
 
-    var isAdventure: Bool { mode == "daily_adventure" }
     var modeLabel: String { generationModeLabel(mode) }
 
     /// 楽曲詳細に出す「リファレンス: <アーティスト>「<曲名>」」の表示文字列
@@ -46,18 +41,10 @@ struct Track: Identifiable, Decodable, Hashable {
     }
 }
 
-/// 曲の生成に使われたプリセット(使用時点のスナップショット。プリセットが編集・削除されても表示できる)
-struct UsedPreset: Decodable, Hashable {
-    let category: String
-    let value: String
-    let labelJa: String
-}
-
 func generationModeLabel(_ mode: String) -> String {
     switch mode {
     case "manual": "カスタム生成"
     case "daily": "おまかせ生成"
-    case "daily_adventure": "おまかせ生成(冒険日)"
     case "artist": "アーティスト経由"
     default: mode
     }
@@ -67,23 +54,6 @@ struct TracksResponse: Decodable {
     let tracks: [Track]
 }
 
-/// POST /api/tracks/:id/rating の body。サーバーは "rating" キー必須のため、
-/// nil(評価解除)でもキーを省略せず "rating": null を送る
-struct RatingRequest: Encodable {
-    let rating: Int?
-
-    private enum CodingKeys: String, CodingKey { case rating }
-
-    func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(rating, forKey: .rating)
-    }
-}
-
-struct RatingResponse: Decodable {
-    let track: Track
-}
-
 /// GET /api/tasks の生成ジョブ
 struct GenerationTask: Identifiable, Decodable, Equatable {
     let id: Int
@@ -91,7 +61,7 @@ struct GenerationTask: Identifiable, Decodable, Equatable {
     let instrumental: Bool
     let status: String
     let error: String?
-    /// "manual" | "daily" | "daily_adventure" | "artist"(Track.mode と同じ)
+    /// "manual" | "daily" | "artist"(Track.mode と同じ)
     let mode: String
     /// LLM が決めた曲名(TEXT_SUCCESS 以降。それ以前と旧データは nil)
     let title: String?
@@ -136,12 +106,12 @@ struct TasksResponse: Decodable {
     let tasks: [GenerationTask]
 }
 
-/// POST /api/generate の body。artistSongId を入れるとアーティスト経由生成(mode = artist)になる。
-/// nil のときはキー自体を送らない(Encodable の既定動作)ため、旧サーバーとも互換
+/// POST /api/generate の body。参照曲(artistSongId)は必須で、prompt は
+/// リファレンスに重ねる「追加の要望」(iOS からは常に空文字)
 struct GenerateRequest: Encodable {
     let prompt: String
     let instrumental: Bool
-    var artistSongId: Int?
+    let artistSongId: Int
 }
 
 struct GenerateResponse: Decodable {
@@ -151,7 +121,6 @@ struct GenerateResponse: Decodable {
 /// POST /api/daily/run(おまかせ生成の手動トリガ)のレスポンス
 struct DailyRunResponse: Decodable {
     let task: GenerationTask
-    let adventure: Bool
 }
 
 // MARK: - アーティスト経由生成
@@ -264,20 +233,12 @@ struct PingResponse: Decodable {
 /// GET /api/generation-params — おまかせ生成(毎日の自動生成)が LLM に注入する入力の一覧。
 /// サーバー側で runDaily と同じ関数群から組み立てるため、表示と実際の生成入力がずれない
 struct GenerationParams: Decodable {
-    /// 参照曲ベースで動いているか(= 参照曲の候補が 1 件以上あるか)。
-    /// false のときだけ要素プール・直近スタイル・冒険日確率が LLM に注入される。
-    /// キーを持たない旧サーバーでは nil = false 扱い(従来どおりの表示になる)
-    let referenceMode: Bool?
-    /// 参照曲の候補(アーティスト単位。最終使用が古い順 = 次に選ばれやすい順)
-    let referenceCandidates: [ReferenceCandidateSummary]?
+    /// 参照曲の候補(アーティスト単位。最終使用が古い順 = 次に選ばれやすい順)。
+    /// 空ならアーティスト未登録で、おまかせ生成できない
+    let referenceCandidates: [ReferenceCandidateSummary]
     /// 直近に参照した曲
-    let recentReferences: [RecentReference]?
-    let adventureProbability: Double
+    let recentReferences: [RecentReference]
     let contextNews: Bool
-    let presets: [PoolPreset]
-    /// category → 日本語ラベル(例: "genre" → "ジャンル")
-    let categoryLabels: [String: String]
-    let recentStyles: [RecentStyle]
     let wordMaxUses: Int
     let wordWindowDays: Int
     /// 使用上限に達したリアルワード(曲の中心に据えない)
@@ -306,22 +267,6 @@ struct RecentReference: Decodable {
     let usedAt: Date
 }
 
-/// 要素プールのプリセット(評価 👍/👎 の集計付き)
-struct PoolPreset: Decodable, Identifiable {
-    let id: Int
-    let category: String
-    let value: String
-    let labelJa: String
-    let upCount: Int
-    let downCount: Int
-}
-
-/// 直近の生成スタイル(重複回避用にプロンプトへ注入される)。styleJa が無い旧データは英語のみ
-struct RecentStyle: Decodable {
-    let style: String
-    let styleJa: String?
-}
-
 struct GenerationParamsResponse: Decodable {
     let params: GenerationParams
 }
@@ -331,7 +276,6 @@ struct GenerationParamsResponse: Decodable {
 /// 変更の楽観反映(トグルの即時切替)のため var
 struct ServerSettings: Decodable, Equatable {
     var dailyEnabled: Bool
-    var adventureProbability: Double
     var dailyHour: Int
     var dailyTimezone: String
     /// 1 日に生成する曲数(1〜10)
@@ -346,7 +290,6 @@ struct SettingsResponse: Decodable {
 /// PUT /api/settings の部分更新 body(nil のキーは送信されない)
 struct SettingsUpdateRequest: Encodable {
     var dailyEnabled: Bool?
-    var adventureProbability: Double?
     var dailyHour: Int?
     var dailyTimezone: String?
     var dailyCount: Int?
@@ -354,14 +297,12 @@ struct SettingsUpdateRequest: Encodable {
 
     init(
         dailyEnabled: Bool? = nil,
-        adventureProbability: Double? = nil,
         dailyHour: Int? = nil,
         dailyTimezone: String? = nil,
         dailyCount: Int? = nil,
         contextNews: Bool? = nil
     ) {
         self.dailyEnabled = dailyEnabled
-        self.adventureProbability = adventureProbability
         self.dailyHour = dailyHour
         self.dailyTimezone = dailyTimezone
         self.dailyCount = dailyCount

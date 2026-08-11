@@ -13,9 +13,8 @@ final class TrackDetailUITests: XCTestCase {
         XCTAssertTrue(firstRow.waitForExistence(timeout: 10), "楽曲一覧が読み込まれること(サーバー起動と API Secret 注入が必要)")
         firstRow.tap()
 
-        // 詳細画面が開く(再生ピルと評価ボタン)
+        // 詳細画面が開く(再生ピル)
         XCTAssertTrue(app.buttons["detail.play"].waitForExistence(timeout: 5), "行タップで楽曲詳細へ遷移すること")
-        XCTAssertTrue(app.buttons["detail.rate.up"].exists && app.buttons["detail.rate.down"].exists, "詳細に 👍/👎 があること")
 
         // 原文スタイルの折りたたみが開閉できる
         let original = app.buttons["detail.style.original"]

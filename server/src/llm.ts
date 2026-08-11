@@ -3,7 +3,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { ANTHROPIC_API_KEY, LLM_MODEL } from "./config.ts";
 import * as db from "./db.ts";
-import type { PresetRow } from "./db.ts";
 
 const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
 
@@ -24,7 +23,9 @@ export function getLlmSettings(): { llmModel: string; llmEffort: LlmEffort } {
   };
 }
 
-export type GenerationMode = "manual" | "daily" | "daily_adventure" | "artist";
+// タスク行に記録する生成経路。どちらも参照曲を持つ(2026-08-10 に manual を廃止。
+// 過去データには 'manual' / 'daily_adventure' が残るが、表示のラベル対応のみ)
+export type GenerationMode = "daily" | "artist";
 
 export interface SongPlan {
   style: string;
@@ -34,15 +35,14 @@ export interface SongPlan {
   lyricsJa: string;
   intent: string;
   realWorldWords: string[]; // この曲の中心となった語(保存して使用回数を制限する)
-  usedPresets: { category: string; value: string }[]; // 採用したプリセット(提示値の写し。サーバーで照合して保存)
-  sources: string[]; // web_search で参照した情報源(検索しなかったモードでは空配列)
+  sources: string[]; // web_search で参照した情報源(検索できなかったときは空配列)
 }
 
 // 生成結果と、生成に使用したパラメータ(記録・管理画面表示用)
 export interface SongPlanResult {
   plan: SongPlan;
   llmModel: string;
-  llmPrompt: string; // LLM に送った user メッセージ全文(プリセット・直近スタイル等を含む)
+  llmPrompt: string; // LLM に送った user メッセージ全文(リファレンス・今日のコンテキスト等を含む)
 }
 
 const SONG_PLAN_SCHEMA = {
@@ -78,26 +78,6 @@ const SONG_PLAN_SCHEMA = {
       description:
         "この曲の中心となった語(リアルワード)。今日のコンテキストから採ったテーマ語と、曲の中心要素(ジャンル・ムード・情景など)を英語小文字で 5〜8 個",
     },
-    usedPresets: {
-      type: "array",
-      items: {
-        type: "object",
-        properties: {
-          category: {
-            type: "string",
-            description: "プロンプトに提示された要素の [ ] 内の category を一字一句そのまま写す",
-          },
-          value: {
-            type: "string",
-            description: "プロンプトに提示された要素の value(英語部分)を一字一句そのまま写す",
-          },
-        },
-        required: ["category", "value"],
-        additionalProperties: false,
-      },
-      description:
-        "この曲に採用したプリセット要素。プロンプトに提示された要素(「- [category] value(和名)」の行)から採用したものだけを、category と value を一字一句そのまま写して列挙する。提示に無い独自の要素は含めない(提示が無ければ空配列)",
-    },
     sources: {
       type: "array",
       items: { type: "string" },
@@ -113,24 +93,10 @@ const SONG_PLAN_SCHEMA = {
     "lyricsJa",
     "intent",
     "realWorldWords",
-    "usedPresets",
     "sources",
   ],
   additionalProperties: false,
 };
-
-// プリセット別の 👍/👎 集計(preset_id → 件数)。daily 系のプール行に併記する
-export type PresetRatings = Map<number, { up: number; down: number }>;
-
-function presetLines(presets: PresetRow[], ratings?: PresetRatings): string {
-  return presets
-    .map((p) => {
-      const r = ratings?.get(p.id);
-      const suffix = r && (r.up > 0 || r.down > 0) ? ` 👍 ${r.up} / 👎 ${r.down}` : "";
-      return `- [${p.category}] ${p.value}(${p.label_ja})${suffix}`;
-    })
-    .join("\n");
-}
 
 function firstText(message: Anthropic.Message): string {
   if (message.stop_reason === "refusal") {
@@ -154,16 +120,11 @@ export interface ReferenceSong {
 }
 
 export interface SongPlanInput {
-  mode: GenerationMode;
   instrumental: boolean;
-  selectedPresets: PresetRow[];
-  presetPool: PresetRow[];
-  presetRatings?: PresetRatings; // プリセット別の 👍/👎 集計(daily 系で注入。manual は非注入)
-  freeText: string;
-  recentStyles: string[];
+  freeText: string; // 「追加の要望」(リファレンスに重ねて反映する。daily は空)
   extraContext?: string; // 「今日のコンテキスト」(ニュース。毎日の自動生成のみ)
-  // 参照曲。プロンプトの分岐はモード名ではなくこの有無で決まる(daily / artist の両方で来る)
-  referenceSong?: ReferenceSong;
+  // 参照曲。daily / artist のどちらも必ず持つ(2026-08-10 に必須化)
+  referenceSong: ReferenceSong;
 }
 
 // リアルワードの使用制限(ウィンドウ内の使用回数から算出。テスト用に注入可能)
@@ -185,82 +146,45 @@ export function currentWordLimits(): WordLimits {
 export function buildSongPlanPrompt(input: SongPlanInput, limits: WordLimits): string {
   const sections: string[] = [];
 
-  // 分岐は**モード名ではなく参照曲の有無**で決める。参照曲があるときは要素プールも
-  // 直近スタイルも提示しない(参照曲が曲調を決めるため、提示すると再現と衝突する)。
-  // 毎日の自動生成(daily)もサーバーが選んだ参照曲を持って、ここを通る
-  if (input.referenceSong) {
-    const ref = input.referenceSong;
-    const refLines = [`- アーティスト: ${ref.artist}`, `- 曲名: ${ref.title}`];
-    if (ref.album) refLines.push(`- 収録アルバム: ${ref.album}`);
-    if (ref.releaseYear) refLines.push(`- リリース年: ${ref.releaseYear}`);
-    if (ref.genre) refLines.push(`- ジャンル(iTunes の分類): ${ref.genre}`);
-    sections.push(
-      `## リファレンス楽曲(この曲に似た新曲を作る)\n${refLines.join("\n")}`
-    );
-    const howTo = [
-      "- **まず web_search でリファレンス楽曲の音楽的特徴を調べる**(BPM、キー、コード進行、楽器編成、ボーカルの音域と質感、プロダクション)。記憶だけで書かず、調べられるものは調べること",
-      "- 検索では**上に挙げたアーティスト名・アルバム・リリース年と一致する曲かを必ず確かめる**。同名の別の曲の情報を使ってはいけない",
-      "- 調べた特徴を具体的な英語の音楽用語に翻訳して style を書く。「〜風」と書くのではなく、音そのものを記述すること",
-      "- **style・title・lyrics に実在の固有名詞(アーティスト名・バンド名・曲名)を一切含めない**。上記のアーティスト名・曲名も、検索結果に出てきた名前も書いてはいけない。Suno のモデレーションが固有名詞を拒否し、生成そのものが失敗する",
-      "- 歌詞は原曲の歌詞を複製・翻訳・言い換えしない。テーマや情景の方向性を参考にするのは構わないが、完全な新作の歌詞を書く",
-      // 参照曲と今日のコンテキストが同時に来るのは毎日の自動生成の経路。音と言葉で担当を分ける
-      ...(input.extraContext
-        ? [
-            "- 曲調・編成・ボーカルの質感はリファレンス楽曲に寄せ、歌詞のテーマ・情景は今日のコンテキストから採る。両者が衝突する場合は、音はリファレンス・言葉はコンテキストを優先する",
-          ]
-        : []),
-      "- 検索で確かめられなかった要素は、そのアーティストの一般的な作風から推定してよい。その場合も推測であることを断らずに具体的に書き切ること",
-      "- intent には、取り入れた音楽的特徴と、その根拠を**項目ごとに書き分ける**(検索で確認した / 曲を知っている / 作風からの推定)",
-      "- sources には、実際に参照した情報源の URL またはタイトルを列挙する(検索しなかった場合は空配列)",
-    ];
-    sections.push(`## 作り方(厳守)\n${howTo.join("\n")}`);
-    if (input.freeText) {
-      sections.push(`## 追加の要望(リファレンスに重ねて反映する)\n${input.freeText}`);
-    }
-  } else if (input.mode === "manual") {
-    if (input.selectedPresets.length > 0) {
-      sections.push(
-        `## ユーザーが選んだ要素(必ず反映する)\n${presetLines(input.selectedPresets)}`
-      );
-    }
-    if (input.freeText) {
-      sections.push(`## ユーザーの自由リクエスト(最優先で反映する)\n${input.freeText}`);
-    }
-  } else {
-    sections.push(
-      `## 利用できる要素プール(評価 👍/👎 の集計を踏まえて自由に選ぶ)\n${presetLines(input.presetPool, input.presetRatings)}`
-    );
-    if (input.mode === "daily_adventure") {
-      sections.push(
-        `## モード: 冒険日\n今日は普段の好みから大きく外れた意外な組み合わせに挑戦する日。評価集計(👍/👎)には従わなくてよく、むしろ未評価・低評価の要素への挑戦も歓迎。普段選ばれない要素を大胆に使うこと。`
-      );
-    } else {
-      sections.push(
-        `## モード: 毎日の自動生成\n👍/👎 はその要素を使った曲へのユーザー評価。👍 の多い要素を優先し、👎 の多い要素は避けること。ただし優先に従いすぎるとマンネリ化するため、1 要素だけは普段(👍 集計の上位)と違うものを入れること。`
-      );
-    }
+  // 生成は daily / artist の 2 経路だけで、どちらも参照曲を持つ(2026-08-10 に分岐を撤去)。
+  // 曲調は参照曲が決めるため、要素プールや直近スタイルは提示しない
+  const ref = input.referenceSong;
+  const refLines = [`- アーティスト: ${ref.artist}`, `- 曲名: ${ref.title}`];
+  if (ref.album) refLines.push(`- 収録アルバム: ${ref.album}`);
+  if (ref.releaseYear) refLines.push(`- リリース年: ${ref.releaseYear}`);
+  if (ref.genre) refLines.push(`- ジャンル(iTunes の分類): ${ref.genre}`);
+  sections.push(`## リファレンス楽曲(この曲に似た新曲を作る)\n${refLines.join("\n")}`);
+
+  const howTo = [
+    "- **まず web_search でリファレンス楽曲の音楽的特徴を調べる**(BPM、キー、コード進行、楽器編成、ボーカルの音域と質感、プロダクション)。記憶だけで書かず、調べられるものは調べること",
+    "- 検索では**上に挙げたアーティスト名・アルバム・リリース年と一致する曲かを必ず確かめる**。同名の別の曲の情報を使ってはいけない",
+    "- 調べた特徴を具体的な英語の音楽用語に翻訳して style を書く。「〜風」と書くのではなく、音そのものを記述すること",
+    "- **style・title・lyrics に実在の固有名詞(アーティスト名・バンド名・曲名)を一切含めない**。上記のアーティスト名・曲名も、検索結果に出てきた名前も書いてはいけない。Suno のモデレーションが固有名詞を拒否し、生成そのものが失敗する",
+    "- 歌詞は原曲の歌詞を複製・翻訳・言い換えしない。テーマや情景の方向性を参考にするのは構わないが、完全な新作の歌詞を書く",
+    // 参照曲と今日のコンテキストが同時に来るのは毎日の自動生成の経路。音と言葉で担当を分ける
+    ...(input.extraContext
+      ? [
+          "- 曲調・編成・ボーカルの質感はリファレンス楽曲に寄せ、歌詞のテーマ・情景は今日のコンテキストから採る。両者が衝突する場合は、音はリファレンス・言葉はコンテキストを優先する",
+        ]
+      : []),
+    "- 検索で確かめられなかった要素は、そのアーティストの一般的な作風から推定してよい。その場合も推測であることを断らずに具体的に書き切ること",
+    "- intent には、取り入れた音楽的特徴と、その根拠を**項目ごとに書き分ける**(検索で確認した / 曲を知っている / 作風からの推定)",
+    "- sources には、実際に参照した情報源の URL またはタイトルを列挙する(検索しなかった場合は空配列)",
+  ];
+  sections.push(`## 作り方(厳守)\n${howTo.join("\n")}`);
+
+  if (input.freeText) {
+    sections.push(`## 追加の要望(リファレンスに重ねて反映する)\n${input.freeText}`);
   }
   if (input.extraContext) {
     sections.push(
       `## 今日のコンテキスト(歌詞・曲調の着想に使う。ニュースの報告ではなく、雰囲気やテーマとしてさりげなく織り込む)\n${input.extraContext}`
     );
   }
-  // 参照曲があるときは「参照曲に似せる」のが目的なので、直近スタイルとの重複回避は
-  // 注入しない(目的と矛盾する)。曲の重複は参照曲の選択側(LRU)で避ける
-  if (!input.referenceSong && input.recentStyles.length > 0) {
-    sections.push(
-      `## 直近の生成スタイル(重複を避ける)\n${input.recentStyles.map((s) => `- ${s}`).join("\n")}`
-    );
-  }
   if (limits.banned.length > 0) {
-    // 参照曲・ユーザー指定は禁止ワードより優先する(衝突したら再現・指定が勝つ)
-    const note = input.referenceSong
-      ? "。ただしリファレンス楽曲の再現と衝突する場合はリファレンスを優先する"
-      : input.mode === "manual"
-        ? "。ただしユーザーが選んだ要素・自由リクエストと衝突する場合はユーザー指定を優先する"
-        : "";
+    // 参照曲は禁止ワードより優先する(衝突したら再現が勝つ)
     sections.push(
-      `## 使用禁止ワード(直近で使いすぎ。テーマ・スタイル・歌詞の中心に据えず、realWorldWords にも含めない${note})\n${limits.banned.map((w) => `- ${w}`).join("\n")}`
+      `## 使用禁止ワード(直近で使いすぎ。テーマ・スタイル・歌詞の中心に据えず、realWorldWords にも含めない。ただしリファレンス楽曲の再現と衝突する場合はリファレンスを優先する)\n${limits.banned.map((w) => `- ${w}`).join("\n")}`
     );
   }
   if (limits.lastChance.length > 0) {
@@ -274,11 +198,9 @@ export function buildSongPlanPrompt(input: SongPlanInput, limits: WordLimits): s
     `- インストゥルメンタル: ${input.instrumental ? "はい(lyrics / lyricsJa は空文字列)" : "いいえ(歌詞を書く)"}`,
   ];
   if (!input.instrumental) {
-    // 参照曲があるときはその声に寄せるのが目的なので、声色を散らす指示は出さない
+    // 参照曲の声に寄せるのが目的なので、声色を散らす指示は出さない
     conditions.push(
-      input.referenceSong
-        ? "- 歌声: style に歌手の声の特徴(性別・声質・年齢感)を必ず含める。リファレンス楽曲のボーカルの質感に寄せること"
-        : "- 歌声: style に歌手の声の特徴(性別・声質・年齢感。vocal カテゴリの要素を参考に)を必ず含める。直近の生成スタイルと歌声が偏らないよう、幅広い声色を試すこと"
+      "- 歌声: style に歌手の声の特徴(性別・声質・年齢感)を必ず含める。リファレンス楽曲のボーカルの質感に寄せること"
     );
   }
   sections.push(`## 出力条件\n${conditions.join("\n")}`);
@@ -322,22 +244,16 @@ function logSearchOutcome(message: Anthropic.Message): void {
   }
 }
 
-async function requestSongPlan(
-  llmPrompt: string,
-  referenceSong?: ReferenceSong
-): Promise<SongPlan> {
-  // 参照曲があるときだけ web_search を有効にする。調べる対象があるのは実在の曲を指定された
-  // ときだけで、daily はニュース文脈が、manual はユーザーの自由記述が入力なので検索先が無い。
+async function requestSongPlan(llmPrompt: string): Promise<SongPlan> {
+  // 生成は必ず参照曲を持つので web_search は常時有効。
   // code_execution は宣言しない — web_search_20260209 の動的フィルタリングが内部で使うため、
   // 別途宣言すると実行環境が 2 つになりモデルが混乱する
-  const tools = referenceSong
-    ? [{ type: "web_search_20260209" as const, name: "web_search" as const, max_uses: WEB_SEARCH_MAX_USES }]
-    : undefined;
+  const tools = [
+    { type: "web_search_20260209" as const, name: "web_search" as const, max_uses: WEB_SEARCH_MAX_USES },
+  ];
 
   const { llmModel, llmEffort } = getLlmSettings();
-  console.log(
-    `[llm] ${llmModel} で生成します(effort=${llmEffort}${tools ? " / web_search 有効" : ""})`
-  );
+  console.log(`[llm] ${llmModel} で生成します(effort=${llmEffort} / web_search 有効)`);
 
   let messages: Anthropic.MessageParam[] = [{ role: "user", content: llmPrompt }];
   for (let resumes = 0; ; resumes++) {
@@ -350,7 +266,7 @@ async function requestSongPlan(
         max_tokens: MAX_TOKENS,
         system: SYSTEM_PROMPT,
         messages,
-        ...(tools ? { tools } : {}),
+        tools,
         output_config: {
           effort: llmEffort,
           format: { type: "json_schema", schema: SONG_PLAN_SCHEMA },
@@ -424,30 +340,26 @@ function planIssues(
         `これらのワードをテーマ・スタイル・歌詞・realWorldWords のいずれにも使わず、別の発想で作り直すこと。`,
     });
   }
-  // 参照曲があれば必ず検査する(モード名で見ると daily の参照曲生成が素通りし、
-  // 検索結果由来の固有名詞がそのまま Suno の SENSITIVE_WORD_ERROR を踏む)
-  if (input.referenceSong) {
-    const nouns = properNounsIn(plan, input.referenceSong);
-    if (nouns.length > 0) {
-      issues.push({
-        label: `固有名詞の混入(${nouns.join(", ")})`,
-        instruction:
-          `前回の出力には固有名詞(${nouns.join(", ")})が含まれていた。Suno のモデレーションに拒否され生成が失敗するため、` +
-          `style・title・lyrics から固有名詞を完全に取り除き、音楽的特徴の記述だけで書き直すこと。`,
-      });
-    }
+  // 検索結果由来の固有名詞がそのまま Suno の SENSITIVE_WORD_ERROR を踏むため必ず検査する
+  const nouns = properNounsIn(plan, input.referenceSong);
+  if (nouns.length > 0) {
+    issues.push({
+      label: `固有名詞の混入(${nouns.join(", ")})`,
+      instruction:
+        `前回の出力には固有名詞(${nouns.join(", ")})が含まれていた。Suno のモデレーションに拒否され生成が失敗するため、` +
+        `style・title・lyrics から固有名詞を完全に取り除き、音楽的特徴の記述だけで書き直すこと。`,
+    });
   }
   return issues;
 }
 
-// スタイル+歌詞+訳+タイトル+狙い+リアルワードを生成する。参照曲があればその曲の音楽的特徴を
-// web_search で調べて寄せ(daily / artist 共通)、無ければ manual はユーザー指定の要素を尊重し、
-// daily はプール全体から評価を踏まえて選ぶ(daily_adventure は大きく外す)。
-// リアルワードの使用制限は全モード共通でここで一元処理する
+// スタイル+歌詞+訳+タイトル+狙い+リアルワードを生成する。参照曲の音楽的特徴を
+// web_search で調べて寄せる(daily / artist 共通)。
+// リアルワードの使用制限は両経路共通でここで一元処理する
 export async function generateSongPlan(input: SongPlanInput): Promise<SongPlanResult> {
   const limits = currentWordLimits();
   let llmPrompt = buildSongPlanPrompt(input, limits);
-  let plan = await requestSongPlan(llmPrompt, input.referenceSong);
+  let plan = await requestSongPlan(llmPrompt);
 
   // 検証リトライ: 禁止ワードの残留・固有名詞の混入があれば、指示を強めて 1 回だけ再生成する
   const issues = planIssues(plan, input, limits);
@@ -456,7 +368,7 @@ export async function generateSongPlan(input: SongPlanInput): Promise<SongPlanRe
       `[llm] ${issues.map((i) => i.label).join(" / ")}が含まれたため再生成します`
     );
     llmPrompt += `\n\n## 再生成の指示(厳守)\n${issues.map((i) => i.instruction).join("\n")}`;
-    plan = await requestSongPlan(llmPrompt, input.referenceSong);
+    plan = await requestSongPlan(llmPrompt);
     const still = planIssues(plan, input, limits);
     if (still.length > 0) {
       // 生成は止めない(警告のみ。固有名詞が残った場合は Suno 側で FAILED として観測できる)
