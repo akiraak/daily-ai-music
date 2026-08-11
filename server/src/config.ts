@@ -40,7 +40,9 @@ export const PUBLIC_DIR = path.resolve(
 
 export const SUNO_API_KEY = process.env.SUNOAPI_ORG_KEY ?? "";
 export const SUNO_BASE_URL = process.env.SUNOAPI_BASE_URL ?? "https://api.kie.ai";
-export const SUNO_MODEL = process.env.SUNO_MODEL ?? "V5";
+// V5_5 は漢字の読み精度が V5 より高い(2026-08-11 に日本語歌唱を既定にしたため引き上げた)。
+// 料金は V5 と同額。kie.ai の許容値は V4 / V4_5 / V4_5PLUS / V4_5ALL / V5 / V5_5
+export const SUNO_MODEL = process.env.SUNO_MODEL ?? "V5_5";
 
 export const API_SECRET = process.env.API_SECRET ?? "";
 

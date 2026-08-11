@@ -23,7 +23,16 @@
     </div>
     <section class="panel">
       <h2>曲の生成(LLM)</h2>
-      <p class="empty">スタイル・歌詞を作る LLM の設定です。モデルはサーバーの .env で決まるため表示のみ、思考の深さは変更できます(次の生成から反映)。</p>
+      <p class="empty">スタイル・歌詞を作る LLM の設定です。モデルはサーバーの .env で決まるため表示のみ、歌声の言語と思考の深さは変更できます(次の生成から反映)。</p>
+      <div class="setting-row">
+        <div class="setting-label">歌声の言語<span class="setting-hint">歌詞をこの言語で書き、そのまま Suno に歌わせる。日本語のときは日本語訳を作らない</span></div>
+        <div class="setting-inputs">
+          <select id="vocal-language" data-field="vocalLanguage">
+            <option value="ja">日本語(既定)</option>
+            <option value="en">英語</option>
+          </select>
+        </div>
+      </div>
       <div class="setting-row">
         <div class="setting-label">LLM モデル<span class="setting-hint">.env の LLM_MODEL で変更(サーバーの再起動が必要)</span></div>
         <div class="setting-value" data-readonly-field="llmModel">-</div>

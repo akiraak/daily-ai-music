@@ -19,6 +19,16 @@ final class SettingsUITests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["settings.dailyHour"].firstMatch.exists)
         XCTAssertTrue(app.descendants(matching: .any)["settings.dailyCount"].firstMatch.exists)
 
+        // 歌声の言語(サーバー設定 vocal_language)。値の往復はニューストグルで見るので、
+        // ここではサーバー値が読めていること(既定の日本語)だけ確認する。
+        // メニュー Picker は Button として露出し、選択値は label の末尾に入る(値は空)
+        let vocalLanguage = app.descendants(matching: .any)["settings.vocalLanguage"].firstMatch
+        XCTAssertTrue(vocalLanguage.exists)
+        XCTAssertTrue(
+            vocalLanguage.label.hasSuffix("日本語"),
+            "サーバーの歌声の言語が表示されること(実際: \(vocalLanguage.label))"
+        )
+
         // タイムゾーン欄にサーバーの現在値が入っていること
         let timezone = app.descendants(matching: .any)["settings.dailyTimezone"].firstMatch
         XCTAssertTrue(timezone.exists)

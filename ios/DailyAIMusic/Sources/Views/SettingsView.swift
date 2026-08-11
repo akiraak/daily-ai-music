@@ -23,6 +23,7 @@ struct SettingsView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     if settings != nil {
+                        songSection
                         dailySection
                         contextSection
                         if let settingsError {
@@ -44,6 +45,25 @@ struct SettingsView: View {
             .navigationTitle("設定")
             .task { await loadSettings() }
         }
+    }
+
+    // MARK: - 曲の生成
+
+    @ViewBuilder
+    private var songSection: some View {
+        sectionHeader("曲の生成")
+        Group {
+            settingRow("歌声の言語", hint: "歌詞をこの言語で書き、そのまま歌わせる") {
+                Picker("歌声の言語", selection: vocalLanguageBinding) {
+                    Text("日本語").tag(VocalLanguage.japanese)
+                    Text("英語").tag(VocalLanguage.english)
+                }
+                .pickerStyle(.menu)
+                .tint(Color.accentDeep)
+                .accessibilityIdentifier("settings.vocalLanguage")
+            }
+        }
+        .disabled(isSavingSettings)
     }
 
     // MARK: - 毎日の自動生成
@@ -240,6 +260,18 @@ struct SettingsView: View {
         )
     }
 
+    /// 歌声の言語。旧サーバーは値を返さないので、表示・比較は既定値でくるむ
+    private var vocalLanguageBinding: Binding<String> {
+        Binding(
+            get: { settings?.vocalLanguage ?? VocalLanguage.default },
+            set: { newValue in
+                guard settings?.vocalLanguage != newValue else { return }
+                settings?.vocalLanguage = newValue
+                save(SettingsUpdateRequest(vocalLanguage: newValue))
+            }
+        )
+    }
+
     private func saveTimezone() {
         let tz = timezoneText.trimmingCharacters(in: .whitespaces)
         guard let settings, !tz.isEmpty, tz != settings.dailyTimezone else { return }
@@ -297,6 +329,7 @@ private extension ServerSettings {
     /// settings 未読込時にバインディングの get が返すダミー(未読込中はコントロール自体を表示しない)
     static let placeholder = ServerSettings(
         dailyEnabled: false, dailyHour: 0,
-        dailyTimezone: "", dailyCount: 1, contextNews: false
+        dailyTimezone: "", dailyCount: 1, contextNews: false,
+        vocalLanguage: nil
     )
 }

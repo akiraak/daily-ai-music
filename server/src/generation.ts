@@ -57,8 +57,10 @@ export async function completeGeneration(
   }
 ): Promise<db.TaskRow> {
   try {
-    const { plan, llmModel, llmPrompt } = await generateSongPlan(input.planInput);
-    db.updateTaskPlan(taskId, { ...plan, llmModel, llmPrompt });
+    const { plan, llmModel, llmPrompt, lyricsLang } = await generateSongPlan(
+      input.planInput
+    );
+    db.updateTaskPlan(taskId, { ...plan, llmModel, llmPrompt, lyricsLang });
     const providerTaskId = await sunoClient.createTask({
       customMode: true,
       style: plan.style,

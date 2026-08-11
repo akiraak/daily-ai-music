@@ -41,6 +41,12 @@ struct GenerationParamsView: View {
     @ViewBuilder
     private func settingsSection(_ p: GenerationParams) -> some View {
         sectionHeader("生成の設定")
+        paramRow(
+            "歌声の言語",
+            vocalLanguageLabelFor(p.vocalLanguage ?? VocalLanguage.default) ?? "-",
+            identifier: "params.vocalLanguage"
+        )
+        Divider()
         paramRow("今日のコンテキスト", contextValue(p), identifier: "params.context")
         Divider()
         paramRow("リアルワード制限", "直近 \(p.wordWindowDays) 日で同一ワード \(p.wordMaxUses) 回まで")

@@ -21,8 +21,9 @@ export interface TaskRow {
   mode: string; // 'manual' | 'daily' | 'artist'
   style: string | null; // LLM が生成したスタイルプロンプト(英語)
   style_ja: string | null; // スタイルプロンプトの日本語訳
-  lyrics: string | null; // 英語歌詞
-  lyrics_ja: string | null; // 日本語訳
+  lyrics: string | null; // Suno に渡した原詞(lyrics_lang の言語)
+  lyrics_ja: string | null; // 日本語訳(原詞が日本語のときは null)
+  lyrics_lang: string | null; // 原詞の言語 'ja' | 'en'(旧データは null = 英語)
   title: string | null; // LLM が付けた曲名
   intent: string | null; // 狙いの説明(日本語)
   llm_model: string | null; // 生成に使った LLM のモデル名
@@ -121,6 +122,9 @@ addColumnIfMissing("tasks", "style", "style TEXT");
 addColumnIfMissing("tasks", "style_ja", "style_ja TEXT");
 addColumnIfMissing("tasks", "lyrics", "lyrics TEXT");
 addColumnIfMissing("tasks", "lyrics_ja", "lyrics_ja TEXT");
+// 原詞(lyrics)の言語 'ja' | 'en'(2026-08-11 追加。歌声の言語を設定できるようにした)。
+// NULL の旧データは英語固定だった頃のもの
+addColumnIfMissing("tasks", "lyrics_lang", "lyrics_lang TEXT");
 addColumnIfMissing("tasks", "title", "title TEXT");
 addColumnIfMissing("tasks", "intent", "intent TEXT");
 addColumnIfMissing("tasks", "llm_model", "llm_model TEXT");
@@ -232,6 +236,7 @@ export function updateTaskPlan(
     styleJa?: string | null;
     lyrics?: string | null;
     lyricsJa?: string | null;
+    lyricsLang?: string | null;
     title: string;
     intent: string;
     sources?: string[];
@@ -241,14 +246,15 @@ export function updateTaskPlan(
 ): void {
   const sources = plan.sources?.filter((s) => s.trim()) ?? [];
   db.prepare(
-    `UPDATE tasks SET style = ?, style_ja = ?, lyrics = ?, lyrics_ja = ?, title = ?, intent = ?,
-       llm_model = ?, llm_prompt = ?, llm_sources = ?,
+    `UPDATE tasks SET style = ?, style_ja = ?, lyrics = ?, lyrics_ja = ?, lyrics_lang = ?,
+       title = ?, intent = ?, llm_model = ?, llm_prompt = ?, llm_sources = ?,
        updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?`
   ).run(
     plan.style,
     plan.styleJa || null,
     plan.lyrics || null,
     plan.lyricsJa || null,
+    plan.lyricsLang ?? null,
     plan.title,
     plan.intent,
     plan.llmModel ?? null,
@@ -335,6 +341,7 @@ export type TrackWithTaskRow = TrackRow & {
   style_ja: string | null;
   lyrics: string | null;
   lyrics_ja: string | null;
+  lyrics_lang: string | null;
   intent: string | null;
   llm_model: string | null;
   llm_prompt: string | null;
@@ -344,7 +351,8 @@ export type TrackWithTaskRow = TrackRow & {
 };
 
 const TRACK_TASK_COLUMNS = `tracks.*, tasks.mode, tasks.prompt, tasks.instrumental, tasks.model,
-  tasks.style, tasks.style_ja, tasks.lyrics, tasks.lyrics_ja, tasks.intent, tasks.llm_model, tasks.llm_prompt,
+  tasks.style, tasks.style_ja, tasks.lyrics, tasks.lyrics_ja, tasks.lyrics_lang,
+  tasks.intent, tasks.llm_model, tasks.llm_prompt,
   tasks.llm_sources, tasks.ref_artist_name, tasks.ref_song_title`;
 
 export function listTracks(limit = 200): TrackWithTaskRow[] {

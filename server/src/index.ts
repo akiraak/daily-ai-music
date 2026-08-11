@@ -13,7 +13,13 @@ import {
   sunoClient,
 } from "./generation.ts";
 import * as itunes from "./itunes.ts";
-import { LLM_EFFORTS, currentWordLimits, getLlmSettings } from "./llm.ts";
+import {
+  LLM_EFFORTS,
+  VOCAL_LANGUAGES,
+  currentWordLimits,
+  getLlmSettings,
+  getVocalLanguage,
+} from "./llm.ts";
 import { referenceCandidateSummary } from "./reference.ts";
 import {
   NoReferenceSongError,
@@ -56,6 +62,8 @@ function taskJson(t: db.TaskRow) {
     styleJa: t.style_ja,
     lyrics: t.lyrics,
     lyricsJa: t.lyrics_ja,
+    // 原詞の言語(旧データは null。英語固定だった頃のもの)
+    lyricsLang: t.lyrics_lang,
     intent: t.intent,
     llmModel: t.llm_model,
     llmPrompt: t.llm_prompt,
@@ -136,6 +144,7 @@ function allSettings() {
     ...getContextSettings(),
     ...db.getWordLimitSettings(),
     ...getLlmSettings(),
+    vocalLanguage: getVocalLanguage(),
     sunoModel: SUNO_MODEL,
   };
 }
@@ -144,8 +153,8 @@ api.get("/settings", (c) => {
   return c.json({ settings: allSettings() });
 });
 
-// 部分更新: { dailyEnabled?, dailyHour?, dailyTimezone?,
-//            dailyCount?, contextNews?, wordMaxUses?, wordWindowDays?, llmEffort? }
+// 部分更新: { dailyEnabled?, dailyHour?, dailyTimezone?, dailyCount?, contextNews?,
+//            wordMaxUses?, wordWindowDays?, llmEffort?, vocalLanguage? }
 api.put("/settings", async (c) => {
   const body = await c.req.json().catch(() => null);
   if (body === null || typeof body !== "object") {
@@ -207,6 +216,15 @@ api.put("/settings", async (c) => {
     }
     updates.push(["llm_effort", body.llmEffort]);
   }
+  if ("vocalLanguage" in body) {
+    if (!VOCAL_LANGUAGES.some((l) => l === body.vocalLanguage)) {
+      return c.json(
+        { error: `vocalLanguage は ${VOCAL_LANGUAGES.join(" / ")} のいずれかです` },
+        400
+      );
+    }
+    updates.push(["vocal_language", body.vocalLanguage]);
+  }
   if (updates.length === 0) {
     return c.json({ error: "更新するフィールドを指定してください" }, 400);
   }
@@ -230,6 +248,7 @@ api.get("/generation-params", (c) => {
         usedAt: r.last_used_at,
       })),
       contextNews: context.contextNews,
+      vocalLanguage: getVocalLanguage(),
       wordMaxUses,
       wordWindowDays,
       bannedWords: limits.banned,
@@ -279,6 +298,8 @@ function trackJson(t: db.TrackWithTaskRow, prefix: string) {
     styleJa: t.style_ja,
     lyrics: t.lyrics,
     lyricsJa: t.lyrics_ja,
+    // 原詞の言語(旧データは null。英語固定だった頃のもの)
+    lyricsLang: t.lyrics_lang,
     intent: t.intent,
     llmModel: t.llm_model,
     llmPrompt: t.llm_prompt,

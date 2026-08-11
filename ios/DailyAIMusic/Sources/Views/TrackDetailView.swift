@@ -282,6 +282,10 @@ struct TrackDetailView: View {
     private var metaLine: String {
         var parts = ["\(Self.metaDateFormatter.string(from: track.createdAt)) 生成", track.modeLabel]
         if track.instrumental { parts.append("インスト") }
+        // 歌声の言語(記録の無い旧データでは出ない。インストは歌わないので出さない)
+        if !track.instrumental, let vocalLanguage = track.vocalLanguageLabel {
+            parts.append("\(vocalLanguage)歌唱")
+        }
         if let sunoModel = track.sunoModel { parts.append(sunoModel) }
         if let llmModel = track.llmModel { parts.append(llmModel) }
         return parts.joined(separator: " · ")

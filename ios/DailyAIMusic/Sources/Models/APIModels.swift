@@ -15,8 +15,12 @@ struct Track: Identifiable, Decodable, Hashable {
     /// 以下は LLM 生成のメタデータ。LLM 導入前の旧データでは nil
     let style: String?
     let styleJa: String?
+    /// Suno に渡した原詞(歌声の言語で書かれている)
     let lyrics: String?
+    /// 日本語訳。原詞が日本語のとき・旧データでは nil
     let lyricsJa: String?
+    /// 原詞の言語 "ja" | "en"(記録の無い旧データ・旧サーバーでは nil)
+    let lyricsLang: String?
     let intent: String?
     let sunoModel: String?
     let llmModel: String?
@@ -34,10 +38,30 @@ struct Track: Identifiable, Decodable, Hashable {
 
     var modeLabel: String { generationModeLabel(mode) }
 
+    /// 歌声の言語のラベル(記録の無い旧データでは nil)
+    var vocalLanguageLabel: String? { vocalLanguageLabelFor(lyricsLang) }
+
     /// 楽曲詳細に出す「リファレンス: <アーティスト>「<曲名>」」の表示文字列
     var referenceLabel: String? {
         guard let refArtistName, let refSongTitle else { return nil }
         return "\(refArtistName)「\(refSongTitle)」"
+    }
+}
+
+/// 歌声(歌詞)の言語コード。サーバー設定 `vocal_language` と `tasks.lyrics_lang` で共通
+enum VocalLanguage {
+    static let japanese = "ja"
+    static let english = "en"
+    /// 旧サーバーが `vocalLanguage` を返さないときの既定(サーバー側の既定と揃える)
+    static let `default` = japanese
+}
+
+/// 言語コードの表示名。未知・未記録は nil(表示しない)
+func vocalLanguageLabelFor(_ code: String?) -> String? {
+    switch code {
+    case VocalLanguage.japanese: "日本語"
+    case VocalLanguage.english: "英語"
+    default: nil
     }
 }
 
@@ -239,6 +263,8 @@ struct GenerationParams: Decodable {
     /// 直近に参照した曲
     let recentReferences: [RecentReference]
     let contextNews: Bool
+    /// 歌声の言語 "ja" | "en"(旧サーバーでは nil)
+    let vocalLanguage: String?
     let wordMaxUses: Int
     let wordWindowDays: Int
     /// 使用上限に達したリアルワード(曲の中心に据えない)
@@ -281,6 +307,9 @@ struct ServerSettings: Decodable, Equatable {
     /// 1 日に生成する曲数(1〜10)
     var dailyCount: Int
     var contextNews: Bool
+    /// 歌声(歌詞)の言語 "ja" | "en"。旧サーバーは返さないので optional で受け、
+    /// 表示・保存時は VocalLanguage.default にフォールバックする
+    var vocalLanguage: String?
 }
 
 struct SettingsResponse: Decodable {
@@ -294,18 +323,21 @@ struct SettingsUpdateRequest: Encodable {
     var dailyTimezone: String?
     var dailyCount: Int?
     var contextNews: Bool?
+    var vocalLanguage: String?
 
     init(
         dailyEnabled: Bool? = nil,
         dailyHour: Int? = nil,
         dailyTimezone: String? = nil,
         dailyCount: Int? = nil,
-        contextNews: Bool? = nil
+        contextNews: Bool? = nil,
+        vocalLanguage: String? = nil
     ) {
         self.dailyEnabled = dailyEnabled
         self.dailyHour = dailyHour
         self.dailyTimezone = dailyTimezone
         self.dailyCount = dailyCount
         self.contextNews = contextNews
+        self.vocalLanguage = vocalLanguage
     }
 }

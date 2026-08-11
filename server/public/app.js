@@ -18,6 +18,12 @@ const MODE_LABELS = {
   artist: "アーティスト経由",
 };
 
+// 歌声(原詞)の言語。旧データは記録が無く、当時は英語固定だった
+const VOCAL_LANGUAGE_LABELS = {
+  ja: "日本語",
+  en: "英語",
+};
+
 // 進行中カードのバッジ用の短い表記(manual は既定なのでバッジを出さない)
 const MODE_BADGES = {
   daily: "毎日",
@@ -172,6 +178,8 @@ function trackElement(t) {
       ["モード", MODE_LABELS[t.mode] ?? t.mode],
       ["リクエスト", t.prompt],
       ["インストゥルメンタル", t.instrumental ? "あり" : "なし"],
+      // 記録が無い旧データ(英語固定だった頃)では行ごと出ない
+      ["歌声の言語", VOCAL_LANGUAGE_LABELS[t.lyricsLang]],
       ["Suno モデル", t.sunoModel],
       ["LLM モデル", t.llmModel],
     ]

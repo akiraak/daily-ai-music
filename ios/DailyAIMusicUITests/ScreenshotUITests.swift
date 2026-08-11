@@ -38,10 +38,8 @@ final class ScreenshotUITests: XCTestCase {
                     app.navigationBars.buttons.firstMatch.tap()
                     _ = app.buttons["player.lyrics"].waitForExistence(timeout: 3)
                 }
-                // シートは上端付近から下へドラッグして閉じる(swipeDown はスライダー等に
-                // 当たると閉じないことがある)。閉じ切って行が押せるようになるまで待つ
-                app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.08))
-                    .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.85)))
+                // シートを閉じ切って、行が押せるようになるまで待つ
+                dismissPlayerSheet(app)
                 let rowHittable = XCTNSPredicateExpectation(
                     predicate: NSPredicate(format: "hittable == true"), object: firstRow
                 )
@@ -68,6 +66,12 @@ final class ScreenshotUITests: XCTestCase {
                     }
                     if prompt.isHittable {
                         prompt.tap()
+                        // isHittable でもレイアウトのずれでシートが開いてしまうことがある。
+                        // 開いたら閉じてスクロールし直し、もう一度だけ押す
+                        if dismissPlayerSheet(app) {
+                            app.swipeUp()
+                            if prompt.isHittable { prompt.tap() }
+                        }
                         app.swipeUp()
                         attach(app, name: "\(style)-detail-prompt")
                     }
@@ -77,6 +81,10 @@ final class ScreenshotUITests: XCTestCase {
         } else {
             attach(app, name: "\(style)-library-empty")
         }
+
+        // タブへ移る前に、開いたままのシートが残っていないことを確かめる
+        // (残っていると以降のタップがすべてシートに吸われ、タブの中身が撮れない)
+        dismissPlayerSheet(app)
 
         for (tab, name) in [("生成", "generate"), ("設定", "settings")] {
             XCTAssertTrue(app.tabBars.buttons[tab].waitForExistence(timeout: 5))
@@ -105,6 +113,22 @@ final class ScreenshotUITests: XCTestCase {
                 attach(app, name: "\(style)-settings-scrolled")
             }
         }
+    }
+
+    /// フルプレイヤーのシートが開いていたら閉じる(閉じたら true)。
+    /// 上端付近から下へドラッグする(swipeDown はスライダー等に当たると閉じないことがある)
+    @MainActor
+    @discardableResult
+    private func dismissPlayerSheet(_ app: XCUIApplication) -> Bool {
+        let title = app.staticTexts["player.title"]
+        guard title.exists else { return false }
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.08))
+            .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.85)))
+        let closed = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == false"), object: title
+        )
+        _ = XCTWaiter().wait(for: [closed], timeout: 5)
+        return true
     }
 
     @MainActor

@@ -23,6 +23,17 @@ export function getLlmSettings(): { llmModel: string; llmEffort: LlmEffort } {
   };
 }
 
+// 歌声の言語(歌詞をどの言語で書くか)。既定は日本語(2026-08-11 に英語固定から変更)。
+// 設定は生成のたびに読むので、変更は次の生成にそのまま効く(llm_effort と同じ流儀)
+export const VOCAL_LANGUAGES = ["ja", "en"] as const;
+export type VocalLanguage = (typeof VOCAL_LANGUAGES)[number];
+const DEFAULT_VOCAL_LANGUAGE: VocalLanguage = "ja";
+
+export function getVocalLanguage(): VocalLanguage {
+  const stored = db.getSetting("vocal_language");
+  return VOCAL_LANGUAGES.find((l) => l === stored) ?? DEFAULT_VOCAL_LANGUAGE;
+}
+
 // タスク行に記録する生成経路。どちらも参照曲を持つ(2026-08-10 に manual を廃止。
 // 過去データには 'manual' / 'daily_adventure' が残るが、表示のラベル対応のみ)
 export type GenerationMode = "daily" | "artist";
@@ -31,8 +42,8 @@ export interface SongPlan {
   style: string;
   styleJa: string;
   title: string;
-  lyrics: string;
-  lyricsJa: string;
+  lyrics: string; // Suno に渡す原詞(歌声の言語で書かれる)
+  lyricsJa?: string; // 日本語訳。原詞が日本語のときはスキーマから外すので undefined
   intent: string;
   realWorldWords: string[]; // この曲の中心となった語(保存して使用回数を制限する)
   sources: string[]; // web_search で参照した情報源(検索できなかったときは空配列)
@@ -43,11 +54,15 @@ export interface SongPlanResult {
   plan: SongPlan;
   llmModel: string;
   llmPrompt: string; // LLM に送った user メッセージ全文(リファレンス・今日のコンテキスト等を含む)
+  lyricsLang: VocalLanguage; // 原詞の言語(タスクに記録する)
 }
 
-const SONG_PLAN_SCHEMA = {
-  type: "object",
-  properties: {
+// 出力スキーマ。歌詞の言語で lyrics / title の指示が変わり、日本語のときは訳が要らないので
+// lyricsJa の項目自体を外す(空文字列を書かせるより、無い方が意図が明確)。
+// buildSongPlanPrompt と同じくテストから直接叩けるよう export する
+export function songPlanSchema(lang: VocalLanguage) {
+  const ja = lang === "ja";
+  const properties: Record<string, unknown> = {
     style: {
       type: "string",
       description:
@@ -57,17 +72,28 @@ const SONG_PLAN_SCHEMA = {
       type: "string",
       description: "style の自然な日本語訳(管理画面に表示する)",
     },
-    title: { type: "string", description: "曲のタイトル(英語、80 文字以内)" },
+    title: {
+      type: "string",
+      description: ja
+        ? "曲のタイトル(80 文字以内)。日本語を基本にするが、英語のタイトルの方が自然ならそれでよい"
+        : "曲のタイトル(英語、80 文字以内)",
+    },
     lyrics: {
       type: "string",
       description:
-        "英語の歌詞。[Verse] [Chorus] [Bridge] などのセクションタグ付き、3〜4 分の曲になる分量。インストゥルメンタルの場合は空文字列",
+        (ja ? "日本語の歌詞。" : "英語の歌詞。") +
+        "[Verse] [Chorus] [Bridge] などのセクションタグ付き(タグは英語のまま)、3〜4 分の曲になる分量。インストゥルメンタルの場合は空文字列",
     },
-    lyricsJa: {
-      type: "string",
-      description:
-        "歌詞の自然な日本語訳(セクションタグは残す)。インストゥルメンタルの場合は空文字列",
-    },
+    // 原詞が日本語なら訳は要らないので項目ごと外す
+    ...(ja
+      ? {}
+      : {
+          lyricsJa: {
+            type: "string",
+            description:
+              "歌詞の自然な日本語訳(セクションタグは残す)。インストゥルメンタルの場合は空文字列",
+          },
+        }),
     intent: {
       type: "string",
       description: "この曲の狙い・意図の説明(日本語、2〜3 文。管理画面に表示する)",
@@ -84,19 +110,14 @@ const SONG_PLAN_SCHEMA = {
       description:
         "web_search で実際に参照した情報源の URL またはタイトル。検索していない場合は空配列",
     },
-  },
-  required: [
-    "style",
-    "styleJa",
-    "title",
-    "lyrics",
-    "lyricsJa",
-    "intent",
-    "realWorldWords",
-    "sources",
-  ],
-  additionalProperties: false,
-};
+  };
+  return {
+    type: "object",
+    properties,
+    required: Object.keys(properties),
+    additionalProperties: false,
+  };
+}
 
 function firstText(message: Anthropic.Message): string {
   if (message.stop_reason === "refusal") {
@@ -142,8 +163,13 @@ export function currentWordLimits(): WordLimits {
   };
 }
 
-// LLM に送る user メッセージを組み立てる(純関数。テストで直接検証できるよう分離)
-export function buildSongPlanPrompt(input: SongPlanInput, limits: WordLimits): string {
+// LLM に送る user メッセージを組み立てる(純関数。テストで直接検証できるよう分離)。
+// 歌声の言語は設定値なので、limits と同じく呼び出し側(generateSongPlan)が読んで渡す
+export function buildSongPlanPrompt(
+  input: SongPlanInput,
+  limits: WordLimits,
+  lang: VocalLanguage
+): string {
   const sections: string[] = [];
 
   // 生成は daily / artist の 2 経路だけで、どちらも参照曲を持つ(2026-08-10 に分岐を撤去)。
@@ -194,10 +220,24 @@ export function buildSongPlanPrompt(input: SongPlanInput, limits: WordLimits): s
   }
   // realWorldWords の出力指示はスキーマの description で行う(ここに書くと LLM 入力全文の
   // 表示にプロンプト指示文が混ざり、具体的なワードと紛らわしいため)
+  const ja = lang === "ja";
+  const emptyFields = ja ? "lyrics は空文字列" : "lyrics / lyricsJa は空文字列";
   const conditions = [
-    `- インストゥルメンタル: ${input.instrumental ? "はい(lyrics / lyricsJa は空文字列)" : "いいえ(歌詞を書く)"}`,
+    `- インストゥルメンタル: ${input.instrumental ? `はい(${emptyFields})` : "いいえ(歌詞を書く)"}`,
   ];
   if (!input.instrumental) {
+    conditions.push(
+      `- 歌詞の言語: ${ja ? "日本語" : "英語"}(この歌詞をそのまま Suno に渡して歌わせる)`
+    );
+    if (ja) {
+      // Suno の日本語読みの弱点(助詞の「は」「へ」・数字の英語読み・漢字の誤読)への対策。
+      // 歌詞はアプリにそのまま表示・保存されるので、助詞を「ワ」「エ」に書き換えるような
+      // 表記置換はさせない(読みは安定するが、歌詞が読み物として崩れる)
+      conditions.push(
+        "- 日本語の表記: 漢字かな交じりの自然な表記で書く(全部ひらがなにしない)。算用数字は使わず日本語の表記にする(「7時」ではなく「七時」)。読み間違えられやすい語(特殊な読みの熟語・当て字)は避け、別の言い回しに置き換える。歌唱を補助するための表記の崩し(助詞を「ワ」「エ」と書くなど)はしない",
+        "- style には日本語で歌っていることが分かる指定(Japanese vocals, natural Japanese pronunciation など)を必ず含める(style 自体は英語で書く)"
+      );
+    }
     // 参照曲の声に寄せるのが目的なので、声色を散らす指示は出さない
     conditions.push(
       "- 歌声: style に歌手の声の特徴(性別・声質・年齢感)を必ず含める。リファレンス楽曲のボーカルの質感に寄せること"
@@ -244,7 +284,10 @@ function logSearchOutcome(message: Anthropic.Message): void {
   }
 }
 
-async function requestSongPlan(llmPrompt: string): Promise<SongPlan> {
+async function requestSongPlan(
+  llmPrompt: string,
+  lang: VocalLanguage
+): Promise<SongPlan> {
   // 生成は必ず参照曲を持つので web_search は常時有効。
   // code_execution は宣言しない — web_search_20260209 の動的フィルタリングが内部で使うため、
   // 別途宣言すると実行環境が 2 つになりモデルが混乱する
@@ -253,7 +296,9 @@ async function requestSongPlan(llmPrompt: string): Promise<SongPlan> {
   ];
 
   const { llmModel, llmEffort } = getLlmSettings();
-  console.log(`[llm] ${llmModel} で生成します(effort=${llmEffort} / web_search 有効)`);
+  console.log(
+    `[llm] ${llmModel} で生成します(effort=${llmEffort} / 歌詞=${lang} / web_search 有効)`
+  );
 
   let messages: Anthropic.MessageParam[] = [{ role: "user", content: llmPrompt }];
   for (let resumes = 0; ; resumes++) {
@@ -269,7 +314,7 @@ async function requestSongPlan(llmPrompt: string): Promise<SongPlan> {
         tools,
         output_config: {
           effort: llmEffort,
-          format: { type: "json_schema", schema: SONG_PLAN_SCHEMA },
+          format: { type: "json_schema", schema: songPlanSchema(lang) },
         },
       })
       .finalMessage();
@@ -358,8 +403,9 @@ function planIssues(
 // リアルワードの使用制限は両経路共通でここで一元処理する
 export async function generateSongPlan(input: SongPlanInput): Promise<SongPlanResult> {
   const limits = currentWordLimits();
-  let llmPrompt = buildSongPlanPrompt(input, limits);
-  let plan = await requestSongPlan(llmPrompt);
+  const lang = getVocalLanguage();
+  let llmPrompt = buildSongPlanPrompt(input, limits, lang);
+  let plan = await requestSongPlan(llmPrompt, lang);
 
   // 検証リトライ: 禁止ワードの残留・固有名詞の混入があれば、指示を強めて 1 回だけ再生成する
   const issues = planIssues(plan, input, limits);
@@ -368,7 +414,7 @@ export async function generateSongPlan(input: SongPlanInput): Promise<SongPlanRe
       `[llm] ${issues.map((i) => i.label).join(" / ")}が含まれたため再生成します`
     );
     llmPrompt += `\n\n## 再生成の指示(厳守)\n${issues.map((i) => i.instruction).join("\n")}`;
-    plan = await requestSongPlan(llmPrompt);
+    plan = await requestSongPlan(llmPrompt, lang);
     const still = planIssues(plan, input, limits);
     if (still.length > 0) {
       // 生成は止めない(警告のみ。固有名詞が残った場合は Suno 側で FAILED として観測できる)
@@ -379,5 +425,5 @@ export async function generateSongPlan(input: SongPlanInput): Promise<SongPlanRe
   }
 
   console.log(`[llm] 生成プラン: "${plan.title}" style=${plan.style.slice(0, 80)}...`);
-  return { plan, llmModel: LLM_MODEL, llmPrompt };
+  return { plan, llmModel: LLM_MODEL, llmPrompt, lyricsLang: lang };
 }
