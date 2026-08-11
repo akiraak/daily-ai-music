@@ -113,11 +113,21 @@ function trackElement(t) {
     ${t.imageUrl ? `<img class="cover" src="${t.imageUrl}" alt="" loading="lazy">` : '<div class="cover placeholder"></div>'}
     <div class="track-body">
       <div class="track-title"></div>
+      <div class="track-reference" hidden></div>
       <div class="track-meta">${formatDuration(t.duration)}<span> · ${formatDate(t.createdAt)}</span></div>
       <audio controls preload="none" src="${t.audioUrl}"></audio>
       <div class="word-tags" hidden></div>
     </div>`;
   li.querySelector(".track-title").textContent = t.title;
+  {
+    // 生成元の曲(スナップショット)。折りたたみの中にも出すが、開かなくても見えるようにする。
+    // 参照曲を持たない旧データは行ごと隠す
+    const reference = li.querySelector(".track-reference");
+    reference.hidden = !t.refArtistName;
+    if (t.refArtistName) {
+      reference.textContent = `リファレンス: ${t.refArtistName}「${t.refSongTitle}」`;
+    }
+  }
   {
     // リアルワード(曲の中心となった語)を展開せずに見えるタグで表示。無い旧データは行ごと隠す
     const words = t.realWorldWords ?? [];

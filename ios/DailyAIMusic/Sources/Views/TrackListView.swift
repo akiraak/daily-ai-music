@@ -278,6 +278,9 @@ private struct HeroCard: View {
                     .padding(.top, 2)
             }
 
+            ReferenceLine(track: track)
+                .padding(.top, 2)
+
             let words = track.realWorldWords
             if !words.isEmpty {
                 SingleLinePillLayout(spacing: 6) {
@@ -295,6 +298,24 @@ private struct HeroCard: View {
         .contentShape(Rectangle())
         .onTapGesture(perform: onOpen)
         .accessibilityIdentifier("hero.card")
+    }
+}
+
+// MARK: - 生成元(リファレンス)
+
+/// その曲を作るときに参照した曲(使用時点のスナップショット)を 1 行で出す。
+/// 楽曲詳細の「リファレンス」セクションと同じ文言で、一覧では折り返さず省略する。
+/// 参照曲を持たない旧データでは何も出さない
+private struct ReferenceLine: View {
+    let track: Track
+
+    var body: some View {
+        if let reference = track.referenceLabel {
+            Text("リファレンス: \(reference)")
+                .font(.caption2)
+                .foregroundStyle(Color.secondary)
+                .lineLimit(1)
+        }
     }
 }
 
@@ -325,6 +346,7 @@ private struct TrackRow: View {
                             .font(.caption)
                             .foregroundStyle(Color.secondary)
                             .lineLimit(1)
+                        ReferenceLine(track: track)
                         pillsRow
                     }
 

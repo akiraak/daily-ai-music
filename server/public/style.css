@@ -190,6 +190,8 @@ ul { list-style: none; margin: 0; padding: 0; }
 }
 .track-body { flex: 1; min-width: 0; }
 .track-title { font-weight: 600; overflow-wrap: anywhere; }
+/* 生成元の曲(リファレンス)。曲名の直下に 1 行、メタ情報と同じ控えめな見た目で出す */
+.track-reference { color: var(--muted); font-size: 0.8rem; margin-top: 2px; overflow-wrap: anywhere; }
 .track-meta { color: var(--muted); font-size: 0.8rem; margin-bottom: 6px; }
 .track audio { width: 100%; height: 36px; }
 
