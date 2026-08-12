@@ -54,6 +54,41 @@ final class GenerateUITests: XCTestCase {
         attachScreenshot(app, name: "artists-list")
     }
 
+    /// アーティストの曲一覧。有効/無効のトグルと表示フィルタが出るところまでを確認する
+    /// (トグルを実際に動かすとサーバーの曲が無効になるため、ここでは表示だけ見る。
+    /// PATCH は curl シナリオでカバー済み)
+    @MainActor
+    func testArtistSongsShowEnabledToggle() throws {
+        let app = XCUIApplication()
+        app.launch()
+
+        app.tabBars.buttons["生成"].tap()
+        let row = app.buttons["generate.artists"]
+        XCTAssertTrue(row.waitForExistence(timeout: 5), "アーティストから生成の行があること")
+        row.tap()
+
+        let artist = app.buttons["artists.row"].firstMatch
+        guard artist.waitForExistence(timeout: 5) else {
+            throw XCTSkip("アーティストが登録されていないため曲一覧を開けない")
+        }
+        artist.tap()
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["artist.songs.filter"].firstMatch
+                .waitForExistence(timeout: 5),
+            "曲の絞り込み欄があること"
+        )
+        XCTAssertTrue(
+            app.descendants(matching: .any)["artist.songs.visibility"].firstMatch.exists,
+            "表示フィルタ(すべて / 有効のみ)があること"
+        )
+        XCTAssertTrue(
+            app.switches["artist.song.toggle"].firstMatch.waitForExistence(timeout: 5),
+            "曲行に有効/無効のトグルがあること"
+        )
+        attachScreenshot(app, name: "artist-songs")
+    }
+
     /// 曲名からの生成への導線。検索して候補が並ぶところまでを確認する
     /// (登録は iTunes からの取り込みと生成まで進んでクレジットを消費するため候補はタップしない。
     /// サーバー側は curl シナリオでカバー済み)

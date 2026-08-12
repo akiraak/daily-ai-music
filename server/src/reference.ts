@@ -1,7 +1,8 @@
 // 毎日の自動生成で使う参照曲の選択。登録済みの曲(artist_songs)から 1 曲を選び、
 // その曲に似た新曲を作らせる。選ぶのはサーバー(LLM には選ばせない)。
 //
-// 選択規則は「ノイズ除外 → アーティストを LRU で選ぶ → その人の曲を LRU で選ぶ」の 2 段階。
+// 選択規則は「有効な曲(artist_songs.enabled = 1)だけを候補に、アーティストを LRU で選ぶ →
+// その人の曲を LRU で選ぶ」の 2 段階(候補の絞り込みは db.listReferenceCandidates() が行う)。
 // アーティスト一様にするのは、取り込みが 1 アーティスト最大 200 曲でカタログの大小差が
 // 桁違いのため(曲一様だと大カタログの人ばかり選ばれる)。LRU + ランダムなら「直近 N 日は除外」
 // のような設定を増やさずに、連続回避・枯渇回避・一巡が同時に成立する
@@ -16,65 +17,6 @@ export interface ReferenceCandidate {
   releaseYear: number | null;
   genre: string | null;
   lastUsedAt: string | null; // この曲を参照したタスクの最新 created_at(未使用は null)
-}
-
-// 別バージョン・派生音源を示す語。iTunes の取り込みは曲名の完全一致でしか重複を畳まないため、
-// 同じ曲のライブ版・リミックスがそのまま候補に残る。参照曲としては原曲を引きたい
-const NOISE_KEYWORDS = [
-  "live",
-  "remix",
-  "instrumental",
-  "karaoke",
-  "cover",
-  "off vocal",
-  "acoustic version",
-  "acoustic ver",
-  "demo",
-  "remaster",
-  "remastered",
-  "radio edit",
-  "tv size",
-  "a cappella",
-  "acappella",
-  "backing track",
-  "reprise",
-  "medley",
-  "ライブ",
-  "ライヴ",
-  "カラオケ",
-  "インスト",
-  "オフボーカル",
-];
-
-// ASCII の語は語境界で見る(「cover」が「discovery」に誤ヒットしないように)。
-// 日本語などの非 ASCII は語境界の概念が無いので単純な部分一致
-function containsKeyword(lower: string, keyword: string): boolean {
-  if (/^[\x20-\x7e]+$/.test(keyword)) {
-    const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    return new RegExp(`(^|[^a-z0-9])${escaped}([^a-z0-9]|$)`).test(lower);
-  }
-  return lower.includes(keyword);
-}
-
-// 曲名のうち、括弧書き・ダッシュ以降の「注釈」部分だけを取り出す。
-// 本題側は見ない(「Live and Let Die」「Cover Me」のような原曲を落とさないため)
-function annotations(title: string): string[] {
-  const parts: string[] = title.match(/[([{（【][^)\]}）】]*[)\]}）】]/g) ?? [];
-  parts.push(...title.split(/\s[-–—~〜]\s?/).slice(1));
-  return parts;
-}
-
-export function isNoisyTitle(title: string): boolean {
-  return annotations(title).some((part) => {
-    const lower = part.toLowerCase();
-    return NOISE_KEYWORDS.some((k) => containsKeyword(lower, k));
-  });
-}
-
-// ノイズ除外を適用した候補。除外した結果 0 件になるなら適用しない(小さいカタログを空にしない)
-export function usableCandidates(candidates: ReferenceCandidate[]): ReferenceCandidate[] {
-  const filtered = candidates.filter((c) => !isNoisyTitle(c.title));
-  return filtered.length > 0 ? filtered : candidates;
 }
 
 // 未使用(null)を最古とみなす比較
@@ -132,8 +74,7 @@ export function pickReferenceSong(
   random: () => number = Math.random
 ): ReferenceCandidate | undefined {
   if (candidates.length === 0) return undefined;
-  const pool = usableCandidates(candidates);
-  const artists = [...groupByArtist(pool).values()];
+  const artists = [...groupByArtist(candidates).values()];
   const songs = pickOne(oldestGroup(artists, artistLastUsedAt), random);
   return pickOne(oldestGroup(songs, (s) => s.lastUsedAt), random);
 }
@@ -155,12 +96,12 @@ export function listCandidates(): ReferenceCandidate[] {
   return db.listReferenceCandidates().map(toCandidate);
 }
 
-// DB から候補を取って 1 曲選ぶ。登録が 1 件も無ければ undefined(呼び出し側がフォールバックする)
+// DB から候補を取って 1 曲選ぶ。有効な曲が 1 曲も無ければ undefined(呼び出し側が 409 にする)
 export function selectReferenceSong(): ReferenceCandidate | undefined {
   return pickReferenceSong(listCandidates());
 }
 
-// 生成パラメータ画面用のアーティスト別サマリ(候補曲数はノイズ除外後の数)。
+// 生成パラメータ画面用のアーティスト別サマリ(候補曲数は有効な曲の数)。
 // 最終使用が古い順 = 次に選ばれやすい順に並べる
 export interface ReferenceArtistSummary {
   artistId: number;
@@ -172,7 +113,7 @@ export interface ReferenceArtistSummary {
 export function referenceCandidateSummary(
   candidates: ReferenceCandidate[] = listCandidates()
 ): ReferenceArtistSummary[] {
-  const summaries = [...groupByArtist(usableCandidates(candidates)).values()].map(
+  const summaries = [...groupByArtist(candidates).values()].map(
     (songs) => ({
       artistId: songs[0].artistId,
       artistName: songs[0].artistName,

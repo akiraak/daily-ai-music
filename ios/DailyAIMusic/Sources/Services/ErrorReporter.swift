@@ -33,6 +33,8 @@ actor ErrorReporter {
     /// 未送信の報告(アプリ終了で捨てる。サーバーが落ちているときに溜め込まないよう上限付き)
     private var pending: [Report] = []
     private var lastReportedAt: [String: Date] = [:]
+    /// 送信中フラグ(flush を同時に走らせないため。理由は flush() のコメント)
+    private var isFlushing = false
 
     private static let maxPending = 20
     private static let dedupeInterval: TimeInterval = 60
@@ -110,29 +112,37 @@ actor ErrorReporter {
         await flush()
     }
 
+    /// 送信は同時に 1 本だけにする(actor は await で中断するので、guard が無いと
+    /// 複数の flush が同じ batch を送りに行き、戻ってきた側が既に消えた分まで
+    /// removeFirst して落ちる。実際に画像 404 が 20 件並んだときにクラッシュした)。
+    /// 走っている間に積まれた分は while で続けて送る
     private func flush() async {
-        guard !pending.isEmpty else { return }
-        let batch = pending
-        guard var request = try? BackendAPI.makeRequest(path: "/api/client-errors", method: "POST"),
-              let body = try? JSONEncoder().encode(Payload(errors: batch)) else {
-            pending.removeAll()
-            return
-        }
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = body
-        do {
-            let (_, response) = try await URLSession.shared.data(for: request)
-            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
-            if (200...299).contains(statusCode) {
-                pending.removeFirst(batch.count)
-            } else {
-                // 401(secret 未設定)などは何度送っても通らないので溜めずに捨てる
-                logger.error("報告に失敗: HTTP \(statusCode, privacy: .public)(\(batch.count) 件を破棄)")
-                pending.removeFirst(batch.count)
+        guard !isFlushing else { return }
+        isFlushing = true
+        defer { isFlushing = false }
+
+        while !pending.isEmpty {
+            let batch = pending
+            guard var request = try? BackendAPI.makeRequest(path: "/api/client-errors", method: "POST"),
+                  let body = try? JSONEncoder().encode(Payload(errors: batch)) else {
+                pending.removeAll()
+                return
             }
-        } catch {
-            // 通信できないだけなら次の報告時に送り直す
-            logger.info("報告を保留(\(batch.count, privacy: .public) 件): \(error.localizedDescription, privacy: .public)")
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = body
+            do {
+                let (_, response) = try await URLSession.shared.data(for: request)
+                let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
+                if !(200...299).contains(statusCode) {
+                    // 401(secret 未設定)などは何度送っても通らないので溜めずに捨てる
+                    logger.error("報告に失敗: HTTP \(statusCode, privacy: .public)(\(batch.count) 件を破棄)")
+                }
+                pending.removeFirst(batch.count)
+            } catch {
+                // 通信できないだけなら次の報告時に送り直す
+                logger.info("報告を保留(\(batch.count, privacy: .public) 件): \(error.localizedDescription, privacy: .public)")
+                return
+            }
         }
     }
 }

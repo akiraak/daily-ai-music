@@ -113,6 +113,13 @@ api.post("/generate", async (c) => {
   if (!song) {
     return c.json({ error: "参照する楽曲が見つかりません" }, 404);
   }
+  // 無効な曲は UI 側でも押せないが、サーバーで弾くのが正(LLM を呼ぶ前なのでクレジットも消えない)
+  if (song.enabled === 0) {
+    return c.json(
+      { error: "この曲は無効になっています。曲一覧で有効にしてから生成してください" },
+      409
+    );
+  }
 
   // タスク一覧に出す表示用のリクエスト内容
   const promptParts = [`${song.artist_name}「${song.title}」風`];
@@ -459,6 +466,8 @@ function artistJson(a: db.ArtistWithCountRow) {
     itunesArtistId: a.itunes_artist_id,
     genre: a.genre,
     songCount: a.song_count,
+    // 参照曲の候補になる曲数(無効にした曲を除く)
+    enabledSongCount: a.enabled_song_count,
     createdAt: a.created_at,
   };
 }
@@ -471,6 +480,8 @@ function artistSongJson(s: db.ArtistSongRow) {
     album: s.album,
     releaseYear: s.release_year,
     genre: s.genre,
+    // false の曲は参照曲に選ばれない(生成の指定もできない)
+    enabled: s.enabled === 1,
   };
 }
 
@@ -548,6 +559,28 @@ api.get("/artists/:id/songs", (c) => {
   });
 });
 
+// 曲一覧の一括操作(「全て有効」「全て無効」「絞り込み中の曲をまとめて」)。
+// body は { enabled, ids? } で、ids を省略するとそのアーティストの全曲が対象
+api.patch("/artists/:id/songs", async (c) => {
+  const id = Number(c.req.param("id"));
+  if (!Number.isInteger(id)) return c.json({ error: "不正な id です" }, 400);
+  const artist = db.getArtist(id);
+  if (!artist) return c.json({ error: "アーティストが見つかりません" }, 404);
+  const body = await c.req.json().catch(() => null);
+  if (typeof body?.enabled !== "boolean") {
+    return c.json({ error: "enabled は boolean です" }, 400);
+  }
+  let ids: number[] | undefined;
+  if (body.ids !== undefined) {
+    if (!Array.isArray(body.ids) || !body.ids.every((v: unknown) => Number.isInteger(v))) {
+      return c.json({ error: "ids は数値の配列です" }, 400);
+    }
+    ids = body.ids as number[];
+  }
+  const updated = db.setArtistSongsEnabled(id, body.enabled, ids);
+  return c.json({ artist: artistJson(db.getArtist(id)!), updated });
+});
+
 // 楽曲リストの再取得(新譜の取り込み)。既存曲はそのままで差分だけ追加する
 api.post("/artists/:id/refresh", async (c) => {
   const id = Number(c.req.param("id"));
@@ -590,6 +623,20 @@ api.get("/artist-songs/search", async (c) => {
     logRouteFailure(c, err, 502);
     return c.json({ error: String(err instanceof Error ? err.message : err) }, 502);
   }
+});
+
+// 曲 1 件の有効/無効。無効な曲は参照曲に選ばれず、POST /generate でも 409 になる
+api.patch("/artist-songs/:id", async (c) => {
+  const id = Number(c.req.param("id"));
+  if (!Number.isInteger(id)) return c.json({ error: "不正な id です" }, 400);
+  const body = await c.req.json().catch(() => null);
+  if (typeof body?.enabled !== "boolean") {
+    return c.json({ error: "enabled は boolean です" }, 400);
+  }
+  if (!db.setArtistSongEnabled(id, body.enabled)) {
+    return c.json({ error: "曲が見つかりません" }, 404);
+  }
+  return c.json({ song: artistSongJson(db.getArtistSong(id)!) });
 });
 
 // 曲を 1 曲登録する。body は { itunesTrackId } のみで、曲メタはサーバーが取り直す
@@ -649,6 +696,12 @@ api.post("/artist-songs", async (c) => {
       ]);
       song = db.findArtistSongByTitle(artist.id, track.title);
       if (!song) return c.json({ error: "曲の登録に失敗しました" }, 500);
+    }
+    // 無効(取り込み時のノイズ判定 or 手動)なら有効に戻す。この曲で生成するために
+    // 選んだ操作なので、選び直し自体が「有効にする」の意思表示になる
+    if (song.enabled === 0) {
+      db.setArtistSongEnabled(song.id, true);
+      song = db.findArtistSongByTitle(artist.id, track.title)!;
     }
 
     console.log(

@@ -172,7 +172,10 @@ function artistRow(a) {
     <button type="button" class="icon-btn" data-act="refresh">再取得</button>
     <button type="button" class="icon-btn" data-act="delete">削除</button>`;
   li.querySelector(".artist-name").textContent = a.name;
-  li.querySelector(".artist-meta").textContent = [a.genre, `${a.songCount} 曲`]
+  li.querySelector(".artist-meta").textContent = [
+    a.genre,
+    `${a.enabledSongCount} / ${a.songCount} 曲`,
+  ]
     .filter(Boolean)
     .join(" / ");
   li.querySelector('[data-act="songs"]').addEventListener("click", () => loadSongs(a));
@@ -243,16 +246,55 @@ async function generate(song) {
   }
 }
 
-function renderSongs() {
+// チェックの切り替え。押した瞬間に見た目を変え(楽観更新)、失敗したら元に戻す
+async function setSongEnabled(song, enabled, checkbox) {
+  const previous = song.enabled;
+  song.enabled = enabled;
+  checkbox.closest(".song").classList.toggle("is-disabled", !enabled);
+  checkbox.closest(".song").querySelector('[data-act="generate"]').disabled = !enabled;
+  try {
+    await fetchJson(`/admin/api/artist-songs/${song.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled }),
+    });
+    showMessage("songs-message", null);
+    updateSongsTitle();
+    loadArtists();
+  } catch (err) {
+    song.enabled = previous;
+    checkbox.checked = previous;
+    checkbox.closest(".song").classList.toggle("is-disabled", !previous);
+    checkbox.closest(".song").querySelector('[data-act="generate"]').disabled = !previous;
+    showMessage("songs-message", err.message);
+  }
+}
+
+// 表示中の曲(絞り込み + 表示フィルタ)。一括操作の対象もこれに揃える
+function visibleSongs() {
   const keyword = $("song-filter").value.trim().toLowerCase();
-  const songs = keyword
-    ? currentSongs.filter((s) => s.title.toLowerCase().includes(keyword))
-    : currentSongs;
+  const visibility = $("song-visibility").value;
+  return currentSongs.filter((s) => {
+    if (keyword && !s.title.toLowerCase().includes(keyword)) return false;
+    if (visibility === "enabled") return s.enabled;
+    if (visibility === "disabled") return !s.enabled;
+    return true;
+  });
+}
+
+function updateSongsTitle() {
+  const enabled = currentSongs.filter((s) => s.enabled).length;
+  $("songs-title").textContent =
+    `${currentArtist.name} の曲(有効 ${enabled} / 全 ${currentSongs.length})`;
+}
+
+function renderSongs() {
   $("songs").replaceChildren(
-    ...songs.map((s) => {
+    ...visibleSongs().map((s) => {
       const li = document.createElement("li");
-      li.className = "song";
+      li.className = s.enabled ? "song" : "song is-disabled";
       li.innerHTML = `
+        <label class="song-enabled"><input type="checkbox" data-act="enabled"><span>有効</span></label>
         <span class="song-title"></span>
         <span class="song-meta"></span>
         <button type="button" class="icon-btn" data-act="generate">この曲で生成</button>`;
@@ -260,10 +302,42 @@ function renderSongs() {
       li.querySelector(".song-meta").textContent = [s.releaseYear, s.album]
         .filter(Boolean)
         .join(" / ");
-      li.querySelector('[data-act="generate"]').addEventListener("click", () => generate(s));
+      const checkbox = li.querySelector('[data-act="enabled"]');
+      checkbox.checked = s.enabled;
+      checkbox.addEventListener("change", () =>
+        setSongEnabled(s, checkbox.checked, checkbox)
+      );
+      const generateBtn = li.querySelector('[data-act="generate"]');
+      generateBtn.disabled = !s.enabled;
+      generateBtn.addEventListener("click", () => generate(s));
       return li;
     })
   );
+}
+
+// 一括操作。絞り込み・表示フィルタが効いているときはその見えている曲だけを対象にする
+// (「全て」と言いながら見えていない曲まで変えると取り返しがつかないため)
+async function setSongsEnabled(enabled) {
+  const targets = visibleSongs();
+  if (targets.length === 0) return;
+  const all = targets.length === currentSongs.length;
+  const label = all ? `全 ${targets.length} 曲` : `表示中の ${targets.length} 曲`;
+  if (!confirm(`${label}を${enabled ? "有効" : "無効"}にしますか?`)) return;
+  try {
+    await fetchJson(`/admin/api/artists/${currentArtist.id}/songs`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        enabled,
+        ...(all ? {} : { ids: targets.map((s) => s.id) }),
+      }),
+    });
+    showMessage("songs-message", null);
+    await loadArtists();
+    await loadSongs(currentArtist);
+  } catch (err) {
+    showMessage("songs-message", err.message);
+  }
 }
 
 async function loadSongs(artist) {
@@ -275,6 +349,7 @@ async function loadSongs(artist) {
   try {
     const { songs } = await fetchJson(`/admin/api/artists/${artist.id}/songs`);
     currentSongs = songs;
+    updateSongsTitle();
     renderSongs();
   } catch (err) {
     showMessage("songs-message", err.message);
@@ -282,6 +357,9 @@ async function loadSongs(artist) {
 }
 
 $("song-filter").addEventListener("input", renderSongs);
+$("song-visibility").addEventListener("change", renderSongs);
+$("songs-enable-all").addEventListener("click", () => setSongsEnabled(true));
+$("songs-disable-all").addEventListener("click", () => setSongsEnabled(false));
 
 applyKind();
 loadArtists();

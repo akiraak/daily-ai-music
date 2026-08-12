@@ -113,10 +113,13 @@ export interface DailyRunStart {
   complete: () => Promise<db.TaskRow>;
 }
 
-// 参照曲の候補が 1 件も無い(アーティスト未登録)。呼び出し側が 409 と再試行の判断に使う
+// 参照曲の候補が 1 件も無い(アーティスト未登録、または曲がすべて無効)。
+// 呼び出し側が 409 と再試行の判断に使う
 export class NoReferenceSongError extends Error {
   constructor() {
-    super("参照曲が登録されていないため生成できません。アーティストを登録してください");
+    super(
+      "生成できる参照曲がありません。アーティストを登録するか、曲一覧で曲を有効にしてください"
+    );
     this.name = "NoReferenceSongError";
   }
 }
@@ -229,15 +232,23 @@ async function tick(): Promise<void> {
     // 参照曲が 0 件のときもここに来る。last_daily_* を進めないので、アーティストを
     // 登録すればその日のうちに追い生成される
     lastFailedAt = Date.now();
-    // 参照曲 0 件(= アーティスト未登録の設定漏れ)は原因も対処も違うので event を分ける
+    // 参照曲 0 件(= アーティスト未登録の設定漏れ)は原因も対処も違うので event を分ける。
+    // 曲数も残して「未登録」と「全部無効」をログで区別できるようにする
     const noReference = err instanceof NoReferenceSongError;
+    const artists = noReference ? db.listArtists() : [];
     logError({
       source: "scheduler",
       event: noReference ? "no_reference_song" : "daily_failed",
       message: `自動生成に失敗(30 分後に再試行): ${err}`,
       detail: {
         localDate: localDateForLog,
-        artistCount: noReference ? db.listArtists().length : undefined,
+        artistCount: noReference ? artists.length : undefined,
+        songCount: noReference
+          ? artists.reduce((sum, a) => sum + a.song_count, 0)
+          : undefined,
+        enabledSongCount: noReference
+          ? artists.reduce((sum, a) => sum + a.enabled_song_count, 0)
+          : undefined,
         ...errorDetail(err),
       },
     });

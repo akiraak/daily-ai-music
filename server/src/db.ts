@@ -1,6 +1,7 @@
 // メタデータ DB(node:sqlite)。tasks = 生成ジョブ、tracks = 完成した楽曲
 import { DatabaseSync } from "node:sqlite";
 import { DB_PATH } from "./config.ts";
+import { isNoisyTitle } from "./songtitle.ts";
 
 // 進行中はプロバイダのステータス(PENDING / TEXT_SUCCESS / FIRST_SUCCESS / SUCCESS)を
 // そのまま保持し、音源の保存まで終えたら COMPLETE、失敗は FAILED にする。
@@ -102,6 +103,8 @@ db.exec(`
     release_year INTEGER,
     genre TEXT,
     itunes_track_id INTEGER,
+    -- 参照曲の候補に入れるか(2026-08-11 追加)。取り込み時に曲名で初期値を決め、以後は人が上書きする
+    enabled INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     UNIQUE (artist_id, title)
   );
@@ -156,6 +159,33 @@ addColumnIfMissing("tasks", "artist_id", "artist_id INTEGER");
 addColumnIfMissing("tasks", "artist_song_id", "artist_song_id INTEGER");
 addColumnIfMissing("tasks", "ref_artist_name", "ref_artist_name TEXT");
 addColumnIfMissing("tasks", "ref_song_title", "ref_song_title TEXT");
+// 参照曲の有効/無効(2026-08-11 追加)。既存行はすべて 1 で入り、直後の backfill で
+// ノイズ判定に当たるものだけ 0 に落とす
+addColumnIfMissing("artist_songs", "enabled", "enabled INTEGER NOT NULL DEFAULT 1");
+
+// 実行時のノイズ除外(Live / Remix 等を生成のたびに候補から外す)を enabled に一本化した
+// ときの引き継ぎ。既存曲に同じ基準を 1 回だけ当てる。
+// 冪等ではない(人が有効に戻した曲を毎起動で無効化してしまう)ので実施記録を settings に残す。
+// DROP TABLE IF EXISTS 系の後片付けとは性質が違う点に注意
+function backfillDisableNoisySongs(): void {
+  if (getSetting("migration_disable_noisy_songs") !== undefined) return;
+  const rows = db
+    .prepare(`SELECT id, title FROM artist_songs`)
+    .all() as unknown as { id: number; title: string }[];
+  const stmt = db.prepare(`UPDATE artist_songs SET enabled = 0 WHERE id = ?`);
+  let disabled = 0;
+  for (const row of rows) {
+    if (isNoisyTitle(row.title)) {
+      stmt.run(row.id);
+      disabled++;
+    }
+  }
+  setSetting("migration_disable_noisy_songs", new Date().toISOString());
+  console.log(
+    `[db] 別バージョン(Live / Remix 等)の ${disabled} 曲を無効にしました(全 ${rows.length} 曲)`
+  );
+}
+backfillDisableNoisySongs();
 
 // 参照曲ベース化(2026-08-10)で廃止した機能の後片付け。プリセット・評価(👍/👎)・
 // 好みプロファイル文書は生成にも表示にも使わなくなった。DROP / DROP COLUMN は
@@ -484,7 +514,11 @@ export interface ArtistRow {
   created_at: string;
 }
 
-export type ArtistWithCountRow = ArtistRow & { song_count: number };
+// enabled_song_count = 参照曲の候補になる曲数(song_count はすべての取り込み曲)
+export type ArtistWithCountRow = ArtistRow & {
+  song_count: number;
+  enabled_song_count: number;
+};
 
 export interface ArtistSongRow {
   id: number;
@@ -494,24 +528,26 @@ export interface ArtistSongRow {
   release_year: number | null;
   genre: string | null;
   itunes_track_id: number | null;
+  enabled: number; // 1 = 参照曲の候補に入れる
   created_at: string;
 }
 
+// 曲数の集計は 4 か所(一覧・id / iTunes ID / 名前による単体取得)で同じものを使う
+const ARTIST_WITH_COUNT_SELECT = `SELECT a.*,
+    (SELECT COUNT(*) FROM artist_songs s WHERE s.artist_id = a.id) AS song_count,
+    (SELECT COUNT(*) FROM artist_songs s WHERE s.artist_id = a.id AND s.enabled = 1)
+      AS enabled_song_count
+  FROM artists a`;
+
 export function listArtists(): ArtistWithCountRow[] {
   return db
-    .prepare(
-      `SELECT a.*, (SELECT COUNT(*) FROM artist_songs s WHERE s.artist_id = a.id) AS song_count
-       FROM artists a ORDER BY a.name`
-    )
+    .prepare(`${ARTIST_WITH_COUNT_SELECT} ORDER BY a.name`)
     .all() as unknown as ArtistWithCountRow[];
 }
 
 export function getArtist(id: number): ArtistWithCountRow | undefined {
   return db
-    .prepare(
-      `SELECT a.*, (SELECT COUNT(*) FROM artist_songs s WHERE s.artist_id = a.id) AS song_count
-       FROM artists a WHERE a.id = ?`
-    )
+    .prepare(`${ARTIST_WITH_COUNT_SELECT} WHERE a.id = ?`)
     .get(id) as ArtistWithCountRow | undefined;
 }
 
@@ -520,8 +556,7 @@ export function getArtist(id: number): ArtistWithCountRow | undefined {
 export function getArtistByItunesId(itunesArtistId: number): ArtistWithCountRow | undefined {
   return db
     .prepare(
-      `SELECT a.*, (SELECT COUNT(*) FROM artist_songs s WHERE s.artist_id = a.id) AS song_count
-       FROM artists a WHERE a.itunes_artist_id = ? ORDER BY a.id LIMIT 1`
+      `${ARTIST_WITH_COUNT_SELECT} WHERE a.itunes_artist_id = ? ORDER BY a.id LIMIT 1`
     )
     .get(itunesArtistId) as ArtistWithCountRow | undefined;
 }
@@ -529,10 +564,7 @@ export function getArtistByItunesId(itunesArtistId: number): ArtistWithCountRow 
 // name の UNIQUE 違反で登録に失敗したときに、その名前の既存行へ合流するため
 export function getArtistByName(name: string): ArtistWithCountRow | undefined {
   return db
-    .prepare(
-      `SELECT a.*, (SELECT COUNT(*) FROM artist_songs s WHERE s.artist_id = a.id) AS song_count
-       FROM artists a WHERE a.name = ?`
-    )
+    .prepare(`${ARTIST_WITH_COUNT_SELECT} WHERE a.name = ?`)
     .get(name) as ArtistWithCountRow | undefined;
 }
 
@@ -561,12 +593,14 @@ export interface ArtistSongInput {
   itunesTrackId: number | null;
 }
 
-// 楽曲リストの取り込み。INSERT OR IGNORE なので既存曲(同じ title)はそのままで新譜だけ増える。
-// 追加された件数を返す
+// 楽曲リストの取り込み。INSERT OR IGNORE なので既存曲(同じ title)はそのままで新譜だけ増える
+// (既存曲の enabled は再取得でも変えない)。追加された件数を返す。
+// enabled の初期値は曲名で決める — Live / Remix 等の別バージョンは参照曲に向かないので
+// 最初から無効で入れる(人が曲一覧で有効に戻せる)
 export function insertArtistSongs(artistId: number, songs: ArtistSongInput[]): number {
   const stmt = db.prepare(
-    `INSERT OR IGNORE INTO artist_songs (artist_id, title, album, release_year, genre, itunes_track_id)
-     VALUES (?, ?, ?, ?, ?, ?)`
+    `INSERT OR IGNORE INTO artist_songs (artist_id, title, album, release_year, genre, itunes_track_id, enabled)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
   );
   let added = 0;
   for (const s of songs) {
@@ -576,11 +610,36 @@ export function insertArtistSongs(artistId: number, songs: ArtistSongInput[]): n
       s.album,
       s.releaseYear,
       s.genre,
-      s.itunesTrackId
+      s.itunesTrackId,
+      isNoisyTitle(s.title) ? 0 : 1
     );
     added += Number(r.changes);
   }
   return added;
+}
+
+// 1 曲の有効/無効を切り替える(存在しなければ false)
+export function setArtistSongEnabled(id: number, enabled: boolean): boolean {
+  return (
+    db
+      .prepare(`UPDATE artist_songs SET enabled = ? WHERE id = ?`)
+      .run(enabled ? 1 : 0, id).changes > 0
+  );
+}
+
+// 一括更新。ids を省略するとそのアーティストの全曲が対象。更新した件数を返す
+// (ids は呼び出し側で数値配列に検証済みのものを渡す)
+export function setArtistSongsEnabled(
+  artistId: number,
+  enabled: boolean,
+  ids?: number[]
+): number {
+  if (ids !== undefined && ids.length === 0) return 0;
+  const idFilter = ids ? ` AND id IN (${ids.map(() => "?").join(",")})` : "";
+  const result = db
+    .prepare(`UPDATE artist_songs SET enabled = ? WHERE artist_id = ?${idFilter}`)
+    .run(enabled ? 1 : 0, artistId, ...(ids ?? []));
+  return Number(result.changes);
 }
 
 // リリース年の新しい順(年不明は末尾)
@@ -620,10 +679,12 @@ export function getArtistSong(id: number): ArtistSongWithArtistRow | undefined {
     .get(id) as ArtistSongWithArtistRow | undefined;
 }
 
-// 毎日の自動生成が参照曲を選ぶための候補一覧(登録済みの全曲 + 最終使用日時)。
+// 毎日の自動生成が参照曲を選ぶための候補一覧(有効な曲 + 最終使用日時)。
 // last_used_at はその曲を参照したタスクの最新 created_at(未使用は NULL)で、
 // 選択側が LRU(未使用 → 古い順)に使う。受付時点でタスク行に artist_song_id が入るため、
-// 同じ日の 2 曲目を選ぶときには 1 曲目が「使用済み」として見える
+// 同じ日の 2 曲目を選ぶときには 1 曲目が「使用済み」として見える。
+// 無効な曲(enabled = 0)はここで落とす — 除外を 1 か所に集約し、「一覧では有効なのに
+// 生成では選ばれない曲」が生まれないようにするため
 export type ReferenceCandidateRow = ArtistSongWithArtistRow & {
   last_used_at: string | null;
 };
@@ -634,6 +695,7 @@ export function listReferenceCandidates(): ReferenceCandidateRow[] {
       `SELECT s.*, a.name AS artist_name,
               (SELECT MAX(t.created_at) FROM tasks t WHERE t.artist_song_id = s.id) AS last_used_at
        FROM artist_songs s JOIN artists a ON a.id = s.artist_id
+       WHERE s.enabled = 1
        ORDER BY s.id`
     )
     .all() as unknown as ReferenceCandidateRow[];

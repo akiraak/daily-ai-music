@@ -295,6 +295,19 @@ details.panel summary {
 /* 行末のボタンは見出しが長くても縮めない(「登録」が 2 行に割れないように) */
 .artist .icon-btn,
 .song .icon-btn { flex: 0 0 auto; white-space: nowrap; }
+/* 曲の有効/無効。無効行は薄く見せて「参照曲に選ばれない」ことを一目で分かるようにする */
+.song-enabled {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.song.is-disabled .song-title,
+.song.is-disabled .song-meta { color: var(--muted); opacity: 0.6; }
+.song .icon-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 /* 曲は最大 200 件になるのでパネル内でスクロールさせる */
 #songs { max-height: 460px; overflow-y: auto; }
 .form-message a { color: var(--accent); }

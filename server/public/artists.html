@@ -46,9 +46,18 @@
 
     <section class="panel" id="songs-panel" hidden>
       <h2 id="songs-title">曲を選ぶ</h2>
-      <p class="empty">曲を選ぶと、その曲の音楽的な特徴に似た新曲を AI が作ります(原曲の歌詞は使わず、完全な新作になります)。</p>
+      <p class="empty">曲を選ぶと、その曲の音楽的な特徴に似た新曲を AI が作ります(原曲の歌詞は使わず、完全な新作になります)。チェックを外した曲は参照曲に選ばれず、この曲での生成もできません(取り込み時に Live / Remix 等は自動で外れます)。</p>
       <div class="inline-form">
         <input id="song-filter" placeholder="曲名で絞り込み">
+        <select id="song-visibility">
+          <option value="all">すべて</option>
+          <option value="enabled">有効のみ</option>
+          <option value="disabled">無効のみ</option>
+        </select>
+        <button type="button" id="songs-enable-all">全て有効</button>
+        <button type="button" id="songs-disable-all">全て無効</button>
+      </div>
+      <div class="inline-form">
         <input id="song-extra" placeholder="追加の要望(任意。例: テンポを速めに)">
       </div>
       <ul id="songs"></ul>

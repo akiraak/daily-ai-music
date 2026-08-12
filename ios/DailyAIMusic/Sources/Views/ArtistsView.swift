@@ -94,7 +94,9 @@ struct ArtistsView: View {
                         Text(artist.name)
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(Color.primary)
-                        Text([artist.genre, "\(artist.songCount) 曲"].compactMap { $0 }.joined(separator: " · "))
+                        // 参照曲の候補になる曲数 / 取り込んだ全曲数
+                        Text([artist.genre, "有効 \(artist.enabledSongs) / 全 \(artist.songCount) 曲"]
+                            .compactMap { $0 }.joined(separator: " · "))
                             .font(.caption)
                             .foregroundStyle(Color.secondary)
                     }

@@ -157,6 +157,11 @@ struct Artist: Identifiable, Decodable, Hashable {
     let genre: String?
     /// 取り込み済みの曲数
     let songCount: Int
+    /// 参照曲の候補になる曲数(無効にした曲を除く)。旧サーバーは返さないので optional
+    let enabledSongCount: Int?
+
+    /// 一覧の「有効 N / 全 M 曲」の N(有効/無効を持たない旧サーバーでは全曲が候補)
+    var enabledSongs: Int { enabledSongCount ?? songCount }
 }
 
 struct ArtistsResponse: Decodable {
@@ -195,6 +200,12 @@ struct ArtistSong: Identifiable, Decodable, Hashable {
     let album: String?
     let releaseYear: Int?
     let genre: String?
+    /// 参照曲の候補にするか。旧サーバーは返さない(その頃は全曲が候補だったので nil = 有効)。
+    /// トグルの楽観反映(押した瞬間に見た目を変える)のため var
+    var enabled: Bool?
+
+    /// 無効な曲は参照曲に選ばれず、この曲での生成もできない(サーバーが 409 で弾く)
+    var isEnabled: Bool { enabled ?? true }
 
     /// 一覧の副題(年 / アルバム。どちらも無ければ空)
     var subtitle: String {
@@ -205,6 +216,15 @@ struct ArtistSong: Identifiable, Decodable, Hashable {
 struct ArtistSongsResponse: Decodable {
     let artist: Artist
     let songs: [ArtistSong]
+}
+
+/// PATCH /api/artist-songs/:id の body(曲 1 件の有効/無効)
+struct SetSongEnabledRequest: Encodable {
+    let enabled: Bool
+}
+
+struct ArtistSongResponse: Decodable {
+    let song: ArtistSong
 }
 
 // MARK: - 曲名からの登録(アーティストは iTunes の応答から逆引きする)
@@ -275,7 +295,7 @@ struct GenerationParams: Decodable {
     let trackedWordCount: Int
 }
 
-/// 参照曲の候補(アーティスト単位)。songCount は別バージョン(Live / Remix 等)を除いた曲数
+/// 参照曲の候補(アーティスト単位)。songCount は有効な曲(無効にした曲を除く)の数
 struct ReferenceCandidateSummary: Decodable, Identifiable {
     let artistId: Int
     let artistName: String
