@@ -3,6 +3,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { ANTHROPIC_API_KEY, LLM_MODEL } from "./config.ts";
 import * as db from "./db.ts";
+import { logWarn } from "./errorlog.ts";
 
 const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
 
@@ -278,7 +279,12 @@ function logSearchOutcome(message: Anthropic.Message): void {
     }
   }
   if (errors.length > 0) {
-    console.warn(`[llm] web_search が失敗しました(${errors.join(", ")})。推定で続行します`);
+    logWarn({
+      source: "llm",
+      event: "web_search_failed",
+      message: `web_search が失敗しました(${errors.join(", ")})。推定で続行します`,
+      detail: { errorCodes: errors, searches },
+    });
   } else if (searches > 0) {
     console.log(`[llm] web_search でリファレンス楽曲を調査(ツール呼び出し ${searches} 回)`);
   }
@@ -418,9 +424,16 @@ export async function generateSongPlan(input: SongPlanInput): Promise<SongPlanRe
     const still = planIssues(plan, input, limits);
     if (still.length > 0) {
       // 生成は止めない(警告のみ。固有名詞が残った場合は Suno 側で FAILED として観測できる)
-      console.warn(
-        `[llm] 再生成後も ${still.map((i) => i.label).join(" / ")} が残ったため、そのまま採用します`
-      );
+      logWarn({
+        source: "llm",
+        event: "plan_issue_remains",
+        message: `再生成後も ${still.map((i) => i.label).join(" / ")} が残ったため、そのまま採用します`,
+        detail: {
+          issues: still.map((i) => i.label),
+          title: plan.title,
+          referenceArtist: input.referenceSong.artist,
+        },
+      });
     }
   }
 

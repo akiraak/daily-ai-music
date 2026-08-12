@@ -106,6 +106,26 @@ db.exec(`
     UNIQUE (artist_id, title)
   );
   CREATE INDEX IF NOT EXISTS idx_artist_songs_artist ON artist_songs(artist_id);
+  -- アプリで起きた失敗の記録(2026-08-11 追加)。docker logs はローテートで消えるため
+  -- DB にも残し、Mac からは GET /api/errors + scripts/fetch-error-logs.sh で取る。
+  -- 書き込みは src/errorlog.ts の logError() / logWarn() 経由に一本化する
+  CREATE TABLE IF NOT EXISTS error_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    occurred_at TEXT NOT NULL,   -- 発生時刻(iOS からの報告はクライアントの時計)
+    received_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    last_seen_at TEXT NOT NULL,  -- 畳み込み中の最後の発生時刻
+    repeat_count INTEGER NOT NULL DEFAULT 1,
+    level TEXT NOT NULL,         -- 'error' | 'warn'
+    origin TEXT NOT NULL,        -- 'server' | 'ios'
+    source TEXT NOT NULL,        -- 'generation' | 'llm' | 'api' | 'scheduler' | ...
+    event TEXT NOT NULL,         -- 'task_failed' 等の安定した識別子(解析の分類キー)
+    message TEXT NOT NULL,
+    detail TEXT,                 -- JSON 文字列(stack・HTTP ステータス等)
+    fingerprint TEXT NOT NULL,   -- 同じ種類のエラーで一致する値(errorlog.ts が計算)
+    task_id INTEGER              -- 生成ジョブに紐づくものだけ(FK は張らない)
+  );
+  CREATE INDEX IF NOT EXISTS idx_error_logs_occurred ON error_logs(occurred_at);
+  CREATE INDEX IF NOT EXISTS idx_error_logs_fingerprint ON error_logs(fingerprint);
 `);
 
 // 既存 DB への後方互換マイグレーション(カラムが無ければ追加)
@@ -637,4 +657,112 @@ export function listRecentReferences(limit = 10): RecentReferenceRow[] {
        ORDER BY last_used_at DESC LIMIT ?`
     )
     .all(limit) as unknown as RecentReferenceRow[];
+}
+
+// --- エラーログ(書き込みは src/errorlog.ts 経由)---
+
+export interface ErrorLogRow {
+  id: number;
+  occurred_at: string;
+  received_at: string;
+  last_seen_at: string;
+  repeat_count: number;
+  level: string;
+  origin: string;
+  source: string;
+  event: string;
+  message: string;
+  detail: string | null;
+  fingerprint: string;
+  task_id: number | null;
+}
+
+// 同じ fingerprint がこの時間内に再発したら行を増やさず repeat_count に畳む。
+// 10 秒ポーラーや通信不能のアプリが同じエラーを吐き続けても DB が膨れないようにするため
+const ERROR_LOG_COLLAPSE = "-10 minutes";
+// 保持は 90 日かつ最大 5000 行(古い順に落とす)
+const ERROR_LOG_RETENTION = "-90 days";
+const ERROR_LOG_MAX_ROWS = 5000;
+
+export function insertErrorLog(input: {
+  occurredAt: string;
+  level: string;
+  origin: string;
+  source: string;
+  event: string;
+  message: string;
+  detail: string | null;
+  fingerprint: string;
+  taskId?: number | null;
+}): void {
+  // last_seen_at はサーバー時刻で入れる(occurred_at は iOS の申告値で、端末の時計が
+  // ずれていると since での絞り込みから漏れてしまうため)
+  const collapsed = db
+    .prepare(
+      `UPDATE error_logs
+       SET repeat_count = repeat_count + 1,
+           last_seen_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+       WHERE id = (SELECT id FROM error_logs
+                   WHERE fingerprint = ? AND origin = ?
+                     AND last_seen_at >= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ?)
+                   ORDER BY id DESC LIMIT 1)`
+    )
+    .run(input.fingerprint, input.origin, ERROR_LOG_COLLAPSE);
+  if (collapsed.changes > 0) return;
+
+  db.prepare(
+    `INSERT INTO error_logs (occurred_at, last_seen_at, level, origin, source, event,
+                             message, detail, fingerprint, task_id)
+     VALUES (?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    input.occurredAt,
+    input.level,
+    input.origin,
+    input.source,
+    input.event,
+    input.message,
+    input.detail,
+    input.fingerprint,
+    input.taskId ?? null
+  );
+  // 件数は 1 日あたり数件〜数十件の想定なので、挿入のたびに掃除しても負荷にならない
+  db.prepare(
+    `DELETE FROM error_logs WHERE last_seen_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ?)`
+  ).run(ERROR_LOG_RETENTION);
+  db.prepare(
+    `DELETE FROM error_logs
+     WHERE id NOT IN (SELECT id FROM error_logs ORDER BY id DESC LIMIT ?)`
+  ).run(ERROR_LOG_MAX_ROWS);
+}
+
+// since は ISO8601(この時刻以降に最後に発生したもの)。新しい順
+export function listErrorLogs(filter: {
+  since?: string;
+  level?: string;
+  origin?: string;
+  source?: string;
+  limit?: number;
+}): ErrorLogRow[] {
+  const where: string[] = [];
+  const params: (string | number)[] = [];
+  if (filter.since) {
+    where.push("last_seen_at >= ?");
+    params.push(filter.since);
+  }
+  for (const [column, value] of [
+    ["level", filter.level],
+    ["origin", filter.origin],
+    ["source", filter.source],
+  ] as const) {
+    if (value) {
+      where.push(`${column} = ?`);
+      params.push(value);
+    }
+  }
+  const sql =
+    `SELECT * FROM error_logs` +
+    (where.length > 0 ? ` WHERE ${where.join(" AND ")}` : "") +
+    ` ORDER BY last_seen_at DESC, id DESC LIMIT ?`;
+  params.push(filter.limit ?? 200);
+  return db.prepare(sql).all(...params) as unknown as ErrorLogRow[];
 }

@@ -4,6 +4,7 @@
 // サーバー停止中に実行時刻を跨いだ場合や途中失敗時も、残数だけ追い生成される
 import { buildTodayContext } from "./context.ts";
 import * as db from "./db.ts";
+import { errorDetail, logError } from "./errorlog.ts";
 import { acceptGeneration, completeGeneration } from "./generation.ts";
 import { selectReferenceSong } from "./reference.ts";
 
@@ -184,6 +185,8 @@ let lastFailedAt = 0;
 async function tick(): Promise<void> {
   if (ticking) return;
   ticking = true;
+  // 失敗ログに「いつの分の生成か」を残すために try の外で持つ
+  let localDateForLog: string | null = null;
   try {
     const settings = getDailySettings();
     if (!settings.dailyEnabled) return;
@@ -195,6 +198,7 @@ async function tick(): Promise<void> {
       lastDailyCount: getLastDailyCount(),
       dailyCount: settings.dailyCount,
     });
+    localDateForLog = localDate;
     if (!run) return;
     // 初回起動(記録なし)は当日分を生成済み扱いにする。導入直後の意図しない生成を避け、
     // 翌日の実行時刻から通常運転に入る
@@ -225,7 +229,18 @@ async function tick(): Promise<void> {
     // 参照曲が 0 件のときもここに来る。last_daily_* を進めないので、アーティストを
     // 登録すればその日のうちに追い生成される
     lastFailedAt = Date.now();
-    console.error(`[daily] 自動生成に失敗(30 分後に再試行): ${err}`);
+    // 参照曲 0 件(= アーティスト未登録の設定漏れ)は原因も対処も違うので event を分ける
+    const noReference = err instanceof NoReferenceSongError;
+    logError({
+      source: "scheduler",
+      event: noReference ? "no_reference_song" : "daily_failed",
+      message: `自動生成に失敗(30 分後に再試行): ${err}`,
+      detail: {
+        localDate: localDateForLog,
+        artistCount: noReference ? db.listArtists().length : undefined,
+        ...errorDetail(err),
+      },
+    });
   } finally {
     ticking = false;
   }

@@ -6,6 +6,7 @@ import { Hono } from "hono";
 import { API_SECRET, AUDIO_DIR, IMAGE_DIR, PORT, PUBLIC_DIR, SUNO_MODEL } from "./config.ts";
 import { getContextSettings } from "./context.ts";
 import * as db from "./db.ts";
+import { errorDetail, logError, logWarn, nowIso } from "./errorlog.ts";
 import {
   acceptGeneration,
   completeGeneration,
@@ -30,6 +31,20 @@ import {
 } from "./scheduler.ts";
 
 const app = new Hono();
+
+// API ルートの失敗を 1 行で記録する(呼び出し側は応答を返すだけにする)
+function logRouteFailure(
+  c: { req: { method: string; path: string } },
+  err: unknown,
+  httpStatus: number
+): void {
+  logError({
+    source: "api",
+    event: "route_failed",
+    message: `${c.req.method} ${c.req.path} が失敗: ${err instanceof Error ? err.message : err}`,
+    detail: { method: c.req.method, path: c.req.path, httpStatus, ...errorDetail(err) },
+  });
+}
 
 function isValidApiSecret(provided: string | undefined): boolean {
   if (!provided) return false;
@@ -269,11 +284,12 @@ api.post("/daily/run", async (c) => {
     void complete().catch(() => {});
     return c.json({ task: taskJson(task) }, 201);
   } catch (err) {
-    console.error(`[api] daily/run 失敗: ${err}`);
     // 参照曲が 1 件も無いのは設定の問題(アーティスト未登録)なので 409 で区別する
+    // (記録は scheduler 側の no_reference_song で行うため、ここでは応答だけ返す)
     if (err instanceof NoReferenceSongError) {
       return c.json({ error: err.message }, 409);
     }
+    logRouteFailure(c, err, 502);
     return c.json({ error: `自動生成に失敗しました: ${err}` }, 502);
   }
 });
@@ -326,6 +342,114 @@ api.get("/credits", async (c) => {
   return c.json({ credits: await sunoClient.getCredits() });
 });
 
+// --- エラーログ(Mac から取得して解析するための入口) ---
+
+function errorJson(e: db.ErrorLogRow) {
+  let detail: unknown = null;
+  if (e.detail) {
+    try {
+      detail = JSON.parse(e.detail);
+    } catch {
+      detail = { unparsable: e.detail };
+    }
+  }
+  return {
+    id: e.id,
+    occurredAt: e.occurred_at,
+    receivedAt: e.received_at,
+    lastSeenAt: e.last_seen_at,
+    // 同じ種類のエラーが短時間に連発したら 1 行に畳んでいる(その回数)
+    repeatCount: e.repeat_count,
+    level: e.level,
+    origin: e.origin,
+    source: e.source,
+    event: e.event,
+    message: e.message,
+    detail,
+    fingerprint: e.fingerprint,
+    taskId: e.task_id,
+  };
+}
+
+// '24h' / '7d' / '90m' の相対指定か ISO8601 を ISO8601 に正規化する。不正なら null
+function parseSince(value: string | undefined): string | null {
+  if (!value) return new Date(Date.now() - 24 * 3_600_000).toISOString();
+  const relative = /^(\d+)([mhd])$/.exec(value.trim());
+  if (relative) {
+    const unit = { m: 60_000, h: 3_600_000, d: 86_400_000 }[relative[2] as "m" | "h" | "d"];
+    return new Date(Date.now() - Number(relative[1]) * unit).toISOString();
+  }
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? null : new Date(parsed).toISOString();
+}
+
+// scripts/fetch-error-logs.sh が叩く。新しい順(last_seen_at)で返す
+api.get("/errors", (c) => {
+  const since = parseSince(c.req.query("since"));
+  if (since === null) {
+    return c.json({ error: "since は 24h / 7d のような相対指定か ISO8601 です" }, 400);
+  }
+  const level = c.req.query("level");
+  if (level !== undefined && level !== "error" && level !== "warn") {
+    return c.json({ error: "level は error / warn です" }, 400);
+  }
+  const origin = c.req.query("origin");
+  if (origin !== undefined && origin !== "server" && origin !== "ios") {
+    return c.json({ error: "origin は server / ios です" }, 400);
+  }
+  const limit = Math.min(Math.max(Number(c.req.query("limit") ?? 200) || 200, 1), 1000);
+  const errors = db.listErrorLogs({
+    since,
+    level,
+    origin,
+    source: c.req.query("source"),
+    limit,
+  });
+  return c.json({ since, limit, count: errors.length, errors: errors.map(errorJson) });
+});
+
+// iOS アプリからのエラー報告。1 リクエスト最大 20 件。
+// クライアントの申告は信用しないので origin は 'ios' に固定し、source / event は形式を検証する
+const CLIENT_ERRORS_MAX = 20;
+
+api.post("/client-errors", async (c) => {
+  const body = await c.req.json().catch(() => null);
+  const items = Array.isArray(body?.errors) ? body.errors : null;
+  if (!items) return c.json({ error: "errors 配列を指定してください" }, 400);
+  if (items.length > CLIENT_ERRORS_MAX) {
+    return c.json({ error: `errors は ${CLIENT_ERRORS_MAX} 件以内です` }, 400);
+  }
+
+  let accepted = 0;
+  for (const item of items) {
+    const message = typeof item?.message === "string" ? item.message.trim() : "";
+    if (!message) continue;
+    // ios-* 以外の source を名乗らせない(サーバー自身の記録と混ざらないようにする)
+    const source =
+      typeof item?.source === "string" && /^ios-[a-z]+$/.test(item.source)
+        ? item.source
+        : "ios-app";
+    const event =
+      typeof item?.event === "string" && /^[a-z0-9_]{1,60}$/.test(item.event)
+        ? item.event
+        : "unknown";
+    // 端末の時計がずれていても received_at で気付けるので、申告値はそのまま採る
+    const occurredAt =
+      typeof item?.occurredAt === "string" && !Number.isNaN(Date.parse(item.occurredAt))
+        ? new Date(item.occurredAt).toISOString()
+        : nowIso();
+    const detail =
+      item?.detail !== null && typeof item?.detail === "object" && !Array.isArray(item.detail)
+        ? (item.detail as Record<string, unknown>)
+        : undefined;
+    const entry = { source, event, message, detail, origin: "ios" as const, occurredAt };
+    if (item?.level === "warn") logWarn(entry);
+    else logError(entry);
+    accepted++;
+  }
+  return c.json({ accepted }, 201);
+});
+
 // --- アーティスト管理(生成経路「アーティスト経由」) ---
 
 function artistJson(a: db.ArtistWithCountRow) {
@@ -358,7 +482,7 @@ api.get("/artists/search", async (c) => {
   try {
     return c.json({ candidates: await itunes.searchArtists(term) });
   } catch (err) {
-    console.error(`[api] アーティスト検索失敗: ${err}`);
+    logRouteFailure(c, err, 502);
     return c.json({ error: String(err instanceof Error ? err.message : err) }, 502);
   }
 });
@@ -408,7 +532,7 @@ api.post("/artists", async (c) => {
     console.log(`[artists] "${artist.name}" を登録し楽曲 ${added} 件を取り込みました`);
     return c.json({ artist: artistJson(db.getArtist(artist.id)!), added }, 201);
   } catch (err) {
-    console.error(`[api] アーティスト登録失敗: ${err}`);
+    logRouteFailure(c, err, 502);
     return c.json({ error: String(err instanceof Error ? err.message : err) }, 502);
   }
 });
@@ -439,7 +563,7 @@ api.post("/artists/:id/refresh", async (c) => {
     console.log(`[artists] "${artist.name}" の楽曲を再取得しました(新規 ${added} 件)`);
     return c.json({ artist: artistJson(db.getArtist(id)!), added });
   } catch (err) {
-    console.error(`[api] 楽曲再取得失敗: ${err}`);
+    logRouteFailure(c, err, 502);
     return c.json({ error: String(err instanceof Error ? err.message : err) }, 502);
   }
 });
@@ -463,7 +587,7 @@ api.get("/artist-songs/search", async (c) => {
   try {
     return c.json({ candidates: await itunes.searchSongs(term) });
   } catch (err) {
-    console.error(`[api] 曲名検索失敗: ${err}`);
+    logRouteFailure(c, err, 502);
     return c.json({ error: String(err instanceof Error ? err.message : err) }, 502);
   }
 });
@@ -542,7 +666,7 @@ api.post("/artist-songs", async (c) => {
       201
     );
   } catch (err) {
-    console.error(`[api] 曲の登録失敗: ${err}`);
+    logRouteFailure(c, err, 502);
     return c.json({ error: String(err instanceof Error ? err.message : err) }, 502);
   }
 });
@@ -550,7 +674,12 @@ api.post("/artist-songs", async (c) => {
 // /api/* は X-API-Secret ヘッダ必須
 app.use("/api/*", async (c, next) => {
   if (!isValidApiSecret(c.req.header("x-api-secret"))) {
-    console.warn(`[api] rejected (invalid X-API-Secret) ${c.req.method} ${c.req.path}`);
+    logWarn({
+      source: "api",
+      event: "unauthorized",
+      message: `X-API-Secret が不正なため拒否: ${c.req.method} ${c.req.path}`,
+      detail: { method: c.req.method, path: c.req.path, hasHeader: c.req.header("x-api-secret") !== undefined },
+    });
     return c.json({ error: "unauthorized" }, 401);
   }
   await next();
@@ -588,6 +717,39 @@ app.use(
     rewriteRequestPath: (p) => p.replace(/^\/admin/, ""),
   })
 );
+
+// ルートで捕まえ損ねた例外(Hono の既定は 500 を返すだけで記録が残らない)
+app.onError((err, c) => {
+  logError({
+    source: "api",
+    event: "unhandled",
+    message: `${c.req.method} ${c.req.path} で未処理の例外: ${err.message}`,
+    detail: { method: c.req.method, path: c.req.path, httpStatus: 500, ...errorDetail(err) },
+  });
+  return c.json({ error: "internal server error" }, 500);
+});
+
+// プロセスレベルの取りこぼし。uncaughtException はプロセスの状態が壊れている可能性が
+// あるので記録してから終了する(本番は docker の restart: unless-stopped で再起動し、
+// 未完了タスクは startPoller が DB から拾い直す)。
+// unhandledRejection は 1 つの非同期処理の失敗にとどまるため、記録して動かし続ける
+process.on("uncaughtException", (err) => {
+  logError({
+    source: "process",
+    event: "uncaught_exception",
+    message: `未捕捉の例外: ${err.message}`,
+    detail: errorDetail(err),
+  });
+  process.exit(1);
+});
+process.on("unhandledRejection", (reason) => {
+  logError({
+    source: "process",
+    event: "unhandled_rejection",
+    message: `未処理の Promise 拒否: ${reason instanceof Error ? reason.message : reason}`,
+    detail: errorDetail(reason),
+  });
+});
 
 serve({ fetch: app.fetch, port: PORT }, (info) => {
   console.log(`Music Plant admin: http://localhost:${info.port}/admin/`);

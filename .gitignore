@@ -13,6 +13,9 @@ output/
 data/
 node_modules/
 
+# scripts/fetch-error-logs.sh が落としてくるサーバーのエラーログ
+.logs/
+
 # iOS(xcodegen で project.yml から生成)
 ios/*.xcodeproj
 ios/build/

@@ -2,6 +2,7 @@
 // 「今日のコンテキスト」として注入する。外部取得の失敗で生成を止めない
 // (タイムアウト数秒+失敗は警告ログのみでスキップ)
 import * as db from "./db.ts";
+import { errorDetail, logWarn } from "./errorlog.ts";
 
 const FETCH_TIMEOUT_MS = 8_000;
 const NEWS_RSS_URL = "https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en";
@@ -74,7 +75,12 @@ export async function buildTodayContext(): Promise<string | null> {
       try {
         return await s.fetch(settings);
       } catch (err) {
-        console.warn(`[context] ${s.name} の取得に失敗(スキップ): ${err}`);
+        logWarn({
+          source: "context",
+          event: "fetch_failed",
+          message: `${s.name} の取得に失敗(スキップ): ${err}`,
+          detail: { sourceName: s.name, ...errorDetail(err) },
+        });
         return null;
       }
     })

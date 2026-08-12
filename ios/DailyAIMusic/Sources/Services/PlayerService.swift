@@ -19,6 +19,8 @@ final class PlayerService: ObservableObject {
     @Published private(set) var queue: [Track] = []
 
     private let player = AVPlayer()
+    /// 再生できなかったことを検知するための現在アイテムの status 監視(ErrorReporter へ送る)
+    private var statusObservation: NSKeyValueObservation?
 
     private var currentIndex: Int? {
         guard let currentTrack else { return nil }
@@ -56,6 +58,29 @@ final class PlayerService: ObservableObject {
                 self?.handleTrackEnded()
             }
         }
+        // 再生途中で止まったケース(通信切れ・音源の破損)。開始時の失敗は status 監視で拾う
+        NotificationCenter.default.addObserver(
+            forName: AVPlayerItem.failedToPlayToEndTimeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] note in
+            // Notification は Sendable ではないので、クロージャの中で文字列にしてから渡す
+            let error = note.userInfo?[AVPlayerItemFailedToPlayToEndTimeErrorKey] as? Error
+            let description = error?.localizedDescription ?? "不明なエラー"
+            MainActor.assumeIsolated {
+                guard let track = self?.currentTrack else { return }
+                ErrorReporter.shared.report(
+                    source: "ios-player",
+                    event: "playback_interrupted",
+                    message: "「\(track.title)」の再生が中断: \(description)",
+                    detail: [
+                        "trackId": String(track.id),
+                        "audioPath": track.audioUrl,
+                        "error": description,
+                    ]
+                )
+            }
+        }
         configureRemoteCommands()
     }
 
@@ -74,7 +99,9 @@ final class PlayerService: ObservableObject {
             let asset = AVURLAsset(url: url, options: [
                 "AVURLAssetHTTPHeaderFieldsKey": BackendAPI.mediaRequestHeaders,
             ])
-            player.replaceCurrentItem(with: AVPlayerItem(asset: asset))
+            let item = AVPlayerItem(asset: asset)
+            observePlaybackFailure(of: item, track: track)
+            player.replaceCurrentItem(with: item)
             currentTrack = track
             currentTime = 0
             updateNowPlayingInfo(for: track)
@@ -83,6 +110,25 @@ final class PlayerService: ObservableObject {
         player.play()
         isPlaying = true
         updateNowPlayingPlaybackState()
+    }
+
+    /// 再生開始に失敗した(音源が取れない・認証が通らない・壊れている)ことをサーバーへ報告する。
+    /// KVO のコールバックは任意のスレッドから来るので、MainActor に触らない @Sendable クロージャにする
+    private func observePlaybackFailure(of item: AVPlayerItem, track: Track) {
+        statusObservation = item.observe(\.status, options: [.new]) { @Sendable item, _ in
+            guard item.status == .failed else { return }
+            let message = item.error?.localizedDescription ?? "不明なエラー"
+            ErrorReporter.shared.report(
+                source: "ios-player",
+                event: "playback_failed",
+                message: "「\(track.title)」の再生に失敗: \(message)",
+                detail: [
+                    "trackId": String(track.id),
+                    "audioPath": track.audioUrl,
+                    "error": message,
+                ]
+            )
+        }
     }
 
     func togglePlayPause() {

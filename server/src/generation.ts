@@ -4,6 +4,7 @@ import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { AUDIO_DIR, IMAGE_DIR, SUNO_API_KEY, SUNO_BASE_URL, SUNO_MODEL } from "./config.ts";
 import * as db from "./db.ts";
+import { errorDetail, logError, logWarn } from "./errorlog.ts";
 import { generateSongPlan } from "./llm.ts";
 import type { SongPlanInput } from "./llm.ts";
 import type { SunoClient, SunoTrack } from "./suno/client.ts";
@@ -77,32 +78,69 @@ export async function completeGeneration(
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     db.updateTaskStatus(taskId, "FAILED", message);
-    console.error(`[generation] task ${taskId} 失敗: ${message}`);
+    const task = db.getTask(taskId);
+    logError({
+      source: "generation",
+      event: "task_failed",
+      message: `task ${taskId} 失敗: ${message}`,
+      taskId,
+      detail: {
+        mode: task?.mode,
+        refArtistName: task?.ref_artist_name,
+        refSongTitle: task?.ref_song_title,
+        llmModel: task?.llm_model,
+        // プランまで進んでいたか(= LLM で落ちたか Suno 送信で落ちたか)の切り分け用
+        hasPlan: task?.style !== null && task?.style !== undefined,
+        ...errorDetail(err),
+      },
+    });
     throw err;
   }
 }
 
-async function download(url: string, file: string): Promise<boolean> {
+async function download(
+  url: string,
+  file: string,
+  context: { taskId: number; kind: "audio" | "image" }
+): Promise<boolean> {
   const res = await fetch(url);
   if (!res.ok) {
-    console.warn(`[generation] ダウンロード失敗 HTTP ${res.status}: ${url}`);
+    // 音源は呼び出し側で例外にする(= タスクが FAILED)ので、ここは警告として残す
+    logWarn({
+      source: "generation",
+      event: "download_failed",
+      message: `${context.kind} のダウンロードに失敗 HTTP ${res.status}`,
+      taskId: context.taskId,
+      detail: { kind: context.kind, httpStatus: res.status, urlHost: hostOf(url) },
+    });
     return false;
   }
   await writeFile(file, Buffer.from(await res.arrayBuffer()));
   return true;
 }
 
+// URL 全体はログに残さない(プロバイダの一時 URL に署名クエリが載ることがある)
+function hostOf(url: string): string {
+  return URL.parse(url)?.host ?? "unknown";
+}
+
 async function saveTracks(task: db.TaskRow, tracks: SunoTrack[]): Promise<void> {
   for (const track of tracks) {
     const audioFile = `${track.id}.mp3`;
-    if (!(await download(track.audioUrl, path.join(AUDIO_DIR, audioFile)))) {
+    const context = { taskId: task.id, kind: "audio" as const };
+    if (!(await download(track.audioUrl, path.join(AUDIO_DIR, audioFile), context))) {
       throw new Error(`音源のダウンロードに失敗: ${track.audioUrl}`);
     }
     let imageFile: string | null = null;
     if (track.imageUrl) {
       // カバー画像は再生に必須ではないので、失敗しても続行する
       const file = `${track.id}.jpeg`;
-      if (await download(track.imageUrl, path.join(IMAGE_DIR, file))) {
+      if (
+        await download(track.imageUrl, path.join(IMAGE_DIR, file), {
+          taskId: task.id,
+          kind: "image",
+        })
+      ) {
         imageFile = file;
       }
     }
@@ -123,7 +161,19 @@ async function pollTask(task: db.TaskRow): Promise<void> {
 
   if (state.failed) {
     db.updateTaskStatus(task.id, "FAILED", state.error ?? state.status);
-    console.warn(`[generation] task ${task.id} 失敗: ${state.error ?? state.status}`);
+    logError({
+      source: "generation",
+      event: "provider_failed",
+      message: `task ${task.id} が ${task.provider} 側で失敗: ${state.error ?? state.status}`,
+      taskId: task.id,
+      detail: {
+        provider: task.provider,
+        providerTaskId: task.provider_task_id,
+        providerStatus: state.status,
+        providerError: state.error,
+        sunoModel: task.model,
+      },
+    });
     return;
   }
   if (state.done) {
@@ -135,8 +185,22 @@ async function pollTask(task: db.TaskRow): Promise<void> {
     );
     return;
   }
-  if (Date.now() - Date.parse(task.created_at) > TASK_TIMEOUT_MS) {
+  const elapsedMs = Date.now() - Date.parse(task.created_at);
+  if (elapsedMs > TASK_TIMEOUT_MS) {
     db.updateTaskStatus(task.id, "FAILED", `タイムアウト (status=${state.status})`);
+    logError({
+      source: "generation",
+      event: "task_timeout",
+      message: `task ${task.id} がタイムアウト (status=${state.status})`,
+      taskId: task.id,
+      detail: {
+        provider: task.provider,
+        providerTaskId: task.provider_task_id,
+        providerStatus: state.status,
+        elapsedMs,
+        timeoutMs: TASK_TIMEOUT_MS,
+      },
+    });
     return;
   }
   if (state.status !== task.status) {
@@ -155,7 +219,13 @@ async function pollOnce(): Promise<void> {
         await pollTask(task);
       } catch (err) {
         // 一時的な API エラーの可能性があるので FAILED にせず次回に再試行する
-        console.warn(`[generation] task ${task.id} のポーリングでエラー: ${err}`);
+        logWarn({
+          source: "generation",
+          event: "poll_error",
+          message: `task ${task.id} のポーリングでエラー: ${err}`,
+          taskId: task.id,
+          detail: { provider: task.provider, ...errorDetail(err) },
+        });
       }
     }
   } finally {

@@ -84,7 +84,27 @@ enum BackendAPI {
     static func getJSON<T: Decodable>(_ type: T.Type, path: String) async throws -> T {
         let request = try makeRequest(path: path, method: "GET")
         let data = try await send(request, path: path)
-        return try makeDecoder().decode(type, from: data)
+        return try decode(type, from: data, path: path)
+    }
+
+    /// デコードの失敗はサーバーとアプリの契約ずれ(応答形式の変更)を意味するので記録して送る
+    private static func decode<T: Decodable>(_ type: T.Type, from data: Data, path: String) throws -> T {
+        do {
+            return try makeDecoder().decode(type, from: data)
+        } catch {
+            logger.error("\(path, privacy: .public): decode failed (\(String(describing: type), privacy: .public)): \(String(describing: error), privacy: .public)")
+            ErrorReporter.shared.report(
+                source: "ios-api",
+                event: "decode_failed",
+                message: "\(path): 応答のデコードに失敗(\(String(describing: type)))",
+                detail: [
+                    "path": path,
+                    "type": String(describing: type),
+                    "error": String(String(describing: error).prefix(300)),
+                ]
+            )
+            throw error
+        }
     }
 
     /// timeout は iTunes への問い合わせ(アーティスト登録・曲の検索)のように
@@ -97,7 +117,7 @@ enum BackendAPI {
         request.httpBody = try JSONEncoder().encode(body)
         if let timeout { request.timeoutInterval = timeout }
         let data = try await send(request, path: path)
-        return try makeDecoder().decode(type, from: data)
+        return try decode(type, from: data, path: path)
     }
 
     /// 削除(/api/artists/:id)。レスポンス body({ ok: true })は使わない
@@ -111,7 +131,7 @@ enum BackendAPI {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(body)
         let data = try await send(request, path: path)
-        return try makeDecoder().decode(type, from: data)
+        return try decode(type, from: data, path: path)
     }
 
     /// body 無しの POST(/api/daily/run 用)。timeout はサーバー側で LLM 生成まで待つ
@@ -120,10 +140,11 @@ enum BackendAPI {
         var request = try makeRequest(path: path, method: "POST")
         if let timeout { request.timeoutInterval = timeout }
         let data = try await send(request, path: path)
-        return try makeDecoder().decode(type, from: data)
+        return try decode(type, from: data, path: path)
     }
 
-    private static func makeRequest(path: String, method: String) throws -> URLRequest {
+    /// ErrorReporter からも使うため internal(共通処理: URL 解決 + X-API-Secret 付与)
+    static func makeRequest(path: String, method: String) throws -> URLRequest {
         guard let url = absoluteURL(forServerPath: path) else {
             logger.error("\(method, privacy: .public) \(path, privacy: .public): invalid base URL \"\(baseURLString, privacy: .public)\"")
             throw BackendAPIError.invalidBaseURL
@@ -144,6 +165,16 @@ enum BackendAPI {
             (data, response) = try await URLSession.shared.data(for: request)
         } catch {
             logger.error("\(path, privacy: .public): transport error: \(error.localizedDescription, privacy: .public)")
+            ErrorReporter.shared.report(
+                source: "ios-api",
+                event: "transport_failed",
+                message: "\(path): 通信に失敗: \(error.localizedDescription)",
+                detail: [
+                    "path": path,
+                    "method": request.httpMethod ?? "GET",
+                    "errorCode": String((error as NSError).code),
+                ]
+            )
             throw error
         }
 
@@ -155,6 +186,17 @@ enum BackendAPI {
 
         let bodySnippet = String(data: data.prefix(500), encoding: .utf8) ?? "<non-UTF8 \(data.count) bytes>"
         logger.error("\(path, privacy: .public): HTTP \(statusCode) body=\(bodySnippet, privacy: .public)")
+        ErrorReporter.shared.report(
+            source: "ios-api",
+            event: "http_error",
+            message: "\(path): HTTP \(statusCode)",
+            detail: [
+                "path": path,
+                "method": request.httpMethod ?? "GET",
+                "httpStatus": String(statusCode),
+                "bodySnippet": String(bodySnippet.prefix(300)),
+            ]
+        )
         if statusCode == 401 {
             throw BackendAPIError.unauthorized
         }
