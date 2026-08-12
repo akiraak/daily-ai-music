@@ -835,6 +835,19 @@ for (const [segment, dir, isPublished] of [
   });
 }
 
+// 曲詳細の URL は /track/:id(共有される恒久 URL としてクエリより適切で、後から同じ URL の
+// まま曲ごとの OGP メタ注入に差し替えられる)。実体は track.html で、曲の特定はページ側の JS が
+// パスから行う。id が数字でないパスは 404(存在しない・非公開の id はページ側で案内を出す)
+const serveTrackPage = serveStatic({
+  root: SITE_DIR,
+  rewriteRequestPath: () => "/track.html",
+});
+app.get("/track/:id", async (c, next) => {
+  if (!/^\d+$/.test(c.req.param("id"))) return c.notFound();
+  // serveStatic はファイルが無いと next に落とすミドルウェアなので、その場合は 404 で確定させる
+  return (await serveTrackPage(c, next)) ?? c.notFound();
+});
+
 // 公開ページの静的ファイル(server/site/)。残りのパス全部を受けるため最後にマウントする
 app.use("/*", serveStatic({ root: SITE_DIR }));
 

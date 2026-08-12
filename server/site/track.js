@@ -1,4 +1,4 @@
-// 曲詳細。?id= で曲を特定し、シークバー付きプレイヤーと「ほかの曲」を出す
+// 曲詳細。URL(/track/:id)のパスから曲を特定し、シークバー付きプレイヤーと「ほかの曲」を出す
 const status = document.getElementById("status");
 
 function showStatus(text) {
@@ -67,7 +67,7 @@ function render(track, tracks) {
   }
 }
 
-const id = Number(new URLSearchParams(location.search).get("id"));
+const id = Number(/^\/track\/(\d+)$/.exec(location.pathname)?.[1]);
 fetchTracks()
   .then((tracks) => {
     const track = tracks.find((t) => t.id === id);

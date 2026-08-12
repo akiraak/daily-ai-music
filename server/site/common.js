@@ -25,5 +25,5 @@ function modelLabel(t) {
 }
 
 function trackPageUrl(t) {
-  return `track.html?id=${t.id}`;
+  return `/track/${t.id}`;
 }
