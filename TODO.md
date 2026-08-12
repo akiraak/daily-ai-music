@@ -12,6 +12,7 @@
   - [x] Phase 2: Web 管理画面の曲一覧に有効/無効の切り替えと一括操作
   - [x] Phase 3: iOS の曲一覧に有効/無効のトグルと表示フィルタ
   - [ ] Phase 4: 本番反映(DB バックアップ → 再起動でマイグレーション)と CLAUDE.md 更新
+    - CLAUDE.md 更新と DB バックアップ(`data/backup-20260812-before-enabled.sqlite`)は完了。残りは g3plus での `git pull` → `build` → `up -d` と反映後の確認
 
 - 生成した曲を表示するWebを作る
   前提としてSunoで生成した曲に著作権があるか確認
