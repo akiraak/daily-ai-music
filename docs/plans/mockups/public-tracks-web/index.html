@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>公開ページ デザイン確認 — Music Plant</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #eceae6;
+    color: #24211c;
+    font-family: -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif;
+    line-height: 1.65;
+    padding: 36px 28px 64px;
+  }
+  h1 { font-size: 19px; margin-bottom: 4px; }
+  .note { font-size: 12.5px; color: #7a756b; margin-bottom: 28px; }
+  .designs { display: flex; gap: 28px; flex-wrap: wrap; justify-content: center; }
+  .design {
+    background: #fff;
+    border: 1px solid #ddd9d1;
+    border-radius: 14px;
+    padding: 20px 20px 24px;
+    width: 440px;
+    max-width: 100%;
+  }
+  .design h2 { font-size: 15px; margin-bottom: 2px; }
+  .design .desc { font-size: 12px; color: #7a756b; min-height: 3.2em; margin-bottom: 12px; }
+  .design a.pc {
+    display: inline-block;
+    font-size: 12.5px;
+    color: #c06830;
+    font-weight: 600;
+    text-decoration: none;
+    margin-bottom: 14px;
+  }
+  .design a.pc:hover { text-decoration: underline; }
+  .phone {
+    width: 390px;
+    max-width: 100%;
+    height: 720px;
+    margin: 0 auto;
+    border: 1px solid #ccc7bd;
+    border-radius: 18px;
+    overflow: hidden;
+    box-shadow: 0 10px 30px rgba(40, 30, 10, 0.12);
+  }
+  .phone iframe { width: 390px; height: 720px; border: 0; display: block; }
+  .archive { margin-top: 36px; font-size: 12px; color: #7a756b; text-align: center; }
+  .archive a { color: #c06830; }
+</style>
+</head>
+<body>
+  <h1>公開ページ デザイン確認 — 案A(2 ページ構成)</h1>
+  <div class="note">
+    案A(ギャラリー・ミニマル)を採用し、曲一覧と曲詳細の 2 ページ構成に変更(2026-08-12)。
+    下の枠はモバイル表示(幅 390px)。一覧のカードをクリック(タップ)すると詳細へ遷移、▶ ボタンは行内再生。PC 表示は各リンクから。
+  </div>
+  <div class="designs">
+    <div class="design">
+      <h2>曲一覧</h2>
+      <div class="desc">カバーアートのグリッド(PC 4〜5 列 / モバイル 2 列)。カードクリックで詳細へ。ホバー(モバイルは右下ボタン)の ▶ でその場で再生。</div>
+      <a class="pc" href="designA.html" target="_blank">PC 表示で開く →</a>
+      <div class="phone"><iframe src="designA.html"></iframe></div>
+    </div>
+    <div class="design">
+      <h2>曲詳細</h2>
+      <div class="desc">大きいカバー+曲名・日付・モデル名と、シークバー付きプレイヤー。下に「ほかの曲」6 曲で回遊。</div>
+      <a class="pc" href="designA-detail.html?id=15" target="_blank">PC 表示で開く →</a>
+      <div class="phone"><iframe src="designA-detail.html?id=15"></iframe></div>
+    </div>
+  </div>
+  <div class="archive">
+    不採用案(参考): <a href="designB.html" target="_blank">案B ファクトリー・ログ</a> ·
+    <a href="designC.html" target="_blank">案C デイリー・プレイヤー</a>
+  </div>
+</body>
+</html>

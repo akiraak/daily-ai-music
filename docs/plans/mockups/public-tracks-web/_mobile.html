@@ -1,0 +1,11 @@
+<!DOCTYPE html>
+<html>
+<!-- ヘッドレス Chrome のモバイル幅スクリーンショット用ラッパー(--window-size が 500px 未満に
+     できないため、390px の iframe 越しに撮る)。?d=designA.html のように対象を指定する -->
+<body style="margin:0;background:#888">
+<iframe id="f" style="width:390px;height:1400px;border:0;display:block"></iframe>
+<script>
+  document.getElementById("f").src = new URLSearchParams(location.search).get("d") || "designA.html";
+</script>
+</body>
+</html>

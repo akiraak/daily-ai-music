@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Music Plant — 案B ファクトリー・ログ</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #101211;
+    --panel: #161917;
+    --text: #d9d6cd;
+    --muted: #838074;
+    --faint: #565349;
+    --line: #232623;
+    --accent: #f0a13c;
+  }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: ui-monospace, "SF Mono", Menlo, "Hiragino Sans", monospace;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 0 24px; }
+
+  header {
+    border-bottom: 1px solid var(--line);
+    padding: 34px 0 22px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+  }
+  .brand .mark {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 17px; font-weight: 700; letter-spacing: 0.26em; text-transform: uppercase;
+  }
+  .brand .mark::before {
+    content: "";
+    width: 13px; height: 13px;
+    background: var(--accent);
+  }
+  .brand .sub { margin-top: 5px; font-size: 10.5px; letter-spacing: 0.18em; color: var(--muted); text-transform: uppercase; }
+  .stats { text-align: right; font-size: 10.5px; color: var(--muted); letter-spacing: 0.08em; line-height: 1.9; }
+  .stats b { color: var(--accent); font-weight: 600; }
+
+  main { padding: 10px 0 64px; }
+
+  .lot { margin-top: 30px; }
+  .lot-head {
+    display: flex; align-items: center; gap: 12px;
+    font-size: 11px; letter-spacing: 0.14em;
+    color: var(--accent);
+  }
+  .lot-head::after { content: ""; flex: 1; border-top: 1px dashed var(--faint); }
+  .lot-head .count { color: var(--muted); }
+
+  .row {
+    display: grid;
+    grid-template-columns: 44px 52px 1fr auto 40px;
+    align-items: center;
+    gap: 14px;
+    padding: 11px 0;
+    border-bottom: 1px solid var(--line);
+    cursor: pointer;
+  }
+  .row:hover { background: var(--panel); }
+  .serial { font-size: 11px; color: var(--faint); }
+  .cover { width: 52px; height: 52px; border-radius: 3px; overflow: hidden; background: var(--panel); }
+  .cover img { width: 100%; height: 100%; object-fit: cover; display: block; filter: saturate(0.92); }
+  .main-col { min-width: 0; }
+  .title {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif;
+    font-size: 14.5px; font-weight: 600; letter-spacing: 0.01em;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .sub-line { margin-top: 2px; font-size: 10.5px; color: var(--muted); letter-spacing: 0.04em; }
+  /* PC ではモデル名はチップ側に出すので行内テキストからは省く */
+  .sub-models { display: none; }
+
+  .chips { display: flex; gap: 6px; }
+  .chip {
+    font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--muted);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 2px 7px;
+    white-space: nowrap;
+  }
+  .play-btn {
+    width: 34px; height: 34px;
+    border: 1px solid var(--faint);
+    border-radius: 50%;
+    background: none;
+    color: var(--text);
+    font-size: 11px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    padding-left: 2px;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .row:hover .play-btn { border-color: var(--accent); color: var(--accent); }
+  .row.playing .play-btn { background: var(--accent); border-color: var(--accent); color: #14100a; padding-left: 0; }
+
+  .eq { display: none; align-items: flex-end; gap: 2.5px; height: 12px; flex: none; }
+  .row.playing .eq { display: flex; }
+  .eq i { width: 2.5px; background: var(--accent); animation: eq 1s ease-in-out infinite; }
+  .eq i:nth-child(1) { height: 55%; }
+  .eq i:nth-child(2) { height: 100%; animation-delay: 0.25s; }
+  .eq i:nth-child(3) { height: 40%; animation-delay: 0.5s; }
+  @keyframes eq { 0%, 100% { transform: scaleY(0.4); } 50% { transform: scaleY(1); } }
+
+  footer {
+    border-top: 1px solid var(--line);
+    padding: 26px 0 44px;
+    font-size: 10.5px;
+    color: var(--muted);
+    letter-spacing: 0.06em;
+    line-height: 2.1;
+  }
+  footer .ja { color: var(--muted); }
+  footer .en { color: var(--faint); }
+
+  @media (max-width: 640px) {
+    .wrap { padding: 0 18px; }
+    header { padding: 26px 0 18px; }
+    .brand .mark { font-size: 14px; letter-spacing: 0.2em; }
+    .stats { display: none; }
+    .row { grid-template-columns: 46px 1fr 36px; gap: 12px; }
+    .serial { display: none; }
+    .chips { display: none; }
+    .sub-models { display: inline; }
+    .cover { width: 46px; height: 46px; }
+    .title { font-size: 13.5px; }
+    .sub-line { font-size: 9.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <div class="mark">Music Plant</div>
+      <div class="sub">Automated Music Factory</div>
+    </div>
+    <div class="stats">
+      TOTAL OUTPUT <b id="total">—</b> TRACKS<br>
+      DAILY PRODUCTION · EST. 2026
+    </div>
+  </header>
+  <main id="log"></main>
+  <footer>
+    <div class="ja">本サイトの楽曲はすべて AI(Suno)による自動生成です。</div>
+    <div class="en">// ALL TRACKS ON THIS SITE ARE GENERATED BY AI. NO HUMANS WERE INVOLVED IN COMPOSITION.</div>
+  </footer>
+</div>
+<script src="data.js"></script>
+<script>
+  document.getElementById("total").textContent = String(TRACKS.length).padStart(3, "0");
+  const log = document.getElementById("log");
+  const audio = new Audio();
+  let playingRow = null;
+
+  for (const g of groupByDate(TRACKS)) {
+    const lot = document.createElement("section");
+    lot.className = "lot";
+    const head = document.createElement("div");
+    head.className = "lot-head";
+    head.innerHTML = `<span></span><span class="count"></span>`;
+    head.children[0].textContent = `LOT ${g.key}`;
+    head.children[1].textContent = `${g.tracks.length} ${g.tracks.length === 1 ? "TRACK" : "TRACKS"}`;
+    lot.appendChild(head);
+
+    for (const t of g.tracks) {
+      const row = document.createElement("div");
+      row.className = "row";
+      row.innerHTML = `
+        <div class="serial"></div>
+        <div class="cover"><img alt=""></div>
+        <div class="main-col">
+          <div class="title"><span class="t"></span><span class="eq"><i></i><i></i><i></i></span></div>
+          <div class="sub-line"><span class="sub-dur"></span><span class="sub-models"></span></div>
+        </div>
+        <div class="chips"></div>
+        <button class="play-btn">▶</button>`;
+      row.querySelector(".serial").textContent = "#" + String(t.id).padStart(3, "0");
+      row.querySelector("img").src = IMG(t.file + ".jpeg");
+      row.querySelector(".t").textContent = t.title;
+      row.querySelector(".sub-dur").textContent = fmtDuration(t.duration);
+      row.querySelector(".sub-models").textContent = ` · ${modelLabel(t)}`;
+      const chips = row.querySelector(".chips");
+      for (const label of [t.sunoModel ? "Suno " + t.sunoModel.replace("_", ".") : null, t.llmModel || null]) {
+        if (!label) continue;
+        const c = document.createElement("span");
+        c.className = "chip";
+        c.textContent = label;
+        chips.appendChild(c);
+      }
+      row.addEventListener("click", () => toggle(t, row));
+      lot.appendChild(row);
+    }
+    log.appendChild(lot);
+  }
+
+  function toggle(t, row) {
+    if (playingRow === row && !audio.paused) {
+      audio.pause();
+      setPlaying(null);
+      return;
+    }
+    if (playingRow !== row) audio.src = AUD(t.file + ".mp3");
+    audio.play();
+    setPlaying(row);
+  }
+  function setPlaying(row) {
+    if (playingRow) {
+      playingRow.classList.remove("playing");
+      playingRow.querySelector(".play-btn").textContent = "▶";
+    }
+    playingRow = row;
+    if (row) {
+      row.classList.add("playing");
+      row.querySelector(".play-btn").textContent = "❚❚";
+    }
+  }
+  audio.addEventListener("ended", () => setPlaying(null));
+</script>
+</body>
+</html>
