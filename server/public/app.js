@@ -114,7 +114,7 @@ function renderTasks(tasks) {
 
 function trackElement(t) {
   const li = document.createElement("li");
-  li.className = "track";
+  li.className = t.published ? "track" : "track is-unpublished";
   li.innerHTML = `
     ${t.imageUrl ? `<img class="cover" src="${t.imageUrl}" alt="" loading="lazy">` : '<div class="cover placeholder"></div>'}
     <div class="track-body">
@@ -123,8 +123,17 @@ function trackElement(t) {
       <div class="track-meta">${formatDuration(t.duration)}<span> · ${formatDate(t.createdAt)}</span></div>
       <audio controls preload="none" src="${t.audioUrl}"></audio>
       <div class="word-tags" hidden></div>
+    </div>
+    <div class="track-publish" title="公開ページに表示するか(外すと一覧・音源・カバーとも見えなくなる)">
+      <span class="publish-label">公開</span>
+      <input type="checkbox" class="toggle">
     </div>`;
   li.querySelector(".track-title").textContent = t.title;
+  {
+    const checkbox = li.querySelector(".track-publish .toggle");
+    checkbox.checked = t.published;
+    checkbox.addEventListener("change", () => setTrackPublished(t, checkbox.checked, checkbox));
+  }
   {
     // 生成元の曲(スナップショット)。折りたたみの中にも出すが、開かなくても見えるようにする。
     // 参照曲を持たない旧データは行ごと隠す
@@ -215,6 +224,28 @@ function trackElement(t) {
   });
 
   return li;
+}
+
+// 公開/非公開の切り替え。押した瞬間に見た目を変え(楽観更新)、失敗したら元に戻す
+async function setTrackPublished(track, published, checkbox) {
+  const previous = track.published;
+  track.published = published;
+  checkbox.closest(".track").classList.toggle("is-unpublished", !published);
+  const message = $("tracks-message");
+  try {
+    await fetchJson(`/admin/api/tracks/${track.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ published }),
+    });
+    message.hidden = true;
+  } catch (err) {
+    track.published = previous;
+    checkbox.checked = previous;
+    checkbox.closest(".track").classList.toggle("is-unpublished", !previous);
+    message.textContent = `公開状態の変更に失敗しました: ${err.message}`;
+    message.hidden = false;
+  }
 }
 
 // 再生を邪魔しないよう、全再描画はせず新しい楽曲だけを先頭に追加する

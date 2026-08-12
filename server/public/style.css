@@ -195,6 +195,19 @@ ul { list-style: none; margin: 0; padding: 0; }
 .track-meta { color: var(--muted); font-size: 0.8rem; margin-bottom: 6px; }
 .track audio { width: 100%; height: 36px; }
 
+/* 公開ページへの表示(opt-out)。非公開の曲は行を薄くして一目で分かるようにする */
+.track-publish {
+  flex: none;
+  align-self: flex-start;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.track-publish .publish-label { font-size: 0.72rem; color: var(--muted); }
+.track.is-unpublished .cover,
+.track.is-unpublished .track-body { opacity: 0.45; }
+
 .task-song-title { font-weight: 600; font-size: 0.95rem; }
 
 .track-details { margin-top: 8px; font-size: 0.85rem; }

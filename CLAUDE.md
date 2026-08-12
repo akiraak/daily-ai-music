@@ -53,7 +53,7 @@ esl-learning-assistant と同方式。`/api/*` は `X-API-Secret` ヘッダ必�
 
 ### バックエンド構成(`server/`)
 
-- 管理画面のページ: 楽曲一覧(`index.html`)/ アーティスト(`artists.html`。アーティスト名または曲名で検索して登録・曲一覧・曲を選んで生成・曲ごとの有効/無効と一括操作)/ 設定(`settings.html`。歌声の言語・生成モデルの表示と effort の切り替え・毎日の自動生成・外部コンテキスト)
+- 管理画面のページ: 楽曲一覧(`index.html`。行末に公開ページへの公開/非公開トグル)/ アーティスト(`artists.html`。アーティスト名または曲名で検索して登録・曲一覧・曲を選んで生成・曲ごとの有効/無効と一括操作)/ 設定(`settings.html`。歌声の言語・生成モデルの表示と effort の切り替え・毎日の自動生成・外部コンテキスト)
 - **公開ページ(`server/site/`、2026-08-12 追加)**: 誰でも見られる公開 Web(`/` にマウント。デザインは案A ギャラリー・ミニマル)。曲一覧(`index.html`。カバーグリッド、カードで詳細へ、▶ で行内再生)+ 曲詳細(`track.html?id=`。大カバー+シークバー付きプレイヤー+ほかの曲)。**全曲自動公開の opt-out 方式**(`tracks.published`、既定 1)で、公開 API `GET /site/api/tracks` は id・title・duration・audioUrl・imageUrl・sunoModel・llmModel・createdAt に絞る(**参照曲・スタイル・歌詞・狙い・リアルワードはレスポンス自体に含めない**。経緯と公開条件は [docs/plans/public-tracks-web.md](docs/plans/public-tracks-web.md) の Phase 0 参照)。フッターに AI 生成の明記、管理画面へのリンクは置かない
 - **Hono + @hono/node-server**: API・静的配信(`public/` の管理画面は `/admin` 配下。本番で Cloudflare Access をこのパスだけに掛けるため。`/` 配下は公開ページ(`server/site/`)。音源・画像は `/api/audio/*` 等 + `/admin/audio/*` 等の二重マウントで Range 対応配信、公開側は公開判定付きの `/site/audio|images/*` — 上記「API 認証」参照)
 - **node:sqlite**(`data/db.sqlite`): `tasks`(生成ジョブ)/ `tracks`(完成楽曲)/ `artists`・`artist_songs`(参照曲)/ `real_world_words` / `settings` / `error_logs`(エラーログ)。`data/` は gitignore
