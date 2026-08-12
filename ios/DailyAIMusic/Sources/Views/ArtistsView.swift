@@ -14,7 +14,7 @@ struct ArtistsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                Text("好きなアーティストの曲を選ぶと、その曲の音楽的な特徴に似た新曲を AI がつくります(原曲の歌詞は使いません)。")
+                Text("好きなアーティストの曲を選ぶと、その曲の音楽的な特徴に似た新曲を AI がつくります(原曲の歌詞は使いません)。取り込んだ曲は無効の状態なので、曲一覧で使いたい曲を有効にしてください。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .padding(.top, 12)
@@ -302,7 +302,7 @@ private struct AddArtistSheet: View {
                 timeout: 60
             )
             await onRegistered()
-            message = "「\(response.artist.name)」を登録し、曲を \(response.added) 件取り込みました。"
+            message = "「\(response.artist.name)」を登録し、曲を \(response.added) 件取り込みました(すべて無効の状態です)。"
             dismiss()
         } catch {
             message = error.localizedDescription

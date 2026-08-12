@@ -1,7 +1,6 @@
 // メタデータ DB(node:sqlite)。tasks = 生成ジョブ、tracks = 完成した楽曲
 import { DatabaseSync } from "node:sqlite";
 import { DB_PATH } from "./config.ts";
-import { isNoisyTitle } from "./songtitle.ts";
 
 // 進行中はプロバイダのステータス(PENDING / TEXT_SUCCESS / FIRST_SUCCESS / SUCCESS)を
 // そのまま保持し、音源の保存まで終えたら COMPLETE、失敗は FAILED にする。
@@ -103,8 +102,9 @@ db.exec(`
     release_year INTEGER,
     genre TEXT,
     itunes_track_id INTEGER,
-    -- 参照曲の候補に入れるか(2026-08-11 追加)。取り込み時に曲名で初期値を決め、以後は人が上書きする
-    enabled INTEGER NOT NULL DEFAULT 1,
+    -- 参照曲の候補に入れるか(2026-08-11 追加)。取り込みは既定で無効(0)にして、
+    -- 使いたい曲だけ人が有効にする
+    enabled INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     UNIQUE (artist_id, title)
   );
@@ -159,33 +159,25 @@ addColumnIfMissing("tasks", "artist_id", "artist_id INTEGER");
 addColumnIfMissing("tasks", "artist_song_id", "artist_song_id INTEGER");
 addColumnIfMissing("tasks", "ref_artist_name", "ref_artist_name TEXT");
 addColumnIfMissing("tasks", "ref_song_title", "ref_song_title TEXT");
-// 参照曲の有効/無効(2026-08-11 追加)。既存行はすべて 1 で入り、直後の backfill で
-// ノイズ判定に当たるものだけ 0 に落とす
-addColumnIfMissing("artist_songs", "enabled", "enabled INTEGER NOT NULL DEFAULT 1");
+// 参照曲の有効/無効(2026-08-11 追加)。既存行は DEFAULT 0 = すべて無効で入る
+addColumnIfMissing("artist_songs", "enabled", "enabled INTEGER NOT NULL DEFAULT 0");
 
-// 実行時のノイズ除外(Live / Remix 等を生成のたびに候補から外す)を enabled に一本化した
-// ときの引き継ぎ。既存曲に同じ基準を 1 回だけ当てる。
-// 冪等ではない(人が有効に戻した曲を毎起動で無効化してしまう)ので実施記録を settings に残す。
+// 有効/無効の導入時に、それまでの「全曲が候補」から「全曲が無効」へ 1 回だけ寄せる。
+// カラム追加が DEFAULT 0 なので通常はここで変わる行は無いが、先に DEFAULT 1 で
+// カラムを足した DB(導入途中のもの)を同じ状態に揃えるために残してある。
+// 冪等ではない(人が有効にした曲を毎起動で無効化してしまう)ので実施記録を settings に残す。
 // DROP TABLE IF EXISTS 系の後片付けとは性質が違う点に注意
-function backfillDisableNoisySongs(): void {
-  if (getSetting("migration_disable_noisy_songs") !== undefined) return;
-  const rows = db
-    .prepare(`SELECT id, title FROM artist_songs`)
-    .all() as unknown as { id: number; title: string }[];
-  const stmt = db.prepare(`UPDATE artist_songs SET enabled = 0 WHERE id = ?`);
-  let disabled = 0;
-  for (const row of rows) {
-    if (isNoisyTitle(row.title)) {
-      stmt.run(row.id);
-      disabled++;
-    }
-  }
-  setSetting("migration_disable_noisy_songs", new Date().toISOString());
-  console.log(
-    `[db] 別バージョン(Live / Remix 等)の ${disabled} 曲を無効にしました(全 ${rows.length} 曲)`
+function backfillDisableAllSongs(): void {
+  if (getSetting("migration_disable_all_songs") !== undefined) return;
+  const changed = Number(
+    db.prepare(`UPDATE artist_songs SET enabled = 0 WHERE enabled <> 0`).run().changes
   );
+  setSetting("migration_disable_all_songs", new Date().toISOString());
+  if (changed > 0) {
+    console.log(`[db] 参照曲の有効/無効の導入に伴い ${changed} 曲を無効にしました`);
+  }
 }
-backfillDisableNoisySongs();
+backfillDisableAllSongs();
 
 // 参照曲ベース化(2026-08-10)で廃止した機能の後片付け。プリセット・評価(👍/👎)・
 // 好みプロファイル文書は生成にも表示にも使わなくなった。DROP / DROP COLUMN は
@@ -595,12 +587,12 @@ export interface ArtistSongInput {
 
 // 楽曲リストの取り込み。INSERT OR IGNORE なので既存曲(同じ title)はそのままで新譜だけ増える
 // (既存曲の enabled は再取得でも変えない)。追加された件数を返す。
-// enabled の初期値は曲名で決める — Live / Remix 等の別バージョンは参照曲に向かないので
-// 最初から無効で入れる(人が曲一覧で有効に戻せる)
+// 新しい曲は enabled の既定(0 = 無効)で入る — 1 アーティスト最大 200 曲を機械的に取り込む
+// 以上、参照曲にしたい曲は人が選ぶものだから(曲名からの登録で選んだ 1 曲だけ API 層で有効にする)
 export function insertArtistSongs(artistId: number, songs: ArtistSongInput[]): number {
   const stmt = db.prepare(
-    `INSERT OR IGNORE INTO artist_songs (artist_id, title, album, release_year, genre, itunes_track_id, enabled)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`
+    `INSERT OR IGNORE INTO artist_songs (artist_id, title, album, release_year, genre, itunes_track_id)
+     VALUES (?, ?, ?, ?, ?, ?)`
   );
   let added = 0;
   for (const s of songs) {
@@ -610,8 +602,7 @@ export function insertArtistSongs(artistId: number, songs: ArtistSongInput[]): n
       s.album,
       s.releaseYear,
       s.genre,
-      s.itunesTrackId,
-      isNoisyTitle(s.title) ? 0 : 1
+      s.itunesTrackId
     );
     added += Number(r.changes);
   }

@@ -80,7 +80,10 @@ async function registerArtist(name, itunesArtistId) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name, itunesArtistId }),
     });
-    afterRegister(`「${artist.name}」を登録し、曲を ${added} 件取り込みました。`);
+    afterRegister(
+      `「${artist.name}」を登録し、曲を ${added} 件取り込みました。` +
+        "取り込んだ曲は無効の状態なので、「曲を見る」から使いたい曲を有効にしてください。"
+    );
     loadArtists();
   } catch (err) {
     showMessage("search-message", err.message);
@@ -100,8 +103,9 @@ async function registerSong(candidate) {
         body: JSON.stringify({ itunesTrackId: candidate.itunesTrackId }),
       }
     );
-    let message = `「${artist.name}」の「${song.title}」を登録しました`;
-    message += artistCreated ? `(曲 ${importedSongs} 件を取り込み)。` : "。";
+    let message = `「${artist.name}」の「${song.title}」を登録して有効にしました`;
+    // 一緒に取り込んだ曲は無効のままなので、有効になったのが選んだ 1 曲だけだと分かるようにする
+    message += artistCreated ? `(他に曲 ${importedSongs} 件を無効で取り込み)。` : "。";
     // コラボ曲は片方の artistId しか返らないため、表示名と登録先が違うことがある
     if (candidate.artistName && candidate.artistName !== artist.name) {
       message += `「${candidate.artistName}」は ${artist.name} として登録しています。`;

@@ -59,7 +59,7 @@ struct ArtistSongsView: View {
                 .accessibilityIdentifier("artist.songs.visibility")
 
                 if !isLoading && !songs.isEmpty {
-                    Text("有効 \(enabledCount) / 全 \(songs.count) 曲 — 無効にした曲は参照曲に選ばれません")
+                    Text("有効 \(enabledCount) / 全 \(songs.count) 曲 — トグルを入れた曲だけが参照曲になります")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .padding(.bottom, 4)
@@ -91,7 +91,7 @@ struct ArtistSongsView: View {
                         .padding(.top, 24)
                 } else {
                     if enabledCount == 0 {
-                        Text("有効な曲がありません。トグルを入れた曲だけが参照曲の候補になります。")
+                        Text("有効な曲がありません。取り込んだ曲は無効の状態なので、参照曲にしたい曲のトグルを入れてください。")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                             .padding(.vertical, 14)
