@@ -34,7 +34,12 @@ struct Track: Identifiable, Decodable, Hashable {
     /// 参照曲なしの旧データでは nil
     let refArtistName: String?
     let refSongTitle: String?
+    /// 公開ページに表示するか(opt-out で既定 true)。公開ページを持たない旧サーバーは返さない
+    let published: Bool?
     let createdAt: Date
+
+    /// 公開状態(旧サーバーの nil は「全曲公開」扱いに揃える)
+    var isPublished: Bool { published ?? true }
 
     var modeLabel: String { generationModeLabel(mode) }
 
@@ -76,6 +81,15 @@ func generationModeLabel(_ mode: String) -> String {
 
 struct TracksResponse: Decodable {
     let tracks: [Track]
+}
+
+/// PATCH /api/tracks/:id の body(公開ページからの除外・再公開)
+struct SetTrackPublishedRequest: Encodable {
+    let published: Bool
+}
+
+struct TrackResponse: Decodable {
+    let track: Track
 }
 
 /// GET /api/tasks の生成ジョブ

@@ -10,16 +10,22 @@ struct TrackDetailView: View {
     @State private var showsOriginalStyle = false
     @State private var showsPrompt = false
     @State private var showsJapaneseLyrics: Bool
+    /// 公開ページへの表示(楽観更新するためローカルに持つ。Track は値渡しのスナップショット)
+    @State private var isPublished: Bool
+    @State private var isUpdatingPublished = false
+    @State private var publishError: String?
 
     init(track: Track) {
         self.track = track
         _showsJapaneseLyrics = State(initialValue: track.lyricsJa != nil)
+        _isPublished = State(initialValue: track.isPublished)
     }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 header
+                publishSection
                 referenceSection
                 wordsSection
                 intentSection
@@ -91,6 +97,54 @@ struct TrackDetailView: View {
     }
 
     // MARK: - セクション
+
+    /// 公開ページ(誰でも見られる Web)への表示。opt-out 運用なので「聴いてまずい」と
+    /// 思ったらここで即座に下げられるようにする(下げると一覧・音源・カバーとも見えなくなる)
+    @ViewBuilder
+    private var publishSection: some View {
+        Toggle(isOn: publishedBinding) {
+            Text("公開ページに表示")
+                .font(.footnote.weight(.semibold))
+        }
+        .tint(.accentDeep)
+        .disabled(isUpdatingPublished)
+        .padding(.top, 22)
+        .accessibilityIdentifier("detail.publish")
+
+        if let publishError {
+            Text(publishError)
+                .font(.caption2)
+                .foregroundStyle(.red)
+                .padding(.top, 4)
+        }
+    }
+
+    /// トグルの束縛。set はそのまま PATCH に流す(楽観更新は setPublished 側で行う)
+    private var publishedBinding: Binding<Bool> {
+        Binding(
+            get: { isPublished },
+            set: { newValue in Task { await setPublished(newValue) } }
+        )
+    }
+
+    /// 公開/非公開の切り替え。押した瞬間に見た目を変え、失敗したら元に戻す
+    private func setPublished(_ published: Bool) async {
+        let previous = isPublished
+        isPublished = published
+        isUpdatingPublished = true
+        defer { isUpdatingPublished = false }
+        do {
+            _ = try await BackendAPI.patchJSON(
+                TrackResponse.self,
+                path: "/api/tracks/\(track.id)",
+                body: SetTrackPublishedRequest(published: published)
+            )
+            publishError = nil
+        } catch {
+            isPublished = previous
+            publishError = error.localizedDescription
+        }
+    }
 
     /// アーティスト経由生成で参照した曲(使用時点のスナップショット。
     /// アーティストを削除しても残る)。他モード・旧データでは出さない
