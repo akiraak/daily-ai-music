@@ -37,6 +37,11 @@ export const PUBLIC_DIR = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "../public"
 );
+// 公開ページ(無認証。/ にマウント)。管理画面(public/)とは分けて置く
+export const SITE_DIR = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../site"
+);
 
 export const SUNO_API_KEY = process.env.SUNOAPI_ORG_KEY ?? "";
 export const SUNO_BASE_URL = process.env.SUNOAPI_BASE_URL ?? "https://api.kie.ai";

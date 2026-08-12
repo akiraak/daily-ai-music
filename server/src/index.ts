@@ -3,7 +3,15 @@ import crypto from "node:crypto";
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
-import { API_SECRET, AUDIO_DIR, IMAGE_DIR, PORT, PUBLIC_DIR, SUNO_MODEL } from "./config.ts";
+import {
+  API_SECRET,
+  AUDIO_DIR,
+  IMAGE_DIR,
+  PORT,
+  PUBLIC_DIR,
+  SITE_DIR,
+  SUNO_MODEL,
+} from "./config.ts";
 import { getContextSettings } from "./context.ts";
 import * as db from "./db.ts";
 import { errorDetail, logError, logWarn, nowIso } from "./errorlog.ts";
@@ -332,6 +340,8 @@ function trackJson(t: db.TrackWithTaskRow, prefix: string) {
     // 参照曲(daily / artist のどちらも持つ。旧データでは null)
     refArtistName: t.ref_artist_name,
     refSongTitle: t.ref_song_title,
+    // 公開ページに出しているか(opt-out。既定 true)
+    published: t.published === 1,
     createdAt: t.created_at,
   };
 }
@@ -343,6 +353,20 @@ function urlPrefix(c: { req: { path: string } }): string {
 
 api.get("/tracks", (c) => {
   return c.json({ tracks: db.listTracks().map((t) => trackJson(t, urlPrefix(c))) });
+});
+
+// 公開ページからの除外・再公開(opt-out 運用の下げる口)。body は { published: boolean }
+api.patch("/tracks/:id", async (c) => {
+  const id = Number(c.req.param("id"));
+  if (!Number.isInteger(id)) return c.json({ error: "不正な id です" }, 400);
+  const body = await c.req.json().catch(() => null);
+  if (typeof body?.published !== "boolean") {
+    return c.json({ error: "published は boolean です" }, 400);
+  }
+  if (!db.setTrackPublished(id, body.published)) {
+    return c.json({ error: "曲が見つかりません" }, 404);
+  }
+  return c.json({ track: trackJson(db.getTrack(id)!, urlPrefix(c)) });
 });
 
 api.get("/credits", async (c) => {
@@ -761,7 +785,6 @@ for (const prefix of ["/api", "/admin"]) {
 }
 
 // 管理画面は /admin 配下(本番で Cloudflare Access をこのパスだけに掛けるため)
-app.get("/", (c) => c.redirect("/admin/"));
 app.get("/admin", (c) => c.redirect("/admin/"));
 app.use(
   "/admin/*",
@@ -770,6 +793,50 @@ app.use(
     rewriteRequestPath: (p) => p.replace(/^\/admin/, ""),
   })
 );
+
+// --- 公開ページ(すべて無認証)。本番の Cloudflare Access は /admin だけを保護しており、
+// / 配下は誰でも見える。参照曲・スタイル・歌詞・狙い・リアルワードなどの生成情報は
+// ページ側で隠すのではなくレスポンス自体に含めない ---
+
+// 公開 API は安全なフィールドだけに絞る(生成モデル名は AI 生成の明記を曲単位で裏付けるため出す)
+function publicTrackJson(t: db.TrackWithTaskRow) {
+  return {
+    id: t.id,
+    title: t.title,
+    duration: t.duration,
+    audioUrl: `/site/audio/${t.audio_file}`,
+    imageUrl: t.image_file ? `/site/images/${t.image_file}` : null,
+    sunoModel: t.model,
+    llmModel: t.llm_model,
+    createdAt: t.created_at,
+  };
+}
+
+app.get("/site/api/tracks", (c) => {
+  return c.json({ tracks: db.listPublishedTracks().map(publicTrackJson) });
+});
+
+// 音源・カバー画像は配信前に「そのファイルの曲が公開中か」を DB で確認し、非公開・不明なら 404。
+// /api|/admin 側の serveStatic はディレクトリ丸ごと配信なので流用しない(Range 対応は serveStatic に任せる)
+for (const [segment, dir, isPublished] of [
+  ["audio", AUDIO_DIR, db.isPublishedAudioFile],
+  ["images", IMAGE_DIR, db.isPublishedImageFile],
+] as const) {
+  const prefix = `/site/${segment}/`;
+  const serveFile = serveStatic({
+    root: dir,
+    rewriteRequestPath: (p) => p.slice(prefix.length - 1),
+  });
+  app.use(`${prefix}*`, async (c, next) => {
+    // パス区切りを含む名前(トラバーサル)は DB のファイル名と一致しないのでここで 404 になる
+    const file = decodeURIComponent(c.req.path.slice(prefix.length));
+    if (!isPublished(file)) return c.notFound();
+    return serveFile(c, next);
+  });
+}
+
+// 公開ページの静的ファイル(server/site/)。残りのパス全部を受けるため最後にマウントする
+app.use("/*", serveStatic({ root: SITE_DIR }));
 
 // ルートで捕まえ損ねた例外(Hono の既定は 500 を返すだけで記録が残らない)
 app.onError((err, c) => {

@@ -108,7 +108,7 @@ TODO の前提条件「Suno で生成した曲に著作権があるか確認」�
 ## Phase 分割
 
 - [x] Phase 0: 前提調査 — Suno 生成曲の著作権・公開可否(本ファイル上部。2026-08-12 完了)
-- [ ] Phase 1: サーバー — `tracks.published` + 公開 API/配信(公開判定付き)+ `PATCH /api/tracks/:id` + 公開ページ(`/` マウント)
+- [x] Phase 1: サーバー — `tracks.published` + 公開 API/配信(公開判定付き)+ `PATCH /api/tracks/:id` + 公開ページ(`/` マウント)(2026-08-12 完了)
 - [ ] Phase 2: 管理画面の楽曲一覧に公開/非公開トグル
 - [ ] Phase 3: iOS の楽曲詳細に公開/非公開トグル
 - [ ] Phase 4: 本番反映(デプロイ・`/` と `/admin` の保護状態の確認・実機確認)

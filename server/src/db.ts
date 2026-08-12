@@ -45,6 +45,7 @@ export interface TrackRow {
   duration: number;
   audio_file: string;
   image_file: string | null;
+  published: number; // 1 = 公開ページに出す(既定。問題のある曲だけ 0 に落とす opt-out 運用)
   created_at: string;
 }
 
@@ -161,6 +162,8 @@ addColumnIfMissing("tasks", "ref_artist_name", "ref_artist_name TEXT");
 addColumnIfMissing("tasks", "ref_song_title", "ref_song_title TEXT");
 // 参照曲の有効/無効(2026-08-11 追加)。既存行は DEFAULT 0 = すべて無効で入る
 addColumnIfMissing("artist_songs", "enabled", "enabled INTEGER NOT NULL DEFAULT 0");
+// 公開ページに出すか(2026-08-12 追加)。opt-out 運用なので既定 1 = 公開(既存行も公開になる)
+addColumnIfMissing("tracks", "published", "published INTEGER NOT NULL DEFAULT 1");
 
 // 有効/無効の導入時に、それまでの「全曲が候補」から「全曲が無効」へ 1 回だけ寄せる。
 // カラム追加が DEFAULT 0 なので通常はここで変わる行は無いが、先に DEFAULT 1 で
@@ -405,6 +408,47 @@ export function listTracks(limit = 200): TrackWithTaskRow[] {
        ORDER BY tracks.id DESC LIMIT ?`
     )
     .all(limit) as unknown as TrackWithTaskRow[];
+}
+
+// --- 公開ページ(無認証)向け ---
+
+// 公開中の曲のみ新しい順。公開 API はここから id・title 等の安全なフィールドだけを返す
+export function listPublishedTracks(limit = 500): TrackWithTaskRow[] {
+  return db
+    .prepare(
+      `SELECT ${TRACK_TASK_COLUMNS}
+       FROM tracks JOIN tasks ON tasks.id = tracks.task_id
+       WHERE tracks.published = 1
+       ORDER BY tracks.id DESC LIMIT ?`
+    )
+    .all(limit) as unknown as TrackWithTaskRow[];
+}
+
+// 公開ページからの除外(opt-out)。存在しなければ false
+export function setTrackPublished(id: number, published: boolean): boolean {
+  return (
+    db
+      .prepare(`UPDATE tracks SET published = ? WHERE id = ?`)
+      .run(published ? 1 : 0, id).changes > 0
+  );
+}
+
+// 音源・カバー画像の配信前チェック。非公開の曲や DB に無いファイル名は配信しない
+// (公開ページの配信はディレクトリ丸ごとの serveStatic を使わず、必ずこの判定を通す)
+function isPublishedFile(column: "audio_file" | "image_file", file: string): boolean {
+  return (
+    db
+      .prepare(`SELECT 1 FROM tracks WHERE ${column} = ? AND published = 1 LIMIT 1`)
+      .get(file) !== undefined
+  );
+}
+
+export function isPublishedAudioFile(file: string): boolean {
+  return isPublishedFile("audio_file", file);
+}
+
+export function isPublishedImageFile(file: string): boolean {
+  return isPublishedFile("image_file", file);
 }
 
 // --- リアルワード(曲の中心となった語。使用回数を数えて重複生成を防ぐ) ---
