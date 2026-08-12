@@ -1,8 +1,6 @@
 # TODO
 
-- エラーログ解析から修正タスクを生成する仕組みを作る [plan](docs/plans/error-log-collection.md)
-  - [x] Phase 1: サーバーのエラーを構造化して保存する(`error_logs` テーブル + `logError()`)
-  - [x] Phase 2: Mac から取得できるようにする(`GET /api/errors` + `scripts/fetch-error-logs.sh`)
-  - [x] Phase 3: iOS アプリのエラーをサーバーへ送る(`POST /api/client-errors`)
-  - [ ] Phase 1〜3 の本番反映(g3plus のデプロイ + 実機アプリの更新)
-  - [ ] Phase 4: 溜まったログの解析 → 修正タスク生成(内容は Phase 1〜3 の後に決める)
+- エラーログ解析から修正タスクを生成する仕組みを作る(Phase 4)
+  - ログの生成・保存と Mac からの取得は 2026-08-11 に導入済み([plan](docs/plans/archive/error-log-collection.md))。`GET /api/errors` / `scripts/fetch-error-logs.sh` で `.logs/` に JSONL が落ちる
+  - 溜まったログを入力に「新規 fingerprint の抽出 → 原因の当たり付け → `TODO.md` への追記案」を出す仕組みを作る
+  - 2〜3 週間ログを溜めてから、スラッシュコマンドにするか定期実行にするかを含めて別プランで決める
