@@ -4,14 +4,47 @@ import SwiftUI
 /// POST /api/generate { artistSongId } で「その曲に似た新曲」を生成する。
 /// 生成の進行状況は生成タブに出るため、開始したらこの画面は閉じて戻る。
 /// 行末のトグルは曲の有効/無効(PATCH /api/artist-songs/:id)。無効な曲は参照曲に選ばれず、
-/// タップしても生成できない(Live / Remix 等は取り込み時に自動で無効になる)
+/// タップしても生成できない(取り込みは既定で無効なので、使う曲を人が有効にする)。
+/// 右上のメニューは一括操作(PATCH /api/artists/:id/songs)で、対象は絞り込みと表示フィルタを
+/// 通した「表示中の曲」
 struct ArtistSongsView: View {
     let artist: Artist
+    /// 曲の有効/無効が変わったら呼ぶ(呼び出し元のアーティスト一覧の曲数表示を更新するため)
+    var onSongsChanged: (() -> Void)?
 
     /// 表示する曲の絞り込み(有効/無効は行を消さずに薄く出したいので既定は「すべて」)
     private enum Visibility: String, CaseIterable {
         case all, enabled
         var label: String { self == .all ? "すべて" : "有効のみ" }
+    }
+
+    /// 確認ダイアログの対象。生成と一括操作でダイアログを 1 つに集約している
+    /// (同じ View に confirmationDialog を 2 つ付けると片方が出ないことがあるため)
+    private enum Confirmation {
+        /// この曲に似た曲を生成する
+        case generate(ArtistSong)
+        /// 表示中の曲をまとめて有効/無効にする(ids が nil なら全曲 = サーバー側で絞る)
+        case bulk(enabled: Bool, ids: [Int]?, count: Int)
+
+        var title: String {
+            switch self {
+            case .generate(let song):
+                "「\(song.title)」に似た曲を生成しますか?"
+            case .bulk(let enabled, let ids, let count):
+                "\(ids == nil ? "全" : "表示中の") \(count) 曲を\(enabled ? "有効" : "無効")にしますか?"
+            }
+        }
+
+        var message: String {
+            switch self {
+            case .generate:
+                "原曲の歌詞は使わず、音楽的な特徴を参考に新しい曲をつくります。"
+            case .bulk(true, _, _):
+                "有効にした曲は毎日の自動生成の参照曲候補になります。"
+            case .bulk(false, _, _):
+                "無効にした曲は参照曲に選ばれず、この画面から生成もできなくなります。"
+            }
+        }
     }
 
     @Environment(\.dismiss) private var dismiss
@@ -20,8 +53,9 @@ struct ArtistSongsView: View {
     @State private var visibility: Visibility = .all
     @State private var isLoading = true
     @State private var errorMessage: String?
-    @State private var pendingSong: ArtistSong?
+    @State private var confirmation: Confirmation?
     @State private var isGenerating = false
+    @State private var isBulkUpdating = false
     @FocusState private var keywordFocused: Bool
 
     private var filteredSongs: [ArtistSong] {
@@ -65,10 +99,10 @@ struct ArtistSongsView: View {
                         .padding(.bottom, 4)
                 }
 
-                if isGenerating {
+                if isGenerating || isBulkUpdating {
                     HStack(spacing: 10) {
                         ProgressView()
-                        Text("生成を開始しています…")
+                        Text(isGenerating ? "生成を開始しています…" : "曲を更新しています…")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
@@ -111,19 +145,50 @@ struct ArtistSongsView: View {
         .scrollDismissesKeyboard(.interactively)
         .navigationTitle(artist.name)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                // 一括操作は破壊的(200 曲が一度に変わる)なのでメニューの中に置く。
+                // 画面上部は絞り込み・表示フィルタ・件数表示で埋まっており、曲行を押し下げたくない事情もある
+                Menu {
+                    Button {
+                        confirmation = bulkConfirmation(enabled: true)
+                    } label: {
+                        Label("表示中を全て有効", systemImage: "checkmark.circle")
+                    }
+                    .accessibilityIdentifier("artist.songs.bulk.enable")
+
+                    Button(role: .destructive) {
+                        confirmation = bulkConfirmation(enabled: false)
+                    } label: {
+                        Label("表示中を全て無効", systemImage: "slash.circle")
+                    }
+                    .accessibilityIdentifier("artist.songs.bulk.disable")
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+                .disabled(filteredSongs.isEmpty || isGenerating || isBulkUpdating)
+                .accessibilityIdentifier("artist.songs.bulk")
+            }
+        }
         .confirmationDialog(
-            pendingSong.map { "「\($0.title)」に似た曲を生成しますか?" } ?? "",
-            isPresented: .init(get: { pendingSong != nil }, set: { if !$0 { pendingSong = nil } }),
-            titleVisibility: .visible
-        ) {
-            Button("生成する") {
-                if let song = pendingSong {
-                    Task { await generate(song) }
+            confirmation?.title ?? "",
+            isPresented: .init(get: { confirmation != nil }, set: { if !$0 { confirmation = nil } }),
+            titleVisibility: .visible,
+            presenting: confirmation
+        ) { item in
+            switch item {
+            case .generate(let song):
+                Button("生成する") { Task { await generate(song) } }
+            case .bulk(true, let ids, _):
+                Button("有効にする") { Task { await setAllEnabled(true, ids: ids) } }
+            case .bulk(false, let ids, _):
+                Button("無効にする", role: .destructive) {
+                    Task { await setAllEnabled(false, ids: ids) }
                 }
             }
             Button("キャンセル", role: .cancel) {}
-        } message: {
-            Text("原曲の歌詞は使わず、音楽的な特徴を参考に新しい曲をつくります。")
+        } message: { item in
+            Text(item.message)
         }
         .task { await load() }
     }
@@ -134,7 +199,7 @@ struct ArtistSongsView: View {
         HStack(spacing: 8) {
             Button {
                 keywordFocused = false
-                pendingSong = song
+                confirmation = .generate(song)
             } label: {
                 HStack(spacing: 8) {
                     VStack(alignment: .leading, spacing: 1) {
@@ -160,12 +225,13 @@ struct ArtistSongsView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .disabled(isGenerating || !song.isEnabled)
+            .disabled(isGenerating || isBulkUpdating || !song.isEnabled)
             .accessibilityIdentifier("artist.song")
 
             Toggle("", isOn: enabledBinding(song))
                 .labelsHidden()
                 .tint(.accentDeep)
+                .disabled(isBulkUpdating)
                 .accessibilityLabel("「\(song.title)」を参照曲の候補にする")
                 .accessibilityIdentifier("artist.song.toggle")
         }
@@ -192,11 +258,39 @@ struct ArtistSongsView: View {
                 body: SetSongEnabledRequest(enabled: enabled)
             )
             errorMessage = nil
+            onSongsChanged?()
         } catch {
             // 再読み込みで並びが変わっていることがあるので id で引き直してから戻す
             if let current = songs.firstIndex(where: { $0.id == song.id }) {
                 songs[current].enabled = previous
             }
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    /// 一括操作の対象を確定する。絞り込み・表示フィルタが効いているときは見えている曲だけを
+    /// 対象にする(「全て」と言いながら見えていない曲まで変えると取り返しがつかないため)
+    private func bulkConfirmation(enabled: Bool) -> Confirmation {
+        let targets = filteredSongs
+        // 全曲が対象なら ids を省く(サーバーがそのアーティストの全曲を対象にする)
+        let ids = targets.count == songs.count ? nil : targets.map(\.id)
+        return .bulk(enabled: enabled, ids: ids, count: targets.count)
+    }
+
+    /// 一括で有効/無効にする。曲数が多く楽観更新の巻き戻しが煩雑なので、
+    /// 成功したらサーバーの結果で一覧を作り直す(件数表示も同時に正しくなる)
+    private func setAllEnabled(_ enabled: Bool, ids: [Int]?) async {
+        isBulkUpdating = true
+        defer { isBulkUpdating = false }
+        do {
+            _ = try await BackendAPI.patchJSON(
+                ArtistSongsBulkResponse.self,
+                path: "/api/artists/\(artist.id)/songs",
+                body: SetArtistSongsEnabledRequest(enabled: enabled, ids: ids)
+            )
+            await load()
+            onSongsChanged?()
+        } catch {
             errorMessage = error.localizedDescription
         }
     }

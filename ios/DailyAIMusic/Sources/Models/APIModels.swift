@@ -227,6 +227,19 @@ struct ArtistSongResponse: Decodable {
     let song: ArtistSong
 }
 
+/// PATCH /api/artists/:id/songs の body(曲の一括更新)
+struct SetArtistSongsEnabledRequest: Encodable {
+    let enabled: Bool
+    /// 対象の曲 id。nil はそのアーティストの全曲(Encodable は nil のキーを出さない)
+    let ids: [Int]?
+}
+
+struct ArtistSongsBulkResponse: Decodable {
+    let artist: Artist
+    /// 実際に更新された曲数
+    let updated: Int
+}
+
 // MARK: - 曲名からの登録(アーティストは iTunes の応答から逆引きする)
 
 /// GET /api/artist-songs/search の候補(まだ登録されていない。iTunes の検索結果)

@@ -87,7 +87,9 @@ struct ArtistsView: View {
     private func artistRow(_ artist: Artist) -> some View {
         HStack(spacing: 8) {
             NavigationLink {
-                ArtistSongsView(artist: artist)
+                // 曲の有効/無効が変わったら一覧を取り直す(この画面は .task の 1 回読みなので、
+                // 戻ってきたときに「有効 N / 全 M 曲」が古いままになる)
+                ArtistSongsView(artist: artist) { Task { await load() } }
             } label: {
                 HStack(spacing: 8) {
                     VStack(alignment: .leading, spacing: 1) {

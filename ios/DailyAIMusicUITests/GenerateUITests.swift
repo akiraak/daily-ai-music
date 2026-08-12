@@ -87,6 +87,37 @@ final class GenerateUITests: XCTestCase {
             "曲行に有効/無効のトグルがあること"
         )
         attachScreenshot(app, name: "artist-songs")
+
+        // 一括操作は確認ダイアログが出るところまで見て、実行はせずに閉じる
+        // (実行するとサーバーの曲がまとめて書き換わるため。PATCH は curl シナリオでカバー済み)
+        let bulk = app.buttons["artist.songs.bulk"]
+        XCTAssertTrue(bulk.waitForExistence(timeout: 3), "一括操作のメニューがあること")
+        bulk.tap()
+        let enableAll = app.buttons["artist.songs.bulk.enable"]
+        XCTAssertTrue(enableAll.waitForExistence(timeout: 3), "「表示中を全て有効」があること")
+        XCTAssertTrue(app.buttons["artist.songs.bulk.disable"].exists, "「表示中を全て無効」があること")
+        attachScreenshot(app, name: "artist-songs-bulk-menu")
+
+        enableAll.tap()
+        XCTAssertTrue(
+            app.buttons["有効にする"].waitForExistence(timeout: 3),
+            "確認ダイアログが出ること"
+        )
+        XCTAssertTrue(
+            app.staticTexts.matching(
+                NSPredicate(format: "label ENDSWITH %@", "曲を有効にしますか?")
+            ).firstMatch.exists,
+            "確認ダイアログに対象の曲数が出ること"
+        )
+        attachScreenshot(app, name: "artist-songs-bulk-confirm")
+
+        // メニューから出した確認ダイアログはポップオーバーで表示され、キャンセル行は描かれない
+        // (iOS 標準の挙動。外側をタップして閉じる)
+        app.otherElements["PopoverDismissRegion"].tap()
+        XCTAssertTrue(
+            bulk.waitForExistence(timeout: 3),
+            "ダイアログを閉じると曲一覧に戻ること"
+        )
     }
 
     /// 曲名からの生成への導線。検索して候補が並ぶところまでを確認する

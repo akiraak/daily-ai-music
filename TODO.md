@@ -14,12 +14,6 @@
   - [ ] Phase 4: 本番反映(DB バックアップ → 再起動でマイグレーション)と CLAUDE.md 更新
     - CLAUDE.md 更新と DB バックアップ(`data/backup-20260812-before-enabled.sqlite`)は完了。残りは g3plus での `git pull` → `build` → `up -d` と反映後の確認
 
-- アーティストの曲を全て有効無効にできる仕組みをアプリに入れる([plan](docs/plans/artist-songs-bulk-enable.md))
-  iOS の曲一覧に一括操作(表示中の曲をまとめて有効/無効)を入れる。サーバーは `PATCH /api/artists/:id/songs` が既にあるので変更不要
-  - [ ] Phase 1: 曲一覧のツールバーにメニュー(表示中を全て有効/無効)+ 確認ダイアログ + 一括 PATCH
-  - [ ] Phase 2: 戻ったときにアーティスト一覧の「有効 N / 全 M」を更新する
-  - [ ] Phase 3: シミュレータ + 隔離 DB での確認・UI テスト追加・CLAUDE.md 更新
-
 - 生成した曲を表示するWebを作る
   前提としてSunoで生成した曲に著作権があるか確認
 
