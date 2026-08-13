@@ -111,4 +111,16 @@ TODO の前提条件「Suno で生成した曲に著作権があるか確認」�
 - [x] Phase 1: サーバー — `tracks.published` + 公開 API/配信(公開判定付き)+ `PATCH /api/tracks/:id` + 公開ページ(`/` マウント)(2026-08-12 完了)
 - [x] Phase 2: 管理画面の楽曲一覧に公開/非公開トグル(2026-08-12 完了)
 - [x] Phase 3: iOS の楽曲詳細に公開/非公開トグル(2026-08-12 完了)
-- [ ] Phase 4: 本番反映(デプロイ・`/` と `/admin` の保護状態の確認・実機確認)
+- [x] Phase 4: 本番反映(デプロイ・`/` と `/admin` の保護状態の確認・実機確認)(2026-08-12 完了)
+
+## 本番反映の記録(2026-08-12)
+
+g3plus 上の clone で `git pull` → `build` → `up -d` の通常フロー。ただし **g3plus-ops 側の Dockerfile に `COPY server/site ./site` の追加が必要だった**(`server/src` と `server/public` しか COPY しておらず、そのままでは `/` と `/track/:id` が 404 になる)。`tracks.published` は `ADD COLUMN ... DEFAULT 1` のみで冪等なので DB の退避はなし。
+
+確認結果:
+
+- Cloudflare 経由で `/`・`/track/1`・`/site/api/tracks` が **無認証 200**、`/admin/` は 302(Access 維持)、secret 無しの `/api/tracks` は 401(公開マウントを足しても認証は緩んでいない)
+- 公開 API のレスポンスに `lyrics` / `style` / `prompt` / `refArtistName` / `refSongTitle` が含まれないこと(既存 36 曲すべてが公開状態で入った)
+- 非公開に落とした曲の `/site/audio|images/*` が 404・一覧からも消えること(検証後に公開へ復元)、存在しないファイル名・パストラバーサルも 404
+- `cf-cache-status: DYNAMIC`(ホスト全体 Bypass の Cache Rule が効いており、公開音源もエッジに載らない)
+- 実機アプリでの公開/非公開トグルはユーザーが確認済み
