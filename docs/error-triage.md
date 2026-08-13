@@ -1,6 +1,6 @@
 # エラートリアージ台帳
 
-`/errors`(`.claude/skills/errors/SKILL.md`)が使う、エラー fingerprint ごとの判断記録。
+`/logs`(`.claude/skills/logs/SKILL.md`)が使う、エラー fingerprint ごとの判断記録。
 手で直してもよい。判断の履歴は git に残る。
 
 状態と再浮上のルール:
