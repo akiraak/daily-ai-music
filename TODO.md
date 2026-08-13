@@ -7,11 +7,6 @@
 
 - LLM トークン記録の最終確認 — 実装・本番反映済み。2026-08-13 の自動生成(PT 6:00)後にトークンが記録されていることを確認して DONE へ [plan](docs/plans/llm-token-usage-log.md)
 
-- 生成 UI 再構築の本番反映 — サーバーを通常フロー(`git pull` → `build` → `up -d`)で反映(`GET /api/reference-songs` の追加のみ・DB 変更なし)し、iOS アプリを実機へ再インストール。**反映まで実機の「曲を選んで生成」の一覧はエラー表示になる**(他の画面は旧サーバーでも動く)[plan](docs/plans/archive/generation-ui-restructure.md)
-
-- 生成を 3 種類にする(おまかせ / アーティストでおまかせ / 曲から生成)+ 生成タブの見た目をわかりやすく [plan](docs/plans/generation-three-entries.md)
-  - [x] Phase 1: サーバー — `POST /api/generate` の `artistId` 受付と選曲(曲 LRU の流用)
-  - [x] Phase 2: iOS — 生成タブの 3 経路化・アーティストでおまかせ画面・「曲から生成」への改名
-  - [ ] 後片付け — CLAUDE.md 更新・本番反映 TODO への追記・プランの archive 移動
+- 生成 UI 再構築 + 生成 3 経路の本番反映 — サーバーを通常フロー(`git pull` → `build` → `up -d`)で反映(`GET /api/reference-songs` と `POST /api/generate` の `artistId` 追加のみ・DB 変更なし)し、iOS アプリを実機へ再インストール。**反映まで実機の「曲から生成」の一覧はエラー表示・「アーティストでおまかせ」の実行は 400 になる**(他の画面は旧サーバーでも動く)[plan](docs/plans/archive/generation-ui-restructure.md) / [plan](docs/plans/archive/generation-three-entries.md)
 
 - [] 音楽になにか分類をつけてWebトップやアプリトップで絞り込みできるようにする
