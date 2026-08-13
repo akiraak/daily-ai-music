@@ -26,7 +26,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 ./run-server.sh        # サーバー起動 → 管理画面 http://localhost:3014/admin/(PORT 環境変数で変更可)
                        # 初回の npm install と、ポートを掴んでいる既存プロセスの停止も行う
-./scripts/fetch-error-logs.sh   # 本番のエラーログを .logs/ に JSONL で取得(--local / --since 7d / --raw)
+./scripts/fetch-logs.sh    # 本番のログ・運用データ(エラー・タスク・楽曲・設定・クレジット)を
+                           # .logs/<env>-<日時>/ に取得(--local / --since 7d / --raw)。/logs の入力
 ./run-ios-device.sh    # iOS アプリを実機にインストール・起動(既定は本番 https://music.chobi.me へ接続、
                        # --local でMacのLAN IP自動検出。.env の API_SECRET 注入)
 
@@ -58,7 +59,7 @@ esl-learning-assistant と同方式。`/api/*` は `X-API-Secret` ヘッダ必�
 - **紹介文(`tasks.intro`、2026-08-12 追加)**: 公開ページ用の短い紹介(日本語 2 文まで・120 字以内)。**開発者向けの `intent`(狙い)は参照曲に触れるので公開には使えず**、聴く人向けの文を LLM の出力に別項目として足している。**生成の入力に参照曲は渡さない**(入力に入れなければ実在アーティスト名が混ざりようがない)。導入前の曲は `server/src/scripts/backfill-intro.ts`(Haiku・逐次・`--dry-run` / `--limit N`・再実行可)で埋める。編集 UI は作らない — 文面に問題があれば曲ごと非公開にする(opt-out と同じ考え方)。管理画面の楽曲一覧では折りたたみに表示だけする
 - **Hono + @hono/node-server**: API・静的配信(`public/` の管理画面は `/admin` 配下。本番で Cloudflare Access をこのパスだけに掛けるため。`/` 配下は公開ページ(`server/site/`)。音源・画像は `/api/audio/*` 等 + `/admin/audio/*` 等の二重マウントで Range 対応配信、公開側は公開判定付きの `/site/audio|images/*` — 上記「API 認証」参照)
 - **node:sqlite**(`data/db.sqlite`): `tasks`(生成ジョブ)/ `tracks`(完成楽曲)/ `artists`・`artist_songs`(参照曲)/ `real_world_words` / `settings` / `error_logs`(エラーログ)。`data/` は gitignore
-- **`src/errorlog.ts`**: エラーログ。`logError()` / `logWarn()` が `console` 出力に加えて `error_logs` テーブルへ構造化して残す(`level` / `origin`(server・ios)/ `source` / `event`(`task_failed` 等の安定した識別子)/ `message` / `detail`(JSON)/ `fingerprint` / `task_id`)。同じ `fingerprint` が 10 分以内に再発したら行を増やさず `repeat_count` に畳み、90 日 or 5000 行で古い順に落とす。fingerprint は message の可変部分(URL・ID・「曲名」・数値)を伏せて計算する。API キー・secret・LLM プロンプト全文は `detail` に載せない。取得は `GET /api/errors` + `scripts/fetch-error-logs.sh`(本番は Cloudflare Access のため `/admin` を curl できず、`/api` + secret 経路を使う。secret は `g3plus-ops/daily-ai-music/.env` から読む)。`docker logs` は 10MB×3 でローテートされるので DB が正本、生ログは `--raw` で ssh 取得する保険
+- **`src/errorlog.ts`**: エラーログ。`logError()` / `logWarn()` が `console` 出力に加えて `error_logs` テーブルへ構造化して残す(`level` / `origin`(server・ios)/ `source` / `event`(`task_failed` 等の安定した識別子)/ `message` / `detail`(JSON)/ `fingerprint` / `task_id`)。同じ `fingerprint` が 10 分以内に再発したら行を増やさず `repeat_count` に畳み、90 日 or 5000 行で古い順に落とす。fingerprint は message の可変部分(URL・ID・「曲名」・数値)を伏せて計算する。API キー・secret・LLM プロンプト全文は `detail` に載せない。取得は `GET /api/errors` + `scripts/fetch-logs.sh`(旧 fetch-error-logs.sh。エラーに加えタスク・楽曲などの運用データもまとめて取る。本番は Cloudflare Access のため `/admin` を curl できず、`/api` + secret 経路を使う。secret は `g3plus-ops/daily-ai-music/.env` から読む)。`docker logs` は 10MB×3 でローテートされるので DB が正本、生ログは `--raw` で ssh 取得する保険
 - **`src/itunes.ts`**: iTunes Search API クライアント(アーティスト経由生成の楽曲データソース。API キー不要)。アーティスト候補の検索・曲候補の検索(曲名からの登録用。track 行の `artistId` でアーティストを逆引き)・楽曲一覧の取得(最大 200 曲・同名の重複は最古を残して除去)を行う
 - **`src/suno/client.ts`**: Suno 連携の抽象化インターフェース。実装は `kieai.ts`(kie.ai / sunoapi.org 互換)。公式 API が出たらここを差し替える
 - **`src/generation.ts`**: 生成ジョブ管理。**受付(`acceptGeneration`)と本体(`completeGeneration`)を分けた非同期方式** — 受付は LLM を呼ぶ前に `status = 'PLANNING'` のタスク行を作って即返し、本体がバックグラウンドで LLM → Suno 送信まで進める(参照曲ありの生成は web_search で 3 分ほどかかり、同期のままだと本番エッジのプロキシタイムアウトに掛かるため)。失敗は必ずタスクの `FAILED` として記録される。10 秒間隔のポーラーが未完了タスク(`PLANNING` を除く)を照会し、完了したら音源・カバー画像を即 `data/` へダウンロード(プロバイダの URL は一時ファイルのため)。サーバー再起動時も DB から未完了タスクを拾って自動再開する(`PLANNING` は再開できないので `FAILED` にする)

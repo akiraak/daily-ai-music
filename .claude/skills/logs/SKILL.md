@@ -18,12 +18,13 @@ description: サーバー・iOS のログを取得して解析する。エラー
 ### 1. 取得
 
 ```bash
-./scripts/fetch-error-logs.sh --since 90d
+./scripts/fetch-logs.sh --since 90d
 ```
 
+- 出力は `.logs/<env>-<日時>/` の 1 ディレクトリ — `errors.jsonl`(エラートリアージの入力)+ `tasks.jsonl` / `tracks.jsonl` / `generation-params.json` / `settings.json` / `credits.json`(改善の気づきの入力)
 - ユーザーが引数を渡したらそのまま付ける(例: `/logs --local`、`/logs --since 7d`)
 - 失敗したら(g3plus-ops の `.env` 不在など)エラー内容と対処を伝えて終了
-- スクリプトが出力する `→ .logs/errors-*.jsonl` のパスが今回の入力。**過去の `.logs/` ファイルは読まない**
+- **過去の `.logs/` ディレクトリは読まない**(毎回新規取得)
 - `--local` は動作確認・デバッグ用。**台帳・TODO の更新を伴う本来のトリアージは本番ログで行う**(ローカルのテスト起因エラーで台帳を汚さない)
 
 ### 2. 台帳と突き合わせて分類
@@ -43,6 +44,7 @@ description: サーバー・iOS のログを取得して解析する。エラー
 
 - `source` / `event` から発生箇所を特定する。server は `server/src/` で `logError` / `logWarn` の呼び出しを grep、iOS(`ios-*`)は `ios/DailyAIMusic/Sources/Services/` を見る
 - 呼び出し元のコードを読み、`message` / `detail`(errorCode・path・stack 等)と突き合わせて原因の当たりを付ける
+- `tasks.jsonl` の FAILED とも突き合わせる — **エラーログ導入(2026-08-11)前やサーバー再起動中の失敗は error_logs に残らず、タスク側にしか出ない**。同種の失敗が過去にもあれば頻度の判断材料になる
 - 推奨判定を決める(下記「判定の目安」)
 
 ### 4. 提示
