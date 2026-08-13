@@ -96,8 +96,11 @@ TODO「アーティストから生成と曲から生成のUIが分かりにく�
 
 ## Phase 分割
 
-- [ ] Phase 0: 構成の決定 — iOS の案 1 / 案 2 をモック HTML(`docs/plans/generation-ui-restructure-mocks/`)で比較して選定。管理画面の追従範囲もここで決める
-- [ ] Phase 1: サーバー — `GET /api/reference-songs` の追加(Phase 0 で必要と決まった場合)
-- [ ] Phase 2: iOS — タブ・画面の再構築
-- [ ] Phase 3: Web 管理画面 — 名前・文言・構成の追従
+Phase 0 はモック HTML(`docs/plans/generation-ui-restructure-mocks/`、2026-08-12 作成)だけでは決めず、**iOS に案 1 / 案 2 の両方を実装して実機で見比べて決定する**(2026-08-12 変更)。両案の差分はタブ構成と生成タブの導線だけで、新画面(曲を選んで生成・参照曲管理の再構成・追加シート統合)は共通なので、共通部分を 1 度実装し、タブ構成は設定画面の一時的な切り替え(`@AppStorage`。決定後に撤去)で両案を試せるようにする。
+
+- [ ] Phase 0a: サーバー — `GET /api/reference-songs`(有効な参照曲の横断一覧。曲を選んで生成に必要)
+- [ ] Phase 0b: iOS — 共通の新画面 + 案 1 / 案 2 を設定で切り替え(実機で見比べる用)
+- [ ] Phase 0c: 実機で両案を確認して構成を決定。管理画面の追従範囲もここで決める
+- [ ] Phase 1: iOS — 落選案と切り替えトグルの撤去・確定構成への整理
+- [ ] Phase 2: Web 管理画面 — 名前・文言・構成の追従
 - [ ] 後片付け — CLAUDE.md 更新・プランの archive 移動
