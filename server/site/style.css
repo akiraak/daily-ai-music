@@ -4,6 +4,7 @@
 :root {
   --bg: #faf9f7;
   --text: #1c1a17;
+  --body: #443f38; /* 本文(紹介・歌詞)。見出しより一段柔らかく */
   --muted: #8a847a;
   --faint: #b3ada2;
   --line: #e8e5df;
@@ -117,6 +118,18 @@ a { color: inherit; text-decoration: none; }
   letter-spacing: 0.01em;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+/* 紹介は 2 行で切る。文量が曲ごとにばらつくため、切らないとカードの高さが揃わない */
+.card .intro {
+  margin-top: 7px;
+  font-size: 12px;
+  line-height: 1.65;
+  color: var(--body);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
 
 /* --- 詳細 --- */
 
@@ -182,7 +195,29 @@ a { color: inherit; text-decoration: none; }
   font-variant-numeric: tabular-nums;
 }
 
+.detail-intro {
+  margin-top: 30px;
+  max-width: 480px;
+  font-size: 15px;
+  line-height: 1.9;
+  color: var(--body);
+  overflow-wrap: anywhere;
+}
+
+/* 歌詞は詳細ページの下に全幅で置く(カバー横の欄に入れると縦に伸びて釣り合わない) */
+.lyrics-section { padding-bottom: 68px; }
+.lyrics {
+  margin-top: 20px;
+  max-width: 620px;
+  white-space: pre-line;
+  font-size: 15px;
+  line-height: 2.1;
+  color: var(--body);
+  overflow-wrap: anywhere;
+}
+
 .others { padding-bottom: 72px; }
+.lyrics-section h2,
 .others h2 {
   font-size: 12.5px; font-weight: 600;
   letter-spacing: 0.14em; text-transform: uppercase;
@@ -236,6 +271,8 @@ footer .en { color: var(--faint); }
   .card .title { font-size: 13.5px; }
   .card .meta { font-size: 11px; }
   .card .models { font-size: 9.5px; }
+  /* 2 列になるぶん字を一段小さくして、クランプは 2 行のまま保つ */
+  .card .intro { font-size: 11px; margin-top: 6px; }
 }
 
 @media (max-width: 720px) {
@@ -248,5 +285,9 @@ footer .en { color: var(--faint); }
   .detail-cover { width: min(78vw, 380px); height: min(78vw, 380px); margin: 0 auto; }
   .detail-title { font-size: 25px; }
   .player { width: 100%; margin: 28px auto 0; }
+  /* .detail が中央寄せになるので紹介も中央に揃える(歌詞は .detail の外なので左寄せのまま) */
+  .detail-intro { margin: 26px auto 0; font-size: 14.5px; }
+  .lyrics { margin-top: 16px; font-size: 14.5px; line-height: 2; }
+  .lyrics-section { padding-bottom: 52px; }
   .others-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 16px; }
 }

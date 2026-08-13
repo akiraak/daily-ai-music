@@ -332,6 +332,8 @@ function trackJson(t: db.TrackWithTaskRow, prefix: string) {
     // 原詞の言語(旧データは null。英語固定だった頃のもの)
     lyricsLang: t.lyrics_lang,
     intent: t.intent,
+    // 公開ページに出している紹介文(管理画面は表示のみ。編集の口は用意しない)
+    intro: t.intro,
     llmModel: t.llm_model,
     llmPrompt: t.llm_prompt,
     // web_search で参照した情報源(参照曲ありの生成のみ。他は空配列)
@@ -798,7 +800,8 @@ app.use(
 // / 配下は誰でも見える。参照曲・スタイル・歌詞・狙い・リアルワードなどの生成情報は
 // ページ側で隠すのではなくレスポンス自体に含めない ---
 
-// 公開 API は安全なフィールドだけに絞る(生成モデル名は AI 生成の明記を曲単位で裏付けるため出す)
+// 公開 API は安全なフィールドだけに絞る(生成モデル名は AI 生成の明記を曲単位で裏付けるため出す)。
+// intro は公開用に書かせた紹介文で、開発者向けの intent(参照曲に触れる)とは別物
 function publicTrackJson(t: db.TrackWithTaskRow) {
   return {
     id: t.id,
@@ -808,12 +811,42 @@ function publicTrackJson(t: db.TrackWithTaskRow) {
     imageUrl: t.image_file ? `/site/images/${t.image_file}` : null,
     sunoModel: t.model,
     llmModel: t.llm_model,
+    intro: t.intro,
     createdAt: t.created_at,
   };
 }
 
+// 歌詞の [Verse] [Chorus] などのセクションタグを落として本文だけにする。
+// 表示側で隠すのではなく公開 API が出さない(既存の「出さないものは含めない」と揃える)。
+// インストゥルメンタル・歌詞の無い旧データは null(ページ側で歌詞ブロックごと出さない)
+export function stripLyricSectionTags(lyrics: string | null): string | null {
+  if (!lyrics) return null;
+  const body = lyrics
+    .split("\n")
+    .filter((line) => !/^\s*\[[^\]]*\]\s*$/.test(line))
+    .join("\n")
+    // タグ行を落とすと空行が連続するので 1 行に畳む
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  return body || null;
+}
+
 app.get("/site/api/tracks", (c) => {
+  // 歌詞は 1 曲で数百〜数千字あるため一覧には載せない(詳細の /site/api/tracks/:id だけ)
   return c.json({ tracks: db.listPublishedTracks().map(publicTrackJson) });
+});
+
+// 曲詳細。公開中の曲だけを返し、非公開・不在・数字でない id はすべて 404。
+// 一覧のフィールド + タグ除去済みの歌詞で、参照曲・スタイル・狙い・リアルワード・
+// LLM 入力は一覧と同じく返さない
+app.get("/site/api/tracks/:id", (c) => {
+  const id = c.req.param("id");
+  if (!/^\d+$/.test(id)) return c.notFound();
+  const track = db.getPublishedTrack(Number(id));
+  if (!track) return c.notFound();
+  return c.json({
+    track: { ...publicTrackJson(track), lyrics: stripLyricSectionTags(track.lyrics) },
+  });
 });
 
 // 音源・カバー画像は配信前に「そのファイルの曲が公開中か」を DB で確認し、非公開・不明なら 404。

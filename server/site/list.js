@@ -27,11 +27,15 @@ function render(tracks) {
         <div class="title"></div>
         <div class="meta"></div>
         <div class="models"></div>
+        <div class="intro"></div>
       </div>`;
     if (t.imageUrl) card.querySelector("img").src = t.imageUrl;
     card.querySelector(".title").textContent = t.title;
     card.querySelector(".meta").textContent = `${fmtDateJa(t.createdAt)} · ${fmtDuration(t.duration)}`;
     card.querySelector(".models").textContent = modelLabel(t);
+    // 紹介は 2 行までのクランプ(CSS)。無い曲は要素ごと消して余白を残さない
+    if (t.intro) card.querySelector(".intro").textContent = t.intro;
+    else card.querySelector(".intro").remove();
     card.addEventListener("click", () => { location.href = trackPageUrl(t); });
     card.querySelector(".play span").addEventListener("click", (e) => {
       e.stopPropagation();

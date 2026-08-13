@@ -46,6 +46,7 @@ export interface SongPlan {
   lyrics: string; // Suno に渡す原詞(歌声の言語で書かれる)
   lyricsJa?: string; // 日本語訳。原詞が日本語のときはスキーマから外すので undefined
   intent: string;
+  intro: string; // 公開ページに出す短い紹介(intent とは別物。参照曲の話を書かせない)
   realWorldWords: string[]; // この曲の中心となった語(保存して使用回数を制限する)
   sources: string[]; // web_search で参照した情報源(検索できなかったときは空配列)
 }
@@ -98,6 +99,12 @@ export function songPlanSchema(lang: VocalLanguage) {
     intent: {
       type: "string",
       description: "この曲の狙い・意図の説明(日本語、2〜3 文。管理画面に表示する)",
+    },
+    intro: {
+      type: "string",
+      description:
+        "公開ページに出す短い紹介(日本語。2 文まで・120 字以内で、60〜100 字が目安)。曲の雰囲気・情景が伝わる文にする。" +
+        "実在のアーティスト名・曲名・固有名詞を含めない。「AI が生成した」のようなメタな説明は書かない",
     },
     realWorldWords: {
       type: "array",
@@ -196,6 +203,7 @@ export function buildSongPlanPrompt(
       : []),
     "- 検索で確かめられなかった要素は、そのアーティストの一般的な作風から推定してよい。その場合も推測であることを断らずに具体的に書き切ること",
     "- intent には、取り入れた音楽的特徴と、その根拠を**項目ごとに書き分ける**(検索で確認した / 曲を知っている / 作風からの推定)",
+    "- intent と intro は読み手が違う。intent は開発者向けの根拠メモ、intro は公開ページで聴く人が読む紹介文で、**intro にはリファレンス楽曲の話を一切書かない**(似せた曲の名前・アーティスト名はもちろん、「◯◯を参考にした」という言い方もしない)。曲そのものの雰囲気・情景だけを書く",
     "- sources には、実際に参照した情報源の URL またはタイトルを列挙する(検索しなかった場合は空配列)",
   ];
   sections.push(`## 作り方(厳守)\n${howTo.join("\n")}`);

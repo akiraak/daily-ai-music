@@ -174,6 +174,9 @@ function trackElement(t) {
     if (t.refArtistName) {
       addSection("リファレンス", `${t.refArtistName}「${t.refSongTitle}」`);
     }
+    // 公開ページに出ている紹介文(表示のみ。文面に問題があれば曲ごと非公開にする)。
+    // バックフィル前の旧データでは出ない
+    addSection("紹介(公開ページ)", t.intro);
     addSection("狙い", t.intent);
     // web_search で参照した情報源(参照曲ありの生成のみ。旧データ・旧サーバーでは空)
     addSection("参照した情報源", (t.sources ?? []).join("\n"), true);

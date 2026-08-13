@@ -1,4 +1,5 @@
-// 曲詳細。URL(/track/:id)のパスから曲を特定し、シークバー付きプレイヤーと「ほかの曲」を出す
+// 曲詳細。URL(/track/:id)のパスから曲を特定し、シークバー付きプレイヤー・紹介・歌詞と
+// 「ほかの曲」を出す。曲そのものは詳細 API(歌詞つき)、「ほかの曲」は一覧 API から取る
 const status = document.getElementById("status");
 
 function showStatus(text) {
@@ -15,6 +16,17 @@ function render(track, tracks) {
   document.getElementById("title").textContent = track.title;
   document.getElementById("models").textContent = modelLabel(track);
   document.getElementById("t-total").textContent = fmtDuration(track.duration);
+
+  // 紹介・歌詞は無い曲(バックフィル前の旧データ・インストゥルメンタル)ではブロックごと出さない
+  if (track.intro) {
+    const intro = document.getElementById("intro");
+    intro.hidden = false;
+    intro.textContent = track.intro;
+  }
+  if (track.lyrics) {
+    document.getElementById("lyrics-section").hidden = false;
+    document.getElementById("lyrics").textContent = track.lyrics;
+  }
 
   const audio = new Audio(track.audioUrl);
   const btn = document.getElementById("btn");
@@ -67,10 +79,9 @@ function render(track, tracks) {
   }
 }
 
-const id = Number(/^\/track\/(\d+)$/.exec(location.pathname)?.[1]);
-fetchTracks()
-  .then((tracks) => {
-    const track = tracks.find((t) => t.id === id);
+const id = /^\/track\/(\d+)$/.exec(location.pathname)?.[1] ?? "";
+Promise.all([fetchTrack(id), fetchTracks()])
+  .then(([track, tracks]) => {
     if (!track) {
       showStatus("曲が見つかりません(非公開になった可能性があります)");
       return;

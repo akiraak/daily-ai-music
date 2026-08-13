@@ -25,7 +25,8 @@ export interface TaskRow {
   lyrics_ja: string | null; // 日本語訳(原詞が日本語のときは null)
   lyrics_lang: string | null; // 原詞の言語 'ja' | 'en'(旧データは null = 英語)
   title: string | null; // LLM が付けた曲名
-  intent: string | null; // 狙いの説明(日本語)
+  intent: string | null; // 狙いの説明(日本語。開発者向けで参照曲に触れるため公開しない)
+  intro: string | null; // 公開ページに出す短い紹介(日本語。旧データは NULL)
   llm_model: string | null; // 生成に使った LLM のモデル名
   llm_prompt: string | null; // LLM に送った入力全文(プリセット・直近スタイル等を含む)
   llm_sources: string | null; // web_search で参照した情報源(JSON 配列。検索しなかったモードは null)
@@ -151,6 +152,9 @@ addColumnIfMissing("tasks", "lyrics_ja", "lyrics_ja TEXT");
 addColumnIfMissing("tasks", "lyrics_lang", "lyrics_lang TEXT");
 addColumnIfMissing("tasks", "title", "title TEXT");
 addColumnIfMissing("tasks", "intent", "intent TEXT");
+// 公開ページ用の紹介文(2026-08-12 追加)。intent は参照曲に触れる開発者向けメモなので
+// 公開には使えず、聴く人向けの文を別に持つ。旧データは NULL = 紹介なし(バックフィル対象)
+addColumnIfMissing("tasks", "intro", "intro TEXT");
 addColumnIfMissing("tasks", "llm_model", "llm_model TEXT");
 addColumnIfMissing("tasks", "llm_prompt", "llm_prompt TEXT");
 // web_search で参照した情報源(2026-08-09 追加。参照曲ありの生成のみ)
@@ -284,6 +288,7 @@ export function updateTaskPlan(
     lyricsLang?: string | null;
     title: string;
     intent: string;
+    intro?: string | null;
     sources?: string[];
     llmModel?: string | null;
     llmPrompt?: string | null;
@@ -292,7 +297,7 @@ export function updateTaskPlan(
   const sources = plan.sources?.filter((s) => s.trim()) ?? [];
   db.prepare(
     `UPDATE tasks SET style = ?, style_ja = ?, lyrics = ?, lyrics_ja = ?, lyrics_lang = ?,
-       title = ?, intent = ?, llm_model = ?, llm_prompt = ?, llm_sources = ?,
+       title = ?, intent = ?, intro = ?, llm_model = ?, llm_prompt = ?, llm_sources = ?,
        updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?`
   ).run(
     plan.style,
@@ -302,6 +307,7 @@ export function updateTaskPlan(
     plan.lyricsLang ?? null,
     plan.title,
     plan.intent,
+    plan.intro || null,
     plan.llmModel ?? null,
     plan.llmPrompt ?? null,
     sources.length > 0 ? JSON.stringify(sources) : null,
@@ -388,6 +394,7 @@ export type TrackWithTaskRow = TrackRow & {
   lyrics_ja: string | null;
   lyrics_lang: string | null;
   intent: string | null;
+  intro: string | null;
   llm_model: string | null;
   llm_prompt: string | null;
   llm_sources: string | null;
@@ -397,7 +404,7 @@ export type TrackWithTaskRow = TrackRow & {
 
 const TRACK_TASK_COLUMNS = `tracks.*, tasks.mode, tasks.prompt, tasks.instrumental, tasks.model,
   tasks.style, tasks.style_ja, tasks.lyrics, tasks.lyrics_ja, tasks.lyrics_lang,
-  tasks.intent, tasks.llm_model, tasks.llm_prompt,
+  tasks.intent, tasks.intro, tasks.llm_model, tasks.llm_prompt,
   tasks.llm_sources, tasks.ref_artist_name, tasks.ref_song_title`;
 
 export function listTracks(limit = 200): TrackWithTaskRow[] {
@@ -422,6 +429,17 @@ export function listPublishedTracks(limit = 500): TrackWithTaskRow[] {
        ORDER BY tracks.id DESC LIMIT ?`
     )
     .all(limit) as unknown as TrackWithTaskRow[];
+}
+
+// 曲詳細の公開 API 用。非公開の曲と存在しない id はどちらも undefined(呼び出し側で 404)
+export function getPublishedTrack(id: number): TrackWithTaskRow | undefined {
+  return db
+    .prepare(
+      `SELECT ${TRACK_TASK_COLUMNS}
+       FROM tracks JOIN tasks ON tasks.id = tracks.task_id
+       WHERE tracks.id = ? AND tracks.published = 1`
+    )
+    .get(id) as TrackWithTaskRow | undefined;
 }
 
 // 公開ページからの除外(opt-out)。存在しなければ false
@@ -536,6 +554,37 @@ export function getTrack(id: number): TrackWithTaskRow | undefined {
        WHERE tracks.id = ?`
     )
     .get(id) as TrackWithTaskRow | undefined;
+}
+
+// --- 紹介文のバックフィル(src/scripts/backfill-intro.ts が使う) ---
+
+// 紹介文がまだ無い曲。生成の入力に使えるのは曲名・スタイルの日本語訳・歌詞だけで、
+// 参照曲(ref_artist_name / ref_song_title)は意図的に返さない — 入力に入れなければ
+// 実在アーティスト名が紹介文に混ざりようがないため(プロンプトでの禁止だけに頼らない)
+export interface MissingIntroRow {
+  task_id: number;
+  title: string;
+  style_ja: string | null;
+  lyrics: string | null;
+}
+
+export function listTasksMissingIntro(limit = 500): MissingIntroRow[] {
+  return db
+    .prepare(
+      `SELECT tasks.id AS task_id, tracks.title AS title, tasks.style_ja, tasks.lyrics
+       FROM tracks JOIN tasks ON tasks.id = tracks.task_id
+       WHERE tasks.intro IS NULL
+       GROUP BY tasks.id
+       ORDER BY tracks.id DESC LIMIT ?`
+    )
+    .all(limit) as unknown as MissingIntroRow[];
+}
+
+export function setTaskIntro(taskId: number, intro: string): void {
+  db.prepare(
+    `UPDATE tasks SET intro = ?,
+     updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?`
+  ).run(intro, taskId);
 }
 
 // --- アーティスト・参照曲(生成経路「アーティスト経由」) ---

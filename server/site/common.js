@@ -5,6 +5,14 @@ async function fetchTracks() {
   return (await res.json()).tracks;
 }
 
+// 曲詳細(歌詞つき)。非公開・存在しない id はサーバーが 404 を返すので null で返す
+async function fetchTrack(id) {
+  const res = await fetch(`/site/api/tracks/${id}`);
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return (await res.json()).track;
+}
+
 function fmtDuration(sec) {
   const m = Math.floor(sec / 60);
   const s = Math.round(sec % 60);
