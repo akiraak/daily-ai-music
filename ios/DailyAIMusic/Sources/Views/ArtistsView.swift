@@ -1,9 +1,14 @@
 import SwiftUI
 
-/// アーティスト一覧。登録済みアーティスト(GET /api/artists)を並べ、選ぶと曲一覧へ push する。
-/// 右上の + で追加シート(iTunes 検索 → 候補から選んで登録)を開く。
+/// 参照曲の管理(アーティスト一覧)。登録済みアーティスト(GET /api/artists)を並べ、
+/// 選ぶと曲一覧(有効/無効の管理)へ push する。右上の + で追加シート
+/// (アーティスト名 / 曲名の 2 経路を統合した iTunes 検索)を開く。
+/// 案 1 ではタブのルート(prominentTitle = true)、案 2 では生成タブから push される。
 /// レイアウトは案A ミニマル基準(ScrollView + VStack 横 22pt・ヘアライン区切り)
 struct ArtistsView: View {
+    /// タブのルートとして表示するとき true(大タイトルにする)。push 時は inline
+    var prominentTitle = false
+
     @State private var artists: [Artist] = []
     @State private var isLoading = true
     @State private var errorMessage: String?
@@ -14,7 +19,7 @@ struct ArtistsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                Text("好きなアーティストの曲を選ぶと、その曲の音楽的な特徴に似た新曲を AI がつくります(原曲の歌詞は使いません)。取り込んだ曲は無効の状態なので、曲一覧で使いたい曲を有効にしてください。")
+                Text("生成のもとにする曲(参照曲)を管理します。有効にした曲がおまかせ生成の候補になり、「曲を選んで生成」でも選べます。取り込んだ曲は最初は無効なので、曲一覧で使いたい曲を有効にしてください。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .padding(.top, 12)
@@ -49,8 +54,8 @@ struct ArtistsView: View {
             .padding(.bottom, 24)
         }
         .background(Color.appBackground)
-        .navigationTitle("アーティスト")
-        .navigationBarTitleDisplayMode(.inline)
+        .navigationTitle("参照曲")
+        .navigationBarTitleDisplayMode(prominentTitle ? .large : .inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
@@ -62,7 +67,7 @@ struct ArtistsView: View {
             }
         }
         .sheet(isPresented: $showsAddSheet) {
-            AddArtistSheet { await load() }
+            AddReferenceSheet { await load() }
         }
         .confirmationDialog(
             pendingDeletion.map { "「\($0.name)」と取り込んだ曲を削除しますか?" } ?? "",
@@ -160,18 +165,41 @@ struct ArtistsView: View {
     }
 }
 
-/// アーティスト追加シート。検索語 → iTunes の候補一覧 → 選んで登録(曲の取り込みまでサーバーが行う)。
-/// 日本語で検索してもヒットするが、登録名は iTunes の表記(ローマ字のことが多い)になり
-/// 別名義も候補に混ざるため、必ず候補から選ばせて取り違えを防ぐ
-private struct AddArtistSheet: View {
+/// 参照曲の追加シート。アーティスト名 / 曲名の 2 経路を 1 つの検索 UI に統合する
+/// (Web 管理画面の「登録」パネルと同じ切替式)。
+/// - アーティスト名: 候補から選ぶと、その人の曲(最大 200 曲)を取り込む
+/// - 曲名: 候補から選ぶと、その曲とアーティストをまとめて登録する(選んだ 1 曲は自動で有効)。
+///   ここは管理が目的の入口なので生成には進まない(生成まで一気に進むのは
+///   「曲を選んで生成」内の曲名検索 = SongSearchView)
+/// どちらも日本語で検索できるが、登録名は iTunes の表記(ローマ字のことが多い)になり
+/// 別名義・カバーも候補に混ざるため、必ず候補から選ばせて取り違えを防ぐ
+private struct AddReferenceSheet: View {
     /// 登録が成功したら呼ぶ(一覧の再読み込み)
     let onRegistered: () async -> Void
 
+    private enum Mode: String, CaseIterable {
+        case artist, song
+        var label: String { self == .artist ? "アーティスト名" : "曲名" }
+        var placeholder: String {
+            self == .artist ? "アーティスト名(例: 米津玄師)" : "曲名(例: Lemon / 夜に駆ける)"
+        }
+        var hint: String {
+            switch self {
+            case .artist:
+                "候補から選ぶと、その人の曲(最大 200 曲)を iTunes から取り込みます。登録名は iTunes の表記(ローマ字のことが多い)になります。"
+            case .song:
+                "候補から選ぶと、その曲とアーティスト(最大 200 曲)をまとめて登録し、選んだ曲だけ有効にします。アーティスト名を足すと精度が上がります(例: 米津玄師 Lemon)。"
+            }
+        }
+    }
+
     @Environment(\.dismiss) private var dismiss
+    @State private var mode: Mode = .artist
     @State private var term = ""
-    @State private var candidates: [ArtistCandidate] = []
+    @State private var artistCandidates: [ArtistCandidate] = []
+    @State private var songCandidates: [SongCandidate] = []
     @State private var isSearching = false
-    @State private var registeringId: Int?
+    @State private var isRegistering = false
     @State private var message: String?
     @State private var isError = false
     @FocusState private var termFocused: Bool
@@ -180,9 +208,17 @@ private struct AddArtistSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
+                    Picker("検索対象", selection: $mode) {
+                        ForEach(Mode.allCases, id: \.self) { Text($0.label).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    .padding(.top, 14)
+                    .accessibilityIdentifier("artists.add.mode")
+
                     HStack(spacing: 8) {
-                        TextField("アーティスト名", text: $term)
+                        TextField(mode.placeholder, text: $term)
                             .font(.subheadline)
+                            .autocorrectionDisabled()
                             .focused($termFocused)
                             .submitLabel(.search)
                             .onSubmit { Task { await search() } }
@@ -195,9 +231,9 @@ private struct AddArtistSheet: View {
                             .disabled(term.trimmingCharacters(in: .whitespaces).isEmpty || isSearching)
                             .accessibilityIdentifier("artists.add.search")
                     }
-                    .padding(.top, 14)
+                    .padding(.top, 12)
 
-                    Text("日本語でも検索できます。登録名は iTunes の表記(ローマ字のことが多い)になります。")
+                    Text(mode.hint)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                         .padding(.top, 8)
@@ -208,24 +244,38 @@ private struct AddArtistSheet: View {
                             .foregroundStyle(isError ? .red : .secondary)
                             .padding(.top, 14)
                     }
-                    if isSearching || registeringId != nil {
+                    if isSearching || isRegistering {
                         ProgressView()
                             .frame(maxWidth: .infinity)
                             .padding(.top, 20)
                     }
 
-                    ForEach(candidates) { candidate in
-                        Divider()
-                        candidateRow(candidate)
+                    switch mode {
+                    case .artist:
+                        ForEach(artistCandidates) { candidate in
+                            Divider()
+                            candidateRow(
+                                title: candidate.name, subtitle: candidate.genre
+                            ) { await registerArtist(candidate) }
+                        }
+                        if !artistCandidates.isEmpty { Divider() }
+                    case .song:
+                        ForEach(songCandidates) { candidate in
+                            Divider()
+                            candidateRow(
+                                title: candidate.title, subtitle: candidate.subtitle
+                            ) { await registerSong(candidate) }
+                        }
+                        if !songCandidates.isEmpty { Divider() }
                     }
-                    if !candidates.isEmpty { Divider() }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 22)
                 .padding(.bottom, 24)
             }
             .background(Color.appBackground)
-            .navigationTitle("アーティストを追加")
+            .scrollDismissesKeyboard(.interactively)
+            .navigationTitle("参照曲を追加")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -234,21 +284,31 @@ private struct AddArtistSheet: View {
             }
         }
         .onAppear { termFocused = true }
+        .onChange(of: mode) {
+            // 経路を切り替えたら前の候補・メッセージを消す(候補の混在を防ぐ)
+            artistCandidates = []
+            songCandidates = []
+            message = nil
+        }
     }
 
-    private func candidateRow(_ candidate: ArtistCandidate) -> some View {
+    private func candidateRow(
+        title: String, subtitle: String?, register: @escaping () async -> Void
+    ) -> some View {
         Button {
-            Task { await register(candidate) }
+            Task { await register() }
         } label: {
             HStack(spacing: 8) {
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(candidate.name)
+                    Text(title)
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(Color.primary)
-                    if let genre = candidate.genre {
-                        Text(genre)
+                        .multilineTextAlignment(.leading)
+                    if let subtitle, !subtitle.isEmpty {
+                        Text(subtitle)
                             .font(.caption)
                             .foregroundStyle(Color.secondary)
+                            .multilineTextAlignment(.leading)
                     }
                 }
                 Spacer(minLength: 8)
@@ -260,7 +320,7 @@ private struct AddArtistSheet: View {
             .padding(.vertical, 13)
         }
         .buttonStyle(.plain)
-        .disabled(registeringId != nil)
+        .disabled(isRegistering)
         .accessibilityIdentifier("artists.add.candidate")
     }
 
@@ -270,29 +330,37 @@ private struct AddArtistSheet: View {
         termFocused = false
         isSearching = true
         defer { isSearching = false }
-        candidates = []
+        artistCandidates = []
+        songCandidates = []
         message = nil
         do {
             let encoded = keyword.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? keyword
-            candidates = try await BackendAPI.getJSON(
-                ArtistSearchResponse.self, path: "/api/artists/search?term=\(encoded)"
-            ).candidates
-            if candidates.isEmpty {
-                message = "「\(keyword)」に一致するアーティストが見つかりません。"
-                isError = false
-            } else {
-                message = "登録するアーティストを選んでください。"
-                isError = false
+            let found: Bool
+            switch mode {
+            case .artist:
+                artistCandidates = try await BackendAPI.getJSON(
+                    ArtistSearchResponse.self, path: "/api/artists/search?term=\(encoded)"
+                ).candidates
+                found = !artistCandidates.isEmpty
+            case .song:
+                songCandidates = try await BackendAPI.getJSON(
+                    SongSearchResponse.self, path: "/api/artist-songs/search?term=\(encoded)"
+                ).candidates
+                found = !songCandidates.isEmpty
             }
+            message = found
+                ? "登録する\(mode == .artist ? "アーティスト" : "曲")を選んでください。"
+                : "「\(keyword)」に一致する\(mode == .artist ? "アーティスト" : "曲")が見つかりません。"
+            isError = false
         } catch {
             message = error.localizedDescription
             isError = true
         }
     }
 
-    private func register(_ candidate: ArtistCandidate) async {
-        registeringId = candidate.itunesArtistId
-        defer { registeringId = nil }
+    private func registerArtist(_ candidate: ArtistCandidate) async {
+        isRegistering = true
+        defer { isRegistering = false }
         message = "登録しています…(iTunes から曲を取り込みます)"
         isError = false
         do {
@@ -305,6 +373,28 @@ private struct AddArtistSheet: View {
             )
             await onRegistered()
             message = "「\(response.artist.name)」を登録し、曲を \(response.added) 件取り込みました(すべて無効の状態です)。"
+            dismiss()
+        } catch {
+            message = error.localizedDescription
+            isError = true
+        }
+    }
+
+    private func registerSong(_ candidate: SongCandidate) async {
+        isRegistering = true
+        defer { isRegistering = false }
+        message = "登録しています…(iTunes から曲を取り込みます)"
+        isError = false
+        do {
+            // 未登録アーティストは最大 200 曲を取り込むためサーバー側の処理がやや長い
+            let response = try await BackendAPI.postJSON(
+                CreateArtistSongResponse.self,
+                path: "/api/artist-songs",
+                body: CreateArtistSongRequest(itunesTrackId: candidate.itunesTrackId),
+                timeout: 60
+            )
+            await onRegistered()
+            message = "「\(response.artist.name)」の「\(response.song.title)」を登録して有効にしました。"
             dismiss()
         } catch {
             message = error.localizedDescription

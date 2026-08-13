@@ -1,10 +1,10 @@
 import SwiftUI
 
-/// アーティストの曲一覧(GET /api/artists/:id/songs)。曲をタップすると確認のうえ
-/// POST /api/generate { artistSongId } で「その曲に似た新曲」を生成する。
-/// 生成の進行状況は生成タブに出るため、開始したらこの画面は閉じて戻る。
-/// 行末のトグルは曲の有効/無効(PATCH /api/artist-songs/:id)。無効な曲は参照曲に選ばれず、
-/// タップしても生成できない(取り込みは既定で無効なので、使う曲を人が有効にする)。
+/// アーティストの曲一覧(GET /api/artists/:id/songs)。管理が主の画面 —
+/// 行タップ・行末トグルで曲の有効/無効(PATCH /api/artist-songs/:id)を切り替える
+/// (取り込みは既定で無効なので、使う曲を人が有効にする)。
+/// 生成は従 — 有効な曲にだけ出る「生成」ボタンで、確認のうえ
+/// POST /api/generate { artistSongId }。進行状況は生成タブに出るため、開始したら閉じて戻る。
 /// 右上のメニューは一括操作(PATCH /api/artists/:id/songs)で、対象は絞り込みと表示フィルタを
 /// 通した「表示中の曲」
 struct ArtistSongsView: View {
@@ -40,9 +40,9 @@ struct ArtistSongsView: View {
             case .generate:
                 "原曲の歌詞は使わず、音楽的な特徴を参考に新しい曲をつくります。"
             case .bulk(true, _, _):
-                "有効にした曲は毎日の自動生成の参照曲候補になります。"
+                "有効にした曲はおまかせ生成の候補になり、「曲を選んで生成」でも選べます。"
             case .bulk(false, _, _):
-                "無効にした曲は参照曲に選ばれず、この画面から生成もできなくなります。"
+                "無効にした曲は生成の候補から外れ、この画面から生成もできなくなります。"
             }
         }
     }
@@ -93,7 +93,7 @@ struct ArtistSongsView: View {
                 .accessibilityIdentifier("artist.songs.visibility")
 
                 if !isLoading && !songs.isEmpty {
-                    Text("有効 \(enabledCount) / 全 \(songs.count) 曲 — トグルを入れた曲だけが参照曲になります")
+                    Text("有効 \(enabledCount) / 全 \(songs.count) 曲 — 有効にした曲だけが生成の候補になります")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .padding(.bottom, 4)
@@ -125,7 +125,7 @@ struct ArtistSongsView: View {
                         .padding(.top, 24)
                 } else {
                     if enabledCount == 0 {
-                        Text("有効な曲がありません。取り込んだ曲は無効の状態なので、参照曲にしたい曲のトグルを入れてください。")
+                        Text("有効な曲がありません。取り込んだ曲は無効の状態なので、候補にしたい曲の行をタップして有効にしてください。")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                             .padding(.vertical, 14)
@@ -193,13 +193,15 @@ struct ArtistSongsView: View {
         .task { await load() }
     }
 
-    /// タイトル部(タップで生成)+ 右端に有効/無効のトグル。
-    /// List を使わない画面構成のため swipeActions は効かず、行内トグルにしている
+    /// 管理が主の行: タイトル部のタップも行末のトグルも有効/無効の切り替え
+    /// (広いタップ面で主目的の管理操作ができるように)。生成は有効な曲にだけ出る
+    /// 「生成」ボタンで明示する(誤タップで生成確認が出ないように)。
+    /// List を使わない画面構成のため swipeActions は効かず、行内に並べている
     private func songRow(_ song: ArtistSong) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 10) {
             Button {
                 keywordFocused = false
-                confirmation = .generate(song)
+                Task { await setEnabled(song, !song.isEnabled) }
             } label: {
                 HStack(spacing: 8) {
                     VStack(alignment: .leading, spacing: 1) {
@@ -215,18 +217,34 @@ struct ArtistSongsView: View {
                         }
                     }
                     Spacer(minLength: 8)
-                    // 無効な曲は生成できないので、生成の合図(sparkles)も出さない
-                    if song.isEnabled {
-                        Image(systemName: "sparkles")
-                            .font(.footnote.weight(.semibold))
-                            .foregroundStyle(Color.accentDeep)
-                    }
                 }
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .disabled(isGenerating || isBulkUpdating || !song.isEnabled)
+            .disabled(isGenerating || isBulkUpdating)
             .accessibilityIdentifier("artist.song")
+
+            if song.isEnabled {
+                Button {
+                    keywordFocused = false
+                    confirmation = .generate(song)
+                } label: {
+                    HStack(spacing: 3) {
+                        Image(systemName: "sparkles")
+                            .font(.caption2.weight(.semibold))
+                        Text("生成")
+                            .font(.caption.weight(.bold))
+                    }
+                    .foregroundStyle(Color.accentDeep)
+                    .padding(.horizontal, 11)
+                    .padding(.vertical, 5)
+                    .overlay(Capsule().strokeBorder(Color.accentDeep, lineWidth: 1.2))
+                    .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .disabled(isGenerating || isBulkUpdating)
+                .accessibilityIdentifier("artist.song.generate")
+            }
 
             Toggle("", isOn: enabledBinding(song))
                 .labelsHidden()

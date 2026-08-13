@@ -292,6 +292,26 @@ struct CreateArtistSongResponse: Decodable {
     let importedSongs: Int
 }
 
+/// GET /api/reference-songs の曲(有効な参照曲の全アーティスト横断一覧。
+/// 「曲を選んで生成」用。アーティスト名 → リリース年の新しい順で返る)
+struct ReferenceSong: Identifiable, Decodable, Hashable {
+    let id: Int
+    let artistId: Int
+    let title: String
+    let album: String?
+    let releaseYear: Int?
+    let artistName: String
+
+    /// 一覧の副題(アーティスト · 年 · アルバム)
+    var subtitle: String {
+        [artistName, releaseYear.map(String.init), album].compactMap { $0 }.joined(separator: " · ")
+    }
+}
+
+struct ReferenceSongsResponse: Decodable {
+    let songs: [ReferenceSong]
+}
+
 /// GET /api/credits。プロバイダから取れなかったときは null
 struct CreditsResponse: Decodable {
     let credits: Int?

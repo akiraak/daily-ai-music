@@ -1,10 +1,14 @@
 import SwiftUI
 
-/// 生成タブ。管理画面と同じく daily フロー(おまかせ生成 = POST /api/daily/run)を主役にし、
-/// 曲名・アーティストからの生成(参照曲を選ぶ経路)への導線を並べる。
+/// 生成タブ。daily フロー(おまかせ生成 = POST /api/daily/run)を主役にし、
+/// もう 1 本の生成経路「曲を選んで生成」(参照曲を人が選ぶ)への導線を置く。
+/// 案 2(3 タブ)では参照曲の管理への導線もここに並ぶ(案 1 では独立タブ)。
 /// 残クレジット(GET /api/credits)はナビゲーションバー右のピルに表示。
 /// レイアウトは案A ミニマル(docs/plans/ios-app-design-mocks/01-minimal.html)基準
 struct GenerateView: View {
+    /// タブ構成の比較用(案 1 / 案 2)。構成が決まったら削除する
+    @AppStorage(AppSettingsKeys.uiVariant) private var uiVariant = UIVariant.default
+
     // おまかせ生成
     @State private var isRunningDaily = false
     @State private var dailyError: String?
@@ -20,11 +24,13 @@ struct GenerateView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     dailyHero
                     Divider()
+                    songPickerRow
+                    Divider()
+                    if uiVariant == UIVariant.threeTabs {
+                        manageReferenceRow
+                        Divider()
+                    }
                     paramsRow
-                    Divider()
-                    songSearchRow
-                    Divider()
-                    artistsRow
                     Divider()
                     progressSection
                 }
@@ -146,18 +152,21 @@ struct GenerateView: View {
         .accessibilityIdentifier("generate.params")
     }
 
-    // MARK: - 曲名から生成(アーティスト名を知らなくても入口に立てるようにする)
+    // MARK: - 曲を選んで生成(参照曲を人が選ぶ、もう 1 本の生成経路)
 
-    private var songSearchRow: some View {
+    private var songPickerRow: some View {
         NavigationLink {
-            SongSearchView()
+            SongPickerView()
         } label: {
-            HStack(spacing: 8) {
+            HStack(spacing: 10) {
+                Image(systemName: "music.note")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(Color.accentDeep)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("曲名から生成")
+                    Text("曲を選んで生成")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(Color.primary)
-                    Text("知っている曲を指定してつくる")
+                    Text("有効な参照曲から 1 曲選んでつくる")
                         .font(.caption)
                         .foregroundStyle(Color.secondary)
                 }
@@ -170,21 +179,24 @@ struct GenerateView: View {
             .padding(.vertical, 13)
         }
         .buttonStyle(.plain)
-        .accessibilityIdentifier("generate.songSearch")
+        .accessibilityIdentifier("generate.songPicker")
     }
 
-    // MARK: - アーティストから生成(読み取り専用画面と同じ push 遷移の行)
+    // MARK: - 参照曲の管理(案 2 のみ。案 1 では独立タブ)
 
-    private var artistsRow: some View {
+    private var manageReferenceRow: some View {
         NavigationLink {
             ArtistsView()
         } label: {
-            HStack(spacing: 8) {
+            HStack(spacing: 10) {
+                Image(systemName: "person.2")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(Color.accentDeep)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("アーティストから生成")
+                    Text("参照曲の管理")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(Color.primary)
-                    Text("好きな曲に似た新曲をつくる")
+                    Text("アーティストの登録・曲の有効/無効")
                         .font(.caption)
                         .foregroundStyle(Color.secondary)
                 }
@@ -197,7 +209,7 @@ struct GenerateView: View {
             .padding(.vertical, 13)
         }
         .buttonStyle(.plain)
-        .accessibilityIdentifier("generate.artists")
+        .accessibilityIdentifier("generate.manageReference")
     }
 
     // MARK: - 進行状況

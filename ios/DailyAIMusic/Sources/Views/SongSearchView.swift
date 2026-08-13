@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// 曲名から生成。アーティスト名を思い出せなくても「この曲みたいな曲」を作れるようにする入口で、
+/// 登録済みにない曲を曲名で探して生成する(「曲を選んで生成」= SongPickerView から push)。
 /// 曲を選ぶと iTunes の応答からアーティストを逆引きして登録(POST /api/artist-songs)し、
-/// そのまま POST /api/generate { artistSongId } まで進む。
+/// そのまま POST /api/generate { artistSongId } まで進む(登録 → 生成の一気通貫)。
 /// カバー・ピアノ版・オルゴールが多く混ざるため、必ず候補から選ばせて取り違えを防ぐ。
 /// レイアウトは案A ミニマル基準(ScrollView + VStack 横 22pt・ヘアライン区切り)
 struct SongSearchView: View {
@@ -77,7 +77,7 @@ struct SongSearchView: View {
         }
         .background(Color.appBackground)
         .scrollDismissesKeyboard(.interactively)
-        .navigationTitle("曲名から生成")
+        .navigationTitle("曲名から探す")
         .navigationBarTitleDisplayMode(.inline)
         .confirmationDialog(
             pendingCandidate.map { "「\($0.title)」に似た曲を生成しますか?" } ?? "",

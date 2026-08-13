@@ -7,6 +7,8 @@ import SwiftUI
 struct SettingsView: View {
     @AppStorage(AppSettingsKeys.backendBaseURL) private var baseURL = AppSettingsKeys.defaultBackendBaseURL
     @AppStorage(AppSettingsKeys.apiSecret) private var apiSecret = AppSettingsKeys.defaultAPISecret
+    /// タブ構成の比較用(案 1 / 案 2)。構成が決まったら削除する
+    @AppStorage(AppSettingsKeys.uiVariant) private var uiVariant = UIVariant.default
     @State private var testResult: String?
     @State private var testSucceeded = false
     @State private var isTesting = false
@@ -22,6 +24,7 @@ struct SettingsView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
+                    variantSection
                     if settings != nil {
                         songSection
                         dailySection
@@ -45,6 +48,23 @@ struct SettingsView: View {
             .navigationTitle("設定")
             .task { await loadSettings() }
         }
+    }
+
+    // MARK: - 画面構成(生成 UI 再構築の比較用。構成が決まったらセクションごと削除する)
+
+    @ViewBuilder
+    private var variantSection: some View {
+        sectionHeader("画面構成(検討用)")
+        settingRow("タブ構成", hint: "案 1 / 案 2 を実機で見比べるための一時設定") {
+            Picker("タブ構成", selection: $uiVariant) {
+                Text("案 1: 参照曲タブ").tag(UIVariant.fourTabs)
+                Text("案 2: 生成タブ内").tag(UIVariant.threeTabs)
+            }
+            .pickerStyle(.menu)
+            .tint(Color.accentDeep)
+            .accessibilityIdentifier("settings.uiVariant")
+        }
+        Divider()
     }
 
     // MARK: - 曲の生成

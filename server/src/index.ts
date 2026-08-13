@@ -761,6 +761,22 @@ api.post("/artist-songs", async (c) => {
   }
 });
 
+// 有効な参照曲の全アーティスト横断一覧(iOS の「曲を選んで生成」用)。
+// 候補の絞り込みは listReferenceCandidates()(WHERE enabled = 1)に集約されたものを使い、
+// 表示順だけ「アーティスト名 → リリース年の新しい順 → 曲名」に揃える。
+// 高々数百件で絞り込みはクライアント側で行うためページングはしない
+api.get("/reference-songs", (c) => {
+  const songs = [...db.listReferenceCandidates()]
+    .sort(
+      (a, b) =>
+        a.artist_name.localeCompare(b.artist_name, "ja") ||
+        (b.release_year ?? -1) - (a.release_year ?? -1) ||
+        a.title.localeCompare(b.title, "ja")
+    )
+    .map((s) => ({ ...artistSongJson(s), artistName: s.artist_name }));
+  return c.json({ songs });
+});
+
 // /api/* は X-API-Secret ヘッダ必須
 app.use("/api/*", async (c, next) => {
   if (!isValidApiSecret(c.req.header("x-api-secret"))) {
