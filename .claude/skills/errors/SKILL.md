@@ -1,0 +1,75 @@
+---
+name: errors
+description: 本番のエラーログを取得してトリアージする。台帳(docs/error-triage.md)と突き合わせて新規・再発の fingerprint だけを調査し、原因の当たりと判定(無視/様子見/タスク化)を提案。承認後に TODO.md と台帳を更新してコミットする。
+---
+
+# エラーログのトリアージ
+
+エラーログを「見て・判断して・タスク化する」を 1 コマンドで行う。判断は台帳
+`docs/error-triage.md` に fingerprint 単位で記録し、2 回目以降は**新規と再発だけ**を提示する。
+経緯・設計: docs/plans/error-triage-command.md(アーカイブ後は docs/plans/archive/)。
+
+## 手順
+
+### 1. 取得
+
+```bash
+./scripts/fetch-error-logs.sh --since 90d
+```
+
+- ユーザーが引数を渡したらそのまま付ける(例: `/errors --local`、`/errors --since 7d`)
+- 失敗したら(g3plus-ops の `.env` 不在など)エラー内容と対処を伝えて終了
+- スクリプトが出力する `→ .logs/errors-*.jsonl` のパスが今回の入力。**過去の `.logs/` ファイルは読まない**
+
+### 2. 台帳と突き合わせて分類
+
+今回の JSONL と `docs/error-triage.md` の台帳を読み、fingerprint ごとに分類する。
+日時の比較は occurredAt / lastSeenAt(UTC)を JST の日付に直して行う。
+
+| 台帳の状態 | 分類 |
+|---|---|
+| (行が無い) | **新規** — 調査対象 |
+| 修正済み で、修正日より後に発生がある | **再発** — 調査対象(再オープン提案) |
+| 様子見 で、判定日より後に発生がある | **様子見の継続** — 再提示(継続 or 昇格を判断) |
+| 対応中 | TODO.md / DONE.md を確認。対応項目が DONE に移っていれば **修正済み化** を提案(修正日 = DONE の日付) |
+| 無視(または上記の発生条件に該当しない既知) | 件数だけ集計 |
+
+### 3. 新規・再発・継続だけ調査
+
+- `source` / `event` から発生箇所を特定する。server は `server/src/` で `logError` / `logWarn` の呼び出しを grep、iOS(`ios-*`)は `ios/DailyAIMusic/Sources/Services/` を見る
+- 呼び出し元のコードを読み、`message` / `detail`(errorCode・path・stack 等)と突き合わせて原因の当たりを付ける
+- 推奨判定を決める(下記「判定の目安」)
+
+### 4. 提示
+
+- 冒頭 1 行サマリ: `新規 X / 再発 Y / 様子見の継続 Z / 既知(無視・対応中)N 件`
+- 調査対象ごとに: fingerprint・`origin/source/event`・件数と最終発生・原因の当たり・推奨判定。タスク化する場合は **TODO.md への追記案の文面**も示す
+- **新規・再発・継続がゼロなら 1 行サマリだけで終了**(台帳も TODO も触らない)
+
+### 5. 承認
+
+判定案を一括で承認するか、個別に変更するかをユーザーに確認する。承認前に TODO.md・台帳を書き換えない。
+
+### 6. 適用(承認後にまとめて)
+
+1. タスク化分を `TODO.md` へ追記(**fingerprint を併記**して台帳と突き合わせられるようにする)
+2. `docs/error-triage.md` の台帳を更新(新規行の追加、状態・判定日・修正日・メモの更新)
+3. 変更を 1 コミット(例: `エラートリアージ: 新規 2 件を判定(タスク化 1・無視 1)`)
+
+## 判定の目安
+
+- **ノイズ → 無視**: 外部スキャナ由来の `api/unauthorized`、iOS の `-999 cancelled`(SwiftUI の画面遷移による正常なリクエストキャンセル)など、コードの不具合でも運用の問題でもないもの。**収集側で拾わない修正が可能なら、その改善をタスク化してから**無視にする(台帳で黙らせて終わりにしない)
+- **一時的 → 様子見**: ネットワーク起因の単発 `transport_failed` / `fetch_failed`、単発の `web_search_failed` など、再現するか分からないもの。判定日を入れておくと以降の発生だけが再提示される
+- **バグ → タスク化(対応中)**: `decode_failed`(サーバーとアプリの契約ずれ)、`task_failed` / `daily_failed` / `plan_issue_remains` の反復、同一 fingerprint の急増。TODO.md に追記し、台帳のメモに TODO 項目を書く
+
+## 台帳の書式(docs/error-triage.md)
+
+| 列 | 内容 |
+|---|---|
+| fingerprint | `error_logs.fingerprint`(12 桁) |
+| 状態 | `無視` / `様子見` / `対応中` / `修正済み` |
+| 判定日 | 最後に判断した日(YYYY-MM-DD、JST) |
+| 修正日 | `修正済み` のみ。再発判定の基準日 |
+| 分類 | `origin/source/event` |
+| 内容 | message の代表例(1 行) |
+| メモ | 判断の理由。`対応中` は TODO 項目への言及、`修正済み` は対応コミット等 |
