@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 曲を選んで生成(GET /api/reference-songs)。有効な参照曲をアーティスト横断で並べ、
+/// 曲から生成(GET /api/reference-songs)。有効な参照曲をアーティスト横断で並べ、
 /// 1 曲選ぶと確認のうえ POST /api/generate { artistSongId } で「その曲に似た新曲」を生成する。
 /// 生成の進行状況は生成タブに出るため、開始したらこの画面は閉じて戻る。
 /// 登録済みにない曲は「登録済みにない曲を探す」から曲名検索(SongSearchView)へ。
@@ -111,7 +111,7 @@ struct SongPickerView: View {
         }
         .background(Color.appBackground)
         .scrollDismissesKeyboard(.interactively)
-        .navigationTitle("曲を選んで生成")
+        .navigationTitle("曲から生成")
         .navigationBarTitleDisplayMode(.inline)
         .confirmationDialog(
             pendingSong.map { "「\($0.title)」に似た曲を生成しますか?" } ?? "",

@@ -11,7 +11,7 @@
 
 - 生成を 3 種類にする(おまかせ / アーティストでおまかせ / 曲から生成)+ 生成タブの見た目をわかりやすく [plan](docs/plans/generation-three-entries.md)
   - [x] Phase 1: サーバー — `POST /api/generate` の `artistId` 受付と選曲(曲 LRU の流用)
-  - [ ] Phase 2: iOS — 生成タブの 3 経路化・アーティストでおまかせ画面・「曲から生成」への改名
+  - [x] Phase 2: iOS — 生成タブの 3 経路化・アーティストでおまかせ画面・「曲から生成」への改名
   - [ ] 後片付け — CLAUDE.md 更新・本番反映 TODO への追記・プランの archive 移動
 
 - [] 音楽になにか分類をつけてWebトップやアプリトップで絞り込みできるようにする

@@ -1,14 +1,17 @@
 import SwiftUI
 
-/// 生成タブ。daily フロー(おまかせ生成 = POST /api/daily/run)を主役にし、
-/// もう 1 本の生成経路「曲を選んで生成」(参照曲を人が選ぶ)への導線を置く。
-/// 生成の経路はこの 2 本だけで、参照曲の管理(登録・有効/無効)は参照曲タブに分離してある。
+/// 生成タブ。3 つの入口を同じ形の行で同格に並べる —
+/// おまかせ(daily = POST /api/daily/run。AI がアーティストと曲を選ぶ)/
+/// アーティストでおまかせ(人がアーティストを選び、曲はサーバーが選ぶ)/
+/// 曲から生成(人が曲まで選ぶ)。押すとすぐ生成に進む行は sparkles、選ぶ画面が開く行は
+/// chevron を右端に出す。参照曲の管理(登録・有効/無効)は参照曲タブに分離してある。
 /// 残クレジット(GET /api/credits)はナビゲーションバー右のピルに表示。
 /// レイアウトは案A ミニマル(docs/plans/ios-app-design-mocks/01-minimal.html)基準
 struct GenerateView: View {
     // おまかせ生成
     @State private var isRunningDaily = false
     @State private var dailyError: String?
+    @State private var showsDailyConfirm = false
 
     // 進行状況・クレジット
     @State private var tasks: [GenerationTask] = []
@@ -19,10 +22,19 @@ struct GenerateView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                    dailyHero
+                    dailyRow
+                    Divider()
+                    artistPickerRow
                     Divider()
                     songPickerRow
                     Divider()
+                    if let dailyError {
+                        Text(dailyError)
+                            .font(.footnote)
+                            .foregroundStyle(.red)
+                            .padding(.vertical, 10)
+                        Divider()
+                    }
                     paramsRow
                     Divider()
                     progressSection
@@ -32,6 +44,16 @@ struct GenerateView: View {
             }
             .background(Color.appBackground)
             .navigationTitle("生成")
+            .confirmationDialog(
+                "おまかせで 1 曲生成しますか?",
+                isPresented: $showsDailyConfirm,
+                titleVisibility: .visible
+            ) {
+                Button("生成する") { Task { await runDaily() } }
+                Button("キャンセル", role: .cancel) {}
+            } message: {
+                Text("登録した曲から AI がアーティストと曲を選び、その曲調と今日のニュースから新曲をつくります。")
+            }
             .toolbar {
                 if let credits {
                     ToolbarItem(placement: .topBarTrailing) {
@@ -49,56 +71,93 @@ struct GenerateView: View {
         }
     }
 
-    // MARK: - おまかせ生成ヒーロー
+    // MARK: - 生成の入口(3 経路を同じ形の行で並べる)
 
-    private var dailyHero: some View {
-        VStack(spacing: 0) {
-            Image(systemName: "sparkles")
-                .font(.system(size: 34))
-                .foregroundStyle(Color.appAccent)
-            Text("おまかせ生成")
-                .font(.title3.weight(.heavy))
-                .padding(.top, 8)
-            Text("登録した曲から 1 曲を選び、その曲調と今日のニュースから AI が 1 曲つくります")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 280)
-                .padding(.top, 6)
-
-            Button {
-                Task { await runDaily() }
-            } label: {
-                HStack(spacing: 8) {
-                    if isRunningDaily {
-                        ProgressView()
-                            .controlSize(.small)
-                            .tint(Color.appBackground)
-                    }
-                    Text(isRunningDaily ? "曲を考えています…" : "いますぐ生成")
-                }
-                .font(.subheadline.weight(.bold))
-                // 案A ミニマルの主要ボタン: ライトは AccentDeep 塗り+クリーム文字、
-                // ダークは AccentColor(=AccentDeep と同値)塗り+暗色文字(AppBackground)
-                .foregroundStyle(Color.appBackground)
-                .padding(.horizontal, 36)
-                .padding(.vertical, 12)
-                .background(Capsule().fill(Color.accentDeep))
+    /// 行の共通形: 丸地アイコン + 太字タイトル + 説明 + 右端の合図
+    /// (すぐ生成に進む行は sparkles、選ぶ画面が開く行は chevron)
+    private func entryLabel(
+        icon: String, title: String, subtitle: String,
+        @ViewBuilder trailing: () -> some View
+    ) -> some View {
+        HStack(spacing: 14) {
+            ZStack {
+                Circle().fill(Color.appAccent.opacity(0.18))
+                Image(systemName: icon)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(Color.accentDeep)
             }
-            .buttonStyle(.borderless)
-            .disabled(isRunningDaily)
-            .padding(.top, 14)
-            .accessibilityIdentifier("generate.daily")
+            .frame(width: 42, height: 42)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.body.weight(.bold))
+                    .foregroundStyle(Color.primary)
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(Color.secondary)
+                    .multilineTextAlignment(.leading)
+            }
+            Spacer(minLength: 8)
+            trailing()
+        }
+        .contentShape(Rectangle())
+        .padding(.vertical, 16)
+    }
 
-            if let dailyError {
-                Text(dailyError)
-                    .font(.footnote)
-                    .foregroundStyle(.red)
-                    .padding(.top, 10)
+    /// 選ぶ画面へ push する行(アーティストでおまかせ・曲から生成)
+    private func entryLink(
+        icon: String, title: String, subtitle: String, identifier: String,
+        @ViewBuilder destination: () -> some View
+    ) -> some View {
+        NavigationLink {
+            destination()
+        } label: {
+            entryLabel(icon: icon, title: title, subtitle: subtitle) {
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Color.secondary)
             }
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 26)
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(identifier)
+    }
+
+    /// おまかせ(daily)。行タップ → 確認ダイアログ → 実行(誤タップで課金しないように)
+    private var dailyRow: some View {
+        Button {
+            showsDailyConfirm = true
+        } label: {
+            entryLabel(
+                icon: "sparkles", title: "おまかせ",
+                subtitle: "アーティストと曲を AI が選んでつくる"
+            ) {
+                if isRunningDaily {
+                    ProgressView()
+                } else {
+                    Image(systemName: "sparkles")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(Color.accentDeep)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(isRunningDaily)
+        .accessibilityIdentifier("generate.daily")
+    }
+
+    private var artistPickerRow: some View {
+        entryLink(
+            icon: "music.mic", title: "アーティストでおまかせ",
+            subtitle: "アーティストを選ぶと、その人の曲から AI が選ぶ",
+            identifier: "generate.artistPicker"
+        ) { ArtistPickerView() }
+    }
+
+    private var songPickerRow: some View {
+        entryLink(
+            icon: "music.note", title: "曲から生成",
+            subtitle: "参照曲を 1 曲選んでつくる",
+            identifier: "generate.songPicker"
+        ) { SongPickerView() }
     }
 
     private func runDaily() async {
@@ -143,36 +202,6 @@ struct GenerateView: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("generate.params")
-    }
-
-    // MARK: - 曲を選んで生成(参照曲を人が選ぶ、もう 1 本の生成経路)
-
-    private var songPickerRow: some View {
-        NavigationLink {
-            SongPickerView()
-        } label: {
-            HStack(spacing: 10) {
-                Image(systemName: "music.note")
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(Color.accentDeep)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("曲を選んで生成")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(Color.primary)
-                    Text("有効な参照曲から 1 曲選んでつくる")
-                        .font(.caption)
-                        .foregroundStyle(Color.secondary)
-                }
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(Color.secondary)
-            }
-            .contentShape(Rectangle())
-            .padding(.vertical, 13)
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("generate.songPicker")
     }
 
     // MARK: - 進行状況

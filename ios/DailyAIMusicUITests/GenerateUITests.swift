@@ -5,18 +5,29 @@ import XCTest
 /// 実際の生成(クレジット消費)は行わない。
 /// サーバー(http://localhost:3014)が起動していることが前提。
 final class GenerateUITests: XCTestCase {
-    /// タブ構成(4 タブ)と生成タブの導線。生成の経路は「おまかせ / 曲を選んで生成」の 2 本で、
-    /// 参照曲の管理は独立タブに分離されている(docs/plans/generation-ui-restructure.md)
+    /// タブ構成(4 タブ)と生成タブの 3 経路(おまかせ / アーティストでおまかせ / 曲から生成)。
+    /// おまかせは確認ダイアログが出るところまで見て、実行はせずに閉じる(クレジット消費を避ける)
     @MainActor
     func testTabsAndGenerateEntryRows() throws {
         let app = XCUIApplication()
         app.launch()
 
         app.tabBars.buttons["生成"].tap()
-        XCTAssertTrue(app.buttons["generate.daily"].waitForExistence(timeout: 5), "おまかせ生成ボタンが表示されること")
-        XCTAssertTrue(app.buttons["generate.songPicker"].exists, "曲を選んで生成の行があること")
+        XCTAssertTrue(app.buttons["generate.daily"].waitForExistence(timeout: 5), "おまかせの行が表示されること")
+        XCTAssertTrue(app.buttons["generate.artistPicker"].exists, "アーティストでおまかせの行があること")
+        XCTAssertTrue(app.buttons["generate.songPicker"].exists, "曲から生成の行があること")
         XCTAssertTrue(app.buttons["generate.params"].exists, "生成パラメータの行があること")
         attachScreenshot(app, name: "generate-tab")
+
+        // おまかせは即実行ではなく確認ダイアログ(誤タップで課金しない)
+        app.buttons["generate.daily"].tap()
+        XCTAssertTrue(
+            app.staticTexts["おまかせで 1 曲生成しますか?"].waitForExistence(timeout: 3),
+            "おまかせの確認ダイアログが出ること"
+        )
+        attachScreenshot(app, name: "generate-daily-confirm")
+        dismissConfirmationDialog(app)
+        XCTAssertTrue(app.buttons["generate.daily"].waitForExistence(timeout: 3), "閉じると生成タブに戻ること")
 
         XCTAssertTrue(app.tabBars.buttons["参照曲"].exists, "参照曲タブがあること")
         app.tabBars.buttons["参照曲"].tap()
@@ -26,6 +37,50 @@ final class GenerateUITests: XCTestCase {
         )
         XCTAssertTrue(app.buttons["artists.add"].waitForExistence(timeout: 3), "追加ボタンがあること")
         attachScreenshot(app, name: "reference-tab")
+    }
+
+    /// アーティストでおまかせ。有効な曲を持つアーティストの一覧 → 確認ダイアログまでを見て、
+    /// 実行はせずに閉じる(クレジット消費を避ける。サーバー側は curl シナリオでカバー済み)
+    @MainActor
+    func testArtistPickerEntryPoint() throws {
+        let app = XCUIApplication()
+        app.launch()
+
+        app.tabBars.buttons["生成"].tap()
+        let row = app.buttons["generate.artistPicker"]
+        XCTAssertTrue(row.waitForExistence(timeout: 5), "アーティストでおまかせの行があること")
+        row.tap()
+        XCTAssertTrue(
+            app.navigationBars["アーティストでおまかせ"].waitForExistence(timeout: 5),
+            "アーティスト選択画面へ遷移すること"
+        )
+        let artist = app.buttons["artistPicker.row"].firstMatch
+        guard artist.waitForExistence(timeout: 5) else {
+            throw XCTSkip("有効な参照曲を持つアーティストがいないため確認ダイアログまで進めない")
+        }
+        attachScreenshot(app, name: "artist-picker")
+        artist.tap()
+        XCTAssertTrue(
+            app.staticTexts.matching(
+                NSPredicate(format: "label ENDSWITH %@", "でおまかせ生成しますか?")
+            ).firstMatch.waitForExistence(timeout: 3),
+            "確認ダイアログが出ること"
+        )
+        attachScreenshot(app, name: "artist-picker-confirm")
+        dismissConfirmationDialog(app)
+        XCTAssertTrue(artist.waitForExistence(timeout: 3), "閉じると一覧に戻ること")
+    }
+
+    /// 確認ダイアログを実行せずに閉じる。行から出したダイアログもポップオーバーで表示され、
+    /// キャンセル行が描かれないことがある(iOS 標準の挙動)ため、無ければ外側タップで閉じる
+    @MainActor
+    private func dismissConfirmationDialog(_ app: XCUIApplication) {
+        let cancel = app.buttons["キャンセル"]
+        if cancel.waitForExistence(timeout: 1) {
+            cancel.tap()
+        } else {
+            app.otherElements["PopoverDismissRegion"].tap()
+        }
     }
 
     /// 参照曲の追加シート(アーティスト名 / 曲名の 2 経路を統合)。
@@ -117,7 +172,7 @@ final class GenerateUITests: XCTestCase {
         )
     }
 
-    /// 曲を選んで生成(有効な参照曲の横断リスト)と、そこからの曲名検索
+    /// 曲から生成(有効な参照曲の横断リスト)と、そこからの曲名検索
     /// (登録済みにない曲を探す)。候補はタップしない(登録 → 生成まで進んで
     /// クレジットを消費するため。サーバー側は curl シナリオでカバー済み)
     @MainActor
@@ -127,12 +182,12 @@ final class GenerateUITests: XCTestCase {
 
         app.tabBars.buttons["生成"].tap()
         let row = app.buttons["generate.songPicker"]
-        XCTAssertTrue(row.waitForExistence(timeout: 5), "曲を選んで生成の行があること")
+        XCTAssertTrue(row.waitForExistence(timeout: 5), "曲から生成の行があること")
 
         row.tap()
         XCTAssertTrue(
-            app.navigationBars["曲を選んで生成"].waitForExistence(timeout: 5),
-            "曲を選んで生成へ遷移すること"
+            app.navigationBars["曲から生成"].waitForExistence(timeout: 5),
+            "曲から生成へ遷移すること"
         )
         XCTAssertTrue(
             app.descendants(matching: .any)["songPicker.filter"].firstMatch.waitForExistence(timeout: 5),

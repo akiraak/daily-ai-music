@@ -144,12 +144,14 @@ struct TasksResponse: Decodable {
     let tasks: [GenerationTask]
 }
 
-/// POST /api/generate の body。参照曲(artistSongId)は必須で、prompt は
-/// リファレンスに重ねる「追加の要望」(iOS からは常に空文字)
+/// POST /api/generate の body。artistSongId(曲から生成)か artistId(アーティストでおまかせ =
+/// 曲はサーバーが LRU で選ぶ)のどちらか一方を指定する(Encodable は nil のキーを出さない)。
+/// prompt はリファレンスに重ねる「追加の要望」(iOS からは常に空文字)
 struct GenerateRequest: Encodable {
     let prompt: String
     let instrumental: Bool
-    let artistSongId: Int
+    var artistSongId: Int? = nil
+    var artistId: Int? = nil
 }
 
 struct GenerateResponse: Decodable {
