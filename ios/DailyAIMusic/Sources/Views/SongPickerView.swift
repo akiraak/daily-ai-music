@@ -20,7 +20,9 @@ struct SongPickerView: View {
         guard !trimmed.isEmpty else { return songs }
         return songs.filter {
             $0.title.localizedCaseInsensitiveContains(trimmed)
+                // アーティスト名は日本語名・正式表記のどちらでも絞り込める
                 || $0.artistName.localizedCaseInsensitiveContains(trimmed)
+                || ($0.artistNameJa?.localizedCaseInsensitiveContains(trimmed) ?? false)
         }
     }
 

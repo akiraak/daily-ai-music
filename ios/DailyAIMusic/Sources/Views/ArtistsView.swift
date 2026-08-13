@@ -70,7 +70,7 @@ struct ArtistsView: View {
             AddReferenceSheet { await load() }
         }
         .confirmationDialog(
-            pendingDeletion.map { "「\($0.name)」と取り込んだ曲を削除しますか?" } ?? "",
+            pendingDeletion.map { "「\($0.displayName)」と取り込んだ曲を削除しますか?" } ?? "",
             isPresented: .init(get: { pendingDeletion != nil }, set: { if !$0 { pendingDeletion = nil } }),
             titleVisibility: .visible
         ) {
@@ -98,7 +98,7 @@ struct ArtistsView: View {
             } label: {
                 HStack(spacing: 8) {
                     VStack(alignment: .leading, spacing: 1) {
-                        Text(artist.name)
+                        Text(artist.displayName)
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(Color.primary)
                         // 参照曲の候補になる曲数 / 取り込んだ全曲数
@@ -171,7 +171,7 @@ struct ArtistsView: View {
 /// - 曲名: 候補から選ぶと、その曲とアーティストをまとめて登録する(選んだ 1 曲は自動で有効)。
 ///   ここは管理が目的の入口なので生成には進まない(生成まで一気に進むのは
 ///   「曲を選んで生成」内の曲名検索 = SongSearchView)
-/// どちらも日本語で検索できるが、登録名は iTunes の表記(ローマ字のことが多い)になり
+/// どちらも日本語で検索できる(表示名は JP ストアの表記 = nameJa ?? name)が、
 /// 別名義・カバーも候補に混ざるため、必ず候補から選ばせて取り違えを防ぐ
 private struct AddReferenceSheet: View {
     /// 登録が成功したら呼ぶ(一覧の再読み込み)
@@ -186,7 +186,7 @@ private struct AddReferenceSheet: View {
         var hint: String {
             switch self {
             case .artist:
-                "候補から選ぶと、その人の曲(最大 200 曲)を iTunes から取り込みます。登録名は iTunes の表記(ローマ字のことが多い)になります。"
+                "候補から選ぶと、その人の曲(最大 200 曲)を iTunes から取り込みます。表示名は Apple Music(日本)の表記になります。"
             case .song:
                 "候補から選ぶと、その曲とアーティスト(最大 200 曲)をまとめて登録し、選んだ曲だけ有効にします。アーティスト名を足すと精度が上がります(例: 米津玄師 Lemon)。"
             }
@@ -255,7 +255,7 @@ private struct AddReferenceSheet: View {
                         ForEach(artistCandidates) { candidate in
                             Divider()
                             candidateRow(
-                                title: candidate.name, subtitle: candidate.genre
+                                title: candidate.displayName, subtitle: candidate.subtitle
                             ) { await registerArtist(candidate) }
                         }
                         if !artistCandidates.isEmpty { Divider() }
@@ -372,7 +372,7 @@ private struct AddReferenceSheet: View {
                 timeout: 60
             )
             await onRegistered()
-            message = "「\(response.artist.name)」を登録し、曲を \(response.added) 件取り込みました(すべて無効の状態です)。"
+            message = "「\(response.artist.displayName)」を登録し、曲を \(response.added) 件取り込みました(すべて無効の状態です)。"
             dismiss()
         } catch {
             message = error.localizedDescription
@@ -394,7 +394,7 @@ private struct AddReferenceSheet: View {
                 timeout: 60
             )
             await onRegistered()
-            message = "「\(response.artist.name)」の「\(response.song.title)」を登録して有効にしました。"
+            message = "「\(response.artist.displayName)」の「\(response.song.title)」を登録して有効にしました。"
             dismiss()
         } catch {
             message = error.localizedDescription

@@ -169,12 +169,17 @@ struct DailyRunResponse: Decodable {
 struct Artist: Identifiable, Decodable, Hashable {
     let id: Int
     let name: String
+    /// 日本語の表示名(JP ストアの表記)。表示名が ASCII のみの人・旧サーバーでは nil
+    let nameJa: String?
     /// iTunes の分類(取れないときは nil)
     let genre: String?
     /// 取り込み済みの曲数
     let songCount: Int
     /// 参照曲の候補になる曲数(無効にした曲を除く)。旧サーバーは返さないので optional
     let enabledSongCount: Int?
+
+    /// 画面に出す名前(日本語名を優先。name は iTunes の正式表記でローマ字のことが多い)
+    var displayName: String { nameJa ?? name }
 
     /// 一覧の「有効 N / 全 M 曲」の N(有効/無効を持たない旧サーバーでは全曲が候補)
     var enabledSongs: Int { enabledSongCount ?? songCount }
@@ -188,9 +193,19 @@ struct ArtistsResponse: Decodable {
 struct ArtistCandidate: Decodable, Hashable, Identifiable {
     let itunesArtistId: Int
     let name: String
+    /// 日本語の表示名(表示名が ASCII のみ・旧サーバーでは nil)
+    let nameJa: String?
     let genre: String?
 
     var id: Int { itunesArtistId }
+
+    var displayName: String { nameJa ?? name }
+
+    /// 候補行の副題。日本語名で表示するときは正式表記も添える(別名義の見分けが付くように)
+    var subtitle: String? {
+        let parts = [nameJa != nil ? name : nil, genre].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
 }
 
 struct ArtistSearchResponse: Decodable {
@@ -303,10 +318,15 @@ struct ReferenceSong: Identifiable, Decodable, Hashable {
     let album: String?
     let releaseYear: Int?
     let artistName: String
+    /// 日本語の表示名(表示名が ASCII のみ・旧サーバーでは nil)
+    let artistNameJa: String?
+
+    /// 画面に出すアーティスト名(日本語名を優先)
+    var artistDisplayName: String { artistNameJa ?? artistName }
 
     /// 一覧の副題(アーティスト · 年 · アルバム)
     var subtitle: String {
-        [artistName, releaseYear.map(String.init), album].compactMap { $0 }.joined(separator: " · ")
+        [artistDisplayName, releaseYear.map(String.init), album].compactMap { $0 }.joined(separator: " · ")
     }
 }
 
@@ -348,11 +368,15 @@ struct GenerationParams: Decodable {
 struct ReferenceCandidateSummary: Decodable, Identifiable {
     let artistId: Int
     let artistName: String
+    /// 日本語の表示名(表示名が ASCII のみ・旧サーバーでは nil)
+    let artistNameJa: String?
     let songCount: Int
     /// このアーティストの曲を最後に参照した日時(未使用は nil = 次に選ばれる)
     let lastUsedAt: Date?
 
     var id: Int { artistId }
+
+    var artistDisplayName: String { artistNameJa ?? artistName }
 }
 
 /// 直近に参照した曲(毎日の自動生成が選んだ曲)

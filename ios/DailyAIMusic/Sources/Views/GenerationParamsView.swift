@@ -75,7 +75,7 @@ struct GenerationParamsView: View {
         }
         ForEach(Array(candidates.enumerated()), id: \.element.id) { index, candidate in
             if index > 0 { Divider() }
-            paramRow(candidate.artistName, "\(candidate.songCount) 曲 · \(lastUsedText(candidate.lastUsedAt))")
+            paramRow(candidate.artistDisplayName, "\(candidate.songCount) 曲 · \(lastUsedText(candidate.lastUsedAt))")
         }
 
         let recent = p.recentReferences

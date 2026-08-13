@@ -143,7 +143,7 @@ struct ArtistSongsView: View {
         }
         .background(Color.appBackground)
         .scrollDismissesKeyboard(.interactively)
-        .navigationTitle(artist.name)
+        .navigationTitle(artist.displayName)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {

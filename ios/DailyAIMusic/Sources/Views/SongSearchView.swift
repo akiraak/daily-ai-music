@@ -181,7 +181,7 @@ struct SongSearchView: View {
             dismiss()
         } catch {
             // 登録は済んでいるので、アーティスト画面の曲一覧から生成し直せることを伝える
-            message = "\(error.localizedDescription)(「\(registered.artist.name)」の「\(registered.song.title)」は登録済みです)"
+            message = "\(error.localizedDescription)(「\(registered.artist.displayName)」の「\(registered.song.title)」は登録済みです)"
             isError = true
         }
     }

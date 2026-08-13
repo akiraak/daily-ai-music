@@ -66,7 +66,7 @@ struct ArtistPickerView: View {
         .navigationTitle("アーティストでおまかせ")
         .navigationBarTitleDisplayMode(.inline)
         .confirmationDialog(
-            pendingArtist.map { "「\($0.name)」でおまかせ生成しますか?" } ?? "",
+            pendingArtist.map { "「\($0.displayName)」でおまかせ生成しますか?" } ?? "",
             isPresented: .init(get: { pendingArtist != nil }, set: { if !$0 { pendingArtist = nil } }),
             titleVisibility: .visible
         ) {
@@ -88,7 +88,7 @@ struct ArtistPickerView: View {
         } label: {
             HStack(spacing: 8) {
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(artist.name)
+                    Text(artist.displayName)
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(Color.primary)
                     Text([artist.genre, "有効 \(artist.enabledSongs) 曲"]
