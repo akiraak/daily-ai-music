@@ -11,6 +11,10 @@
   - [x] Phase 1: サーバー — `tasks.intro`(公開用の紹介文)+ 一覧 API に intro + `GET /site/api/tracks/:id`(intro + セクションタグを落とした歌詞)
   - [x] Phase 2: 公開ページに表示(曲詳細は紹介・歌詞、トップの一覧カードは紹介 2 行クランプ。管理画面には intro の表示だけ足す)
   - [x] Phase 3: 既存 36 曲のバックフィルスクリプト(参照曲を入力に渡さず Haiku で生成。開発機で文面確認まで)
-  - [ ] Phase 4: 本番反映(デプロイ → バックフィル実行 → 公開・非公開の確認)
+  - [ ] Phase 4: 本番反映 — **デプロイと公開・非公開の確認は 2026-08-12 に完了。バックフィルだけ残り**
+    - 残り: 既存 38 曲の紹介文バックフィル。**Anthropic の残高チャージ後**に
+      `docker compose ... exec -T daily-ai-music node src/scripts/backfill-intro.ts` を流す
+      (`credit balance is too low` で全件失敗したため。同じキーを曲の生成にも使うので、
+      残高が無い間は毎日の自動生成も止まる)
 
 - ログに追加:AIのモデルとトークン使用量
