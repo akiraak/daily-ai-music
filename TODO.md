@@ -10,3 +10,6 @@
 - 生成 UI 再構築 + 生成 3 経路の本番反映 — サーバーを通常フロー(`git pull` → `build` → `up -d`)で反映(`GET /api/reference-songs` と `POST /api/generate` の `artistId` 追加のみ・DB 変更なし)し、iOS アプリを実機へ再インストール。**反映まで実機の「曲から生成」の一覧はエラー表示・「アーティストでおまかせ」の実行は 400 になる**(他の画面は旧サーバーでも動く)[plan](docs/plans/archive/generation-ui-restructure.md) / [plan](docs/plans/archive/generation-three-entries.md)
 
 - [] 音楽になにか分類をつけてWebトップやアプリトップで絞り込みできるようにする
+- アーティスト名が英語でしか出てこない。日本語になるようにする — 調査済み。iTunes の artist 行は常に英語正式表記で、日本語名は `artistLinkUrl` の slug から取る。`artists.name` は LLM・同一性用に残し、表示用 `name_ja` を追加する方針 [plan](docs/plans/artist-name-localization.md)
+  - [ ] Phase 1: サーバー(`name_ja` の取得・保存・API 追加・backfill)+ 管理画面
+  - [ ] Phase 2: iOS 表示(`nameJa ?? name`)
