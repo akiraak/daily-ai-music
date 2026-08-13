@@ -131,8 +131,10 @@ export async function startDailyRun(): Promise<DailyRunStart> {
   // 1. 参照曲の選択(サーバーが選ぶ。LRU + ランダムなので同じ日の 2 曲目は別アーティストになる)
   const reference = selectReferenceSong();
   if (!reference) throw new NoReferenceSongError();
+  // 表示(ログ・タスクのラベル・スナップショット)は日本語名。LLM へは正式表記を渡す
+  const displayName = reference.artistNameJa ?? reference.artistName;
   console.log(
-    `[daily] 参照曲: ${reference.artistName}「${reference.title}」` +
+    `[daily] 参照曲: ${displayName}「${reference.title}」` +
       `(最終使用 ${reference.lastUsedAt ?? "なし"})`
   );
 
@@ -143,13 +145,13 @@ export async function startDailyRun(): Promise<DailyRunStart> {
   }
 
   const task = acceptGeneration({
-    prompt: `毎日の自動生成 / ${reference.artistName}「${reference.title}」風`,
+    prompt: `毎日の自動生成 / ${displayName}「${reference.title}」風`,
     instrumental: false,
     mode: "daily",
     artist: {
       artistId: reference.artistId,
       artistSongId: reference.id,
-      artistName: reference.artistName,
+      artistName: displayName,
       songTitle: reference.title,
     },
   });
@@ -165,6 +167,7 @@ export async function startDailyRun(): Promise<DailyRunStart> {
           extraContext: extraContext ?? undefined,
           referenceSong: {
             artist: reference.artistName,
+            artistJa: reference.artistNameJa,
             title: reference.title,
             album: reference.album,
             releaseYear: reference.releaseYear,

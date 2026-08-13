@@ -11,5 +11,5 @@
 
 - [] 音楽になにか分類をつけてWebトップやアプリトップで絞り込みできるようにする
 - アーティスト名が英語でしか出てこない。日本語になるようにする — 調査済み。iTunes の artist 行は常に英語正式表記で、日本語名は `artistLinkUrl` の slug から取る。`artists.name` は LLM・同一性用に残し、表示用 `name_ja` を追加する方針 [plan](docs/plans/artist-name-localization.md)
-  - [ ] Phase 1: サーバー(`name_ja` の取得・保存・API 追加・backfill)+ 管理画面
+  - [x] Phase 1: サーバー(`name_ja` の取得・保存・API 追加・backfill)+ 管理画面
   - [ ] Phase 2: iOS 表示(`nameJa ?? name`)

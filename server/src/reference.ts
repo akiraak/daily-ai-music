@@ -12,6 +12,7 @@ export interface ReferenceCandidate {
   id: number;
   artistId: number;
   artistName: string;
+  artistNameJa: string | null; // 表示用(無ければ artistName を表示する)
   title: string;
   album: string | null;
   releaseYear: number | null;
@@ -84,6 +85,7 @@ function toCandidate(row: db.ReferenceCandidateRow): ReferenceCandidate {
     id: row.id,
     artistId: row.artist_id,
     artistName: row.artist_name,
+    artistNameJa: row.artist_name_ja,
     title: row.title,
     album: row.album,
     releaseYear: row.release_year,
@@ -118,6 +120,7 @@ export function selectReferenceSongForArtist(
 export interface ReferenceArtistSummary {
   artistId: number;
   artistName: string;
+  artistNameJa: string | null; // 表示用(無ければ artistName を表示する)
   songCount: number;
   lastUsedAt: string | null;
 }
@@ -129,6 +132,7 @@ export function referenceCandidateSummary(
     (songs) => ({
       artistId: songs[0].artistId,
       artistName: songs[0].artistName,
+      artistNameJa: songs[0].artistNameJa,
       songCount: songs.length,
       lastUsedAt: artistLastUsedAt(songs),
     })

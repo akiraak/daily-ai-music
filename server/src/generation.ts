@@ -25,6 +25,7 @@ export function acceptGeneration(input: {
   instrumental: boolean;
   mode: string;
   // artist モードの参照曲。名前・曲名はスナップショットで、アーティスト削除後も表示に使える
+  // (artistName は表示用なので、呼び出し側が日本語名(name_ja ?? name)を渡す)
   artist?: {
     artistId: number;
     artistSongId: number;

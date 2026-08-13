@@ -176,6 +176,9 @@ addColumnIfMissing("tasks", "ref_artist_name", "ref_artist_name TEXT");
 addColumnIfMissing("tasks", "ref_song_title", "ref_song_title TEXT");
 // 参照曲の有効/無効(2026-08-11 追加)。既存行は DEFAULT 0 = すべて無効で入る
 addColumnIfMissing("artist_songs", "enabled", "enabled INTEGER NOT NULL DEFAULT 0");
+// 日本語の表示名(2026-08-13 追加。iTunes の artistLinkUrl の slug 由来)。表示だけに使い、
+// 同一性判定(UNIQUE)・LLM への入力は従来どおり name(正式表記)。NULL は従来表示(name)
+addColumnIfMissing("artists", "name_ja", "name_ja TEXT");
 // 公開ページに出すか(2026-08-12 追加)。opt-out 運用なので既定 1 = 公開(既存行も公開になる)
 addColumnIfMissing("tracks", "published", "published INTEGER NOT NULL DEFAULT 1");
 
@@ -610,12 +613,14 @@ export function setTaskIntro(taskId: number, intro: string): void {
 }
 
 // --- アーティスト・参照曲(生成経路「アーティスト経由」) ---
-// name は iTunes の正式表記(ローマ字のことが多い)。UNIQUE 違反は SQLite の例外を
-// そのまま投げる(API 層で 409 にする)
+// name は iTunes の正式表記(ローマ字のことが多い)で、同一性判定(UNIQUE)と LLM への入力に使う。
+// name_ja は JP ストアの表示名(表示専用。無ければ null で name を表示する)。
+// UNIQUE 違反は SQLite の例外をそのまま投げる(API 層で 409 にする)
 
 export interface ArtistRow {
   id: number;
   name: string;
+  name_ja: string | null;
   itunes_artist_id: number | null;
   genre: string | null;
   created_at: string;
@@ -677,13 +682,19 @@ export function getArtistByName(name: string): ArtistWithCountRow | undefined {
 
 export function createArtist(input: {
   name: string;
+  nameJa?: string | null;
   itunesArtistId?: number | null;
   genre?: string | null;
 }): ArtistWithCountRow {
   const result = db
-    .prepare(`INSERT INTO artists (name, itunes_artist_id, genre) VALUES (?, ?, ?)`)
-    .run(input.name, input.itunesArtistId ?? null, input.genre ?? null);
+    .prepare(`INSERT INTO artists (name, name_ja, itunes_artist_id, genre) VALUES (?, ?, ?, ?)`)
+    .run(input.name, input.nameJa ?? null, input.itunesArtistId ?? null, input.genre ?? null);
   return getArtist(Number(result.lastInsertRowid))!;
+}
+
+// 日本語表示名の追い付き(再取得・バックフィル用)。取得できた値でだけ呼ぶ(null で消さない)
+export function updateArtistNameJa(id: number, nameJa: string): void {
+  db.prepare(`UPDATE artists SET name_ja = ? WHERE id = ?`).run(nameJa, id);
 }
 
 // 曲ごと削除する。生成済みタスクは ref_artist_name / ref_song_title のスナップショットで表示が続く
@@ -774,12 +785,15 @@ export function findArtistSongByTitle(
     .get(artistId, title) as ArtistSongRow | undefined;
 }
 
-export type ArtistSongWithArtistRow = ArtistSongRow & { artist_name: string };
+export type ArtistSongWithArtistRow = ArtistSongRow & {
+  artist_name: string;
+  artist_name_ja: string | null; // 表示用(無ければ artist_name を表示する)
+};
 
 export function getArtistSong(id: number): ArtistSongWithArtistRow | undefined {
   return db
     .prepare(
-      `SELECT s.*, a.name AS artist_name FROM artist_songs s
+      `SELECT s.*, a.name AS artist_name, a.name_ja AS artist_name_ja FROM artist_songs s
        JOIN artists a ON a.id = s.artist_id WHERE s.id = ?`
     )
     .get(id) as ArtistSongWithArtistRow | undefined;
@@ -798,7 +812,7 @@ export type ReferenceCandidateRow = ArtistSongWithArtistRow & {
 export function listReferenceCandidates(): ReferenceCandidateRow[] {
   return db
     .prepare(
-      `SELECT s.*, a.name AS artist_name,
+      `SELECT s.*, a.name AS artist_name, a.name_ja AS artist_name_ja,
               (SELECT MAX(t.created_at) FROM tasks t WHERE t.artist_song_id = s.id) AS last_used_at
        FROM artist_songs s JOIN artists a ON a.id = s.artist_id
        WHERE s.enabled = 1

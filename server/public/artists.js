@@ -22,6 +22,10 @@ function showMessage(id, text, info = false) {
 let currentArtist = null;
 let currentSongs = [];
 
+// 表示は日本語名(JP ストアの表示名)を優先する。name は iTunes の正式表記
+// (ローマ字のことが多い)で、同一性判定・LLM への入力にはそちらが使われ続ける
+const displayName = (a) => a.nameJa ?? a.name;
+
 // --- 検索・登録(アーティスト名 / 曲名の 2 経路) ---
 
 // 検索対象ごとの文言と処理。曲名経路はアーティスト名を思い出せなくても入口に立てるためのもので、
@@ -29,7 +33,7 @@ let currentSongs = [];
 const SEARCH_KINDS = {
   artist: {
     placeholder: "アーティスト名(例: 米津玄師 / Radiohead)",
-    hint: "名前で検索して候補から選ぶと、その人の曲(最大 200 曲)を iTunes から取り込みます。日本語で検索できますが、登録名は iTunes の表記(ローマ字のことが多い)になります。",
+    hint: "名前で検索して候補から選ぶと、その人の曲(最大 200 曲)を iTunes から取り込みます。日本語で検索できます(表示名は Apple Music(日本)の表記になります)。",
     notFound: (term) => `「${term}」に一致するアーティストが見つかりません。`,
     prompt: "登録するアーティストを選んでください。",
   },
@@ -82,7 +86,7 @@ async function registerArtist(name, itunesArtistId) {
       body: JSON.stringify({ name, itunesArtistId }),
     });
     afterRegister(
-      `「${artist.name}」を登録し、曲を ${added} 件取り込みました。` +
+      `「${displayName(artist)}」を登録し、曲を ${added} 件取り込みました。` +
         "取り込んだ曲は無効の状態なので、「曲を見る」から使いたい曲を有効にしてください。"
     );
     loadArtists();
@@ -104,12 +108,16 @@ async function registerSong(candidate) {
         body: JSON.stringify({ itunesTrackId: candidate.itunesTrackId }),
       }
     );
-    let message = `「${artist.name}」の「${song.title}」を登録して有効にしました`;
+    let message = `「${displayName(artist)}」の「${song.title}」を登録して有効にしました`;
     // 一緒に取り込んだ曲は無効のままなので、有効になったのが選んだ 1 曲だけだと分かるようにする
     message += artistCreated ? `(他に曲 ${importedSongs} 件を無効で取り込み)。` : "。";
-    // コラボ曲は片方の artistId しか返らないため、表示名と登録先が違うことがある
-    if (candidate.artistName && candidate.artistName !== artist.name) {
-      message += `「${candidate.artistName}」は ${artist.name} として登録しています。`;
+    // コラボ曲は片方の artistId しか返らないため、候補の表示名と登録先が違うことがある
+    if (
+      candidate.artistName &&
+      candidate.artistName !== displayName(artist) &&
+      candidate.artistName !== artist.name
+    ) {
+      message += `「${candidate.artistName}」は ${displayName(artist)} として登録しています。`;
     }
     afterRegister(message);
     await loadArtists();
@@ -154,8 +162,10 @@ $("search-form").addEventListener("submit", async (e) => {
               onRegister: () => registerSong(cand),
             })
           : candidateRow({
-              title: cand.name,
-              meta: cand.genre ?? "",
+              title: displayName(cand),
+              // 日本語名で表示するときは正式表記も添える(別名義の見分けが付くように)
+              meta: [cand.nameJa ? cand.name : null, cand.genre].filter(Boolean).join(" / "),
+              // 登録名(同一性のキー)は従来どおり正式表記を渡す
               onRegister: () => registerArtist(cand.name, cand.itunesArtistId),
             })
       )
@@ -176,7 +186,7 @@ function artistRow(a) {
     <button type="button" class="icon-btn" data-act="songs">曲を見る</button>
     <button type="button" class="icon-btn" data-act="refresh">再取得</button>
     <button type="button" class="icon-btn" data-act="delete">削除</button>`;
-  li.querySelector(".artist-name").textContent = a.name;
+  li.querySelector(".artist-name").textContent = displayName(a);
   li.querySelector(".artist-meta").textContent = [
     a.genre,
     `${a.enabledSongCount} / ${a.songCount} 曲`,
@@ -185,7 +195,7 @@ function artistRow(a) {
     .join(" / ");
   li.querySelector('[data-act="songs"]').addEventListener("click", () => loadSongs(a));
   li.querySelector('[data-act="refresh"]').addEventListener("click", async () => {
-    showMessage("artists-message", `「${a.name}」の曲を再取得しています…`, true);
+    showMessage("artists-message", `「${displayName(a)}」の曲を再取得しています…`, true);
     try {
       const { added } = await fetchJson(`/admin/api/artists/${a.id}/refresh`, {
         method: "POST",
@@ -202,7 +212,7 @@ function artistRow(a) {
     }
   });
   li.querySelector('[data-act="delete"]').addEventListener("click", async () => {
-    if (!confirm(`「${a.name}」と取り込んだ曲を削除しますか?(生成済みの曲は残ります)`)) return;
+    if (!confirm(`「${displayName(a)}」と取り込んだ曲を削除しますか?(生成済みの曲は残ります)`)) return;
     try {
       await fetchJson(`/admin/api/artists/${a.id}`, { method: "DELETE" });
       showMessage("artists-message", null);
@@ -290,7 +300,7 @@ function visibleSongs() {
 function updateSongsTitle() {
   const enabled = currentSongs.filter((s) => s.enabled).length;
   $("songs-title").textContent =
-    `${currentArtist.name} の曲(有効 ${enabled} / 全 ${currentSongs.length})`;
+    `${displayName(currentArtist)} の曲(有効 ${enabled} / 全 ${currentSongs.length})`;
 }
 
 function renderSongs() {
@@ -348,7 +358,7 @@ async function setSongsEnabled(enabled) {
 async function loadSongs(artist) {
   currentArtist = artist;
   $("songs-panel").hidden = false;
-  $("songs-title").textContent = `${artist.name} の曲`;
+  $("songs-title").textContent = `${displayName(artist)} の曲`;
   $("songs").replaceChildren();
   showMessage("songs-message", null);
   try {

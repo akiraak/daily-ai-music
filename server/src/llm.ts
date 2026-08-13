@@ -150,7 +150,9 @@ function firstText(message: Anthropic.Message): string {
 // 参照曲(この曲に似た新曲を作る)。artist モードのほか、毎日の自動生成(daily)でも
 // サーバーが登録済みの曲から 1 曲選んで渡す
 export interface ReferenceSong {
-  artist: string;
+  artist: string; // 正式表記(プロンプトにはこちらを載せる。web_search の安定性が上のため)
+  // 日本語の表示名(あれば)。プロンプトには載せず、固有名詞の混入チェックだけに使う
+  artistJa?: string | null;
   title: string;
   album: string | null;
   releaseYear: number | null;
@@ -391,6 +393,9 @@ export function properNounsIn(plan: SongPlan, ref: ReferenceSong): string[] {
   const found: string[] = [];
   const body = [plan.style, plan.title, plan.lyrics].join("\n").toLowerCase();
   if (containsName(body, ref.artist)) found.push(ref.artist);
+  // 日本語の表示名も検査する。プロンプトには載せないので混入リスクは低いが、
+  // web_search の結果経由で出てくることがある(検査は 1 回の文字列走査で済む)
+  if (ref.artistJa && containsName(body, ref.artistJa)) found.push(ref.artistJa);
   if (containsName(plan.title.toLowerCase(), ref.title)) found.push(ref.title);
   return found;
 }

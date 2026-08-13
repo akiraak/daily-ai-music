@@ -156,8 +156,9 @@ api.post("/generate", async (c) => {
     song = db.getArtistSong(picked.id)!;
   }
 
-  // タスク一覧に出す表示用のリクエスト内容
-  const promptParts = [`${song.artist_name}「${song.title}」風`];
+  // タスク一覧に出す表示用のリクエスト内容(表示は日本語名。LLM へは正式表記を渡す)
+  const artistDisplayName = song.artist_name_ja ?? song.artist_name;
+  const promptParts = [`${artistDisplayName}「${song.title}」風`];
   if (freeText) promptParts.push(freeText);
 
   // 受付だけ済ませて即座に返す。LLM が web_search で調べるため 3 分ほどかかり、
@@ -169,7 +170,7 @@ api.post("/generate", async (c) => {
     artist: {
       artistId: song.artist_id,
       artistSongId: song.id,
-      artistName: song.artist_name,
+      artistName: artistDisplayName,
       songTitle: song.title,
     },
   });
@@ -181,6 +182,7 @@ api.post("/generate", async (c) => {
       freeText,
       referenceSong: {
         artist: song.artist_name,
+        artistJa: song.artist_name_ja,
         title: song.title,
         album: song.album,
         releaseYear: song.release_year,
@@ -520,6 +522,8 @@ function artistJson(a: db.ArtistWithCountRow) {
   return {
     id: a.id,
     name: a.name,
+    // 日本語の表示名(無ければ null)。クライアントは nameJa ?? name で表示する
+    nameJa: a.name_ja,
     itunesArtistId: a.itunes_artist_id,
     genre: a.genre,
     songCount: a.song_count,
@@ -574,7 +578,8 @@ api.post("/artists", async (c) => {
     // 未指定なら検索して最上位候補(正式表記)に解決する
     let resolved: itunes.ArtistCandidate;
     if (itunesArtistId !== undefined) {
-      resolved = { itunesArtistId, name, genre: null };
+      // nameJa は候補経由では受け取らない(クライアントの申告を信用しない)。lookup から採る
+      resolved = { itunesArtistId, name, nameJa: null, genre: null };
     } else {
       const candidates = await itunes.searchArtists(name);
       if (candidates.length === 0) {
@@ -584,12 +589,14 @@ api.post("/artists", async (c) => {
     }
 
     // 楽曲の取得を先に済ませてから登録する(iTunes 側で失敗しても曲 0 件の
-    // アーティストが残らない)。ジャンルは候補経由で来ていなければ lookup の応答から拾う
-    const { artistGenre, songs } = await itunes.fetchSongs(resolved.itunesArtistId);
+    // アーティストが残らない)。ジャンルは候補経由で来ていなければ lookup の応答から拾う。
+    // 日本語名は lookup の artist 行(artistLinkUrl の slug)から採る
+    const { artistNameJa, artistGenre, songs } = await itunes.fetchSongs(resolved.itunesArtistId);
     let artist: db.ArtistWithCountRow;
     try {
       artist = db.createArtist({
         name: resolved.name,
+        nameJa: artistNameJa,
         itunesArtistId: resolved.itunesArtistId,
         genre: resolved.genre ?? artistGenre,
       });
@@ -648,8 +655,12 @@ api.post("/artists/:id/refresh", async (c) => {
     return c.json({ error: "iTunes のアーティスト ID が未登録のため再取得できません" }, 400);
   }
   try {
-    const { songs } = await itunes.fetchSongs(artist.itunes_artist_id);
+    const { artistNameJa, songs } = await itunes.fetchSongs(artist.itunes_artist_id);
     const added = db.insertArtistSongs(id, songs);
+    // 日本語名も追い付かせる(name_ja 導入前に登録したアーティストの更新経路を兼ねる)
+    if (artistNameJa && artistNameJa !== artist.name_ja) {
+      db.updateArtistNameJa(id, artistNameJa);
+    }
     console.log(`[artists] "${artist.name}" の楽曲を再取得しました(新規 ${added} 件)`);
     return c.json({ artist: artistJson(db.getArtist(id)!), added });
   } catch (err) {
@@ -716,15 +727,19 @@ api.post("/artist-songs", async (c) => {
     if (!artist) {
       // 未登録なら曲一覧もまとめて取り込む。正式名とジャンルを取るために lookup は
       // どのみち 1 回必要で、曲一覧は同じ応答に入っており追加コストがゼロのため
-      const { artistName, artistGenre, songs } = await itunes.fetchSongs(track.itunesArtistId);
+      const { artistName, artistNameJa, artistGenre, songs } = await itunes.fetchSongs(
+        track.itunesArtistId
+      );
       // 登録名は lookup の artist 行(正式表記)から採る。検索の track 行の artistName は
       // ローカライズされた表示名(「クイーン」)で、既存のアーティスト名検索経路と
       // 名前が食い違い二重登録になるうえ、llm.ts の固有名詞混入チェックも効かなくなる
+      // (日本語の表示名は name_ja として別に持つ)
       const name = artistName ?? track.artistName;
       if (!name) return c.json({ error: "アーティスト名を特定できませんでした" }, 502);
       try {
         artist = db.createArtist({
           name,
+          nameJa: artistNameJa,
           itunesArtistId: track.itunesArtistId,
           genre: artistGenre,
         });
@@ -786,14 +801,20 @@ api.post("/artist-songs", async (c) => {
 // 表示順だけ「アーティスト名 → リリース年の新しい順 → 曲名」に揃える。
 // 高々数百件で絞り込みはクライアント側で行うためページングはしない
 api.get("/reference-songs", (c) => {
+  // 並び順は表示に使う名前(日本語名があればそちら)に合わせる
+  const displayName = (s: db.ReferenceCandidateRow) => s.artist_name_ja ?? s.artist_name;
   const songs = [...db.listReferenceCandidates()]
     .sort(
       (a, b) =>
-        a.artist_name.localeCompare(b.artist_name, "ja") ||
+        displayName(a).localeCompare(displayName(b), "ja") ||
         (b.release_year ?? -1) - (a.release_year ?? -1) ||
         a.title.localeCompare(b.title, "ja")
     )
-    .map((s) => ({ ...artistSongJson(s), artistName: s.artist_name }));
+    .map((s) => ({
+      ...artistSongJson(s),
+      artistName: s.artist_name,
+      artistNameJa: s.artist_name_ja,
+    }));
   return c.json({ songs });
 });
 

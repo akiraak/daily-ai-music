@@ -13,6 +13,8 @@ const SONG_SEARCH_LIMIT = 25;
 export interface ArtistCandidate {
   itunesArtistId: number;
   name: string;
+  // JP ストアの表示名(artistLinkUrl の slug 由来)。ASCII のみの表示名は null(name を使う)
+  nameJa: string | null;
   genre: string | null;
 }
 
@@ -32,11 +34,33 @@ interface ItunesResult {
   wrapperType?: string;
   artistId?: number;
   artistName?: string;
+  artistLinkUrl?: string;
   trackId?: number;
   trackName?: string;
   collectionName?: string;
   releaseDate?: string;
   primaryGenreName?: string;
+}
+
+// artist 行の artistLinkUrl(…/jp/artist/<表示名の slug>/<id>)から JP ストアの表示名を取り出す。
+// artist 行の artistName は country=JP でも lang=ja_jp でもローカライズされず常に正式表記
+// (「米津玄師」→ "Kenshi Yonezu")のため、日本語の表示名はこの slug からしか取れない。
+// slug の制約(実測)と対応:
+// - ASCII は小文字化される(DAOKO → daoko)→ 全 ASCII なら表記情報が失われているので不採用(null)
+// - 中黒・空白は「-」になる(フレディ・マーキュリー → フレディ-マーキュリー)
+//   → カタカナに挟まれた「-」は「・」に戻す(この文脈の「-」はほぼ中黒・空白由来のため)
+// - 末尾の記号は落ちる(ずっと真夜中でいいのに。→ ずっと真夜中でいいのに)→ 許容
+export function artistNameJaFromLinkUrl(linkUrl: string | undefined): string | null {
+  const slug = linkUrl?.match(/\/artist\/([^/?]+)\//)?.[1];
+  if (!slug) return null;
+  let name: string;
+  try {
+    name = decodeURIComponent(slug);
+  } catch {
+    return null;
+  }
+  if (/^[\x00-\x7f]*$/.test(name)) return null;
+  return name.replace(/(?<=[゠-ヿ])-(?=[゠-ヿ])/g, "・");
 }
 
 async function request(path: string, params: Record<string, string>): Promise<ItunesResult[]> {
@@ -76,6 +100,8 @@ export async function searchArtists(term: string): Promise<ArtistCandidate[]> {
       .map((r) => ({
         itunesArtistId: r.artistId!,
         name: r.artistName!,
+        // US フォールバック時は slug も英語なので自然に null になる
+        nameJa: artistNameJaFromLinkUrl(r.artistLinkUrl),
         genre: r.primaryGenreName ?? null,
       }));
     if (candidates.length > 0) return candidates;
@@ -175,6 +201,7 @@ export async function fetchTrack(itunesTrackId: number): Promise<SongCandidate |
 // 同じ 1 リクエストから拾える
 export async function fetchSongs(itunesArtistId: number): Promise<{
   artistName: string | null;
+  artistNameJa: string | null; // JP ストアの表示名(slug 由来。ASCII のみは null)
   artistGenre: string | null;
   songs: ArtistSongInput[];
 }> {
@@ -206,7 +233,21 @@ export async function fetchSongs(itunesArtistId: number): Promise<{
   );
   return {
     artistName: artistRow?.artistName ?? null,
+    artistNameJa: artistNameJaFromLinkUrl(artistRow?.artistLinkUrl),
     artistGenre: artistRow?.primaryGenreName ?? null,
     songs,
+  };
+}
+
+// アーティスト 1 件の lookup(name_ja バックフィル用)。曲を取らないぶん fetchSongs より軽い
+export async function fetchArtist(itunesArtistId: number): Promise<ArtistCandidate | null> {
+  const results = await request("/lookup", { id: String(itunesArtistId), country: "JP" });
+  const r = results.find((row) => row.wrapperType === "artist");
+  if (!r || r.artistId === undefined || !r.artistName) return null;
+  return {
+    itunesArtistId: r.artistId,
+    name: r.artistName,
+    nameJa: artistNameJaFromLinkUrl(r.artistLinkUrl),
+    genre: r.primaryGenreName ?? null,
   };
 }
