@@ -128,11 +128,13 @@ struct TrackListView: View {
         var tracks: [Track]
     }
 
-    /// 生成日(端末タイムゾーン)でグループ化。tracks が新しい順なので隣接をまとめるだけでよい
+    /// 生成日(端末タイムゾーン)でグループ化。tracks が新しい順なので隣接をまとめるだけでよい。
+    /// ヒーローに出した曲は重複するので除く(今日がヒーロー 1 曲だけの日は「今日」グループごと消える)
     private var dayGroups: [TrackDayGroup] {
         let calendar = Calendar.current
+        let heroId = todayTrack?.id
         var groups: [TrackDayGroup] = []
-        for track in tracks {
+        for track in tracks where track.id != heroId {
             let day = calendar.startOfDay(for: track.createdAt)
             if groups.last?.id == day {
                 groups[groups.count - 1].tracks.append(track)
