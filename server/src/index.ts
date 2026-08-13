@@ -32,7 +32,7 @@ import {
   getLlmSettings,
   getVocalLanguage,
 } from "./llm.ts";
-import { referenceCandidateSummary } from "./reference.ts";
+import { referenceCandidateSummary, selectReferenceSongForArtist } from "./reference.ts";
 import {
   NoReferenceSongError,
   getDailySettings,
@@ -118,22 +118,42 @@ api.post("/generate", async (c) => {
   const artistSongId = Number.isInteger(body?.artistSongId)
     ? (body.artistSongId as number)
     : undefined;
-  if (artistSongId === undefined) {
-    return c.json({ error: "artistSongId を指定してください" }, 400);
+  const artistId = Number.isInteger(body?.artistId) ? (body.artistId as number) : undefined;
+  // 曲を人が選ぶ(artistSongId)か、アーティストだけ選んで曲はサーバーが選ぶ(artistId)かの
+  // どちらか一方。以降の処理は選曲後に合流し、mode も同じ "artist"
+  if ((artistSongId === undefined) === (artistId === undefined)) {
+    return c.json({ error: "artistSongId か artistId のどちらか一方を指定してください" }, 400);
   }
   if (freeText.length > 2000) {
     return c.json({ error: "自由テキストが長すぎます(2000 文字以内)" }, 400);
   }
-  const song = db.getArtistSong(artistSongId);
-  if (!song) {
-    return c.json({ error: "参照する楽曲が見つかりません" }, 404);
-  }
-  // 無効な曲は UI 側でも押せないが、サーバーで弾くのが正(LLM を呼ぶ前なのでクレジットも消えない)
-  if (song.enabled === 0) {
-    return c.json(
-      { error: "この曲は無効になっています。曲一覧で有効にしてから生成してください" },
-      409
-    );
+  let song: db.ArtistSongWithArtistRow;
+  if (artistSongId !== undefined) {
+    const found = db.getArtistSong(artistSongId);
+    if (!found) {
+      return c.json({ error: "参照する楽曲が見つかりません" }, 404);
+    }
+    // 無効な曲は UI 側でも押せないが、サーバーで弾くのが正(LLM を呼ぶ前なのでクレジットも消えない)
+    if (found.enabled === 0) {
+      return c.json(
+        { error: "この曲は無効になっています。曲一覧で有効にしてから生成してください" },
+        409
+      );
+    }
+    song = found;
+  } else {
+    // アーティストでおまかせ: 有効な曲を LRU で 1 曲選ぶ(選ばれる曲は enabled = 1 のみ)
+    if (!db.getArtist(artistId!)) {
+      return c.json({ error: "アーティストが見つかりません" }, 404);
+    }
+    const picked = selectReferenceSongForArtist(artistId!);
+    if (!picked) {
+      return c.json(
+        { error: "このアーティストに有効な参照曲がありません。曲一覧で有効にしてから生成してください" },
+        409
+      );
+    }
+    song = db.getArtistSong(picked.id)!;
   }
 
   // タスク一覧に出す表示用のリクエスト内容

@@ -101,6 +101,18 @@ export function selectReferenceSong(): ReferenceCandidate | undefined {
   return pickReferenceSong(listCandidates());
 }
 
+// アーティストを固定して曲だけを LRU で選ぶ(「アーティストでおまかせ」= POST /api/generate の
+// artistId 経路用)。選択規則は 2 段階選択の曲側と同じなので、同じアーティストで連続生成しても
+// 違う曲が選ばれ、一巡する。有効な曲が無ければ undefined(呼び出し側が 409 にする)
+export function selectReferenceSongForArtist(
+  artistId: number,
+  random: () => number = Math.random
+): ReferenceCandidate | undefined {
+  const songs = listCandidates().filter((c) => c.artistId === artistId);
+  if (songs.length === 0) return undefined;
+  return pickOne(oldestGroup(songs, (s) => s.lastUsedAt), random);
+}
+
 // 生成パラメータ画面用のアーティスト別サマリ(候補曲数は有効な曲の数)。
 // 最終使用が古い順 = 次に選ばれやすい順に並べる
 export interface ReferenceArtistSummary {

@@ -57,6 +57,6 @@
 
 ## Phase 分割
 
-- [ ] Phase 1: サーバー — `artistId` 受付と選曲(+ 隔離 DB 検証)
+- [x] Phase 1: サーバー — `artistId` 受付と選曲(2026-08-12 完了。隔離 DB + 無効 API キーで 201/400/404/409 と LRU(1 曲目使用後は別の曲が選ばれる)・バックグラウンドが費用ゼロで FAILED になることを確認)
 - [ ] Phase 2: iOS — 生成タブの 3 経路化・`ArtistPickerView`・改名(+ UI テスト)
 - [ ] 後片付け — CLAUDE.md 更新・本番反映 TODO への追記・プランの archive 移動
