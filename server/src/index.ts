@@ -1,5 +1,7 @@
 // エントリポイント。API + 管理画面(静的ファイル)+ 保存済み音源の配信
 import crypto from "node:crypto";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
@@ -8,6 +10,7 @@ import {
   AUDIO_DIR,
   IMAGE_DIR,
   PORT,
+  PUBLIC_BASE_URL,
   PUBLIC_DIR,
   SITE_DIR,
   SUNO_MODEL,
@@ -868,17 +871,50 @@ for (const [segment, dir, isPublished] of [
   });
 }
 
-// 曲詳細の URL は /track/:id(共有される恒久 URL としてクエリより適切で、後から同じ URL の
-// まま曲ごとの OGP メタ注入に差し替えられる)。実体は track.html で、曲の特定はページ側の JS が
-// パスから行う。id が数字でないパスは 404(存在しない・非公開の id はページ側で案内を出す)
-const serveTrackPage = serveStatic({
-  root: SITE_DIR,
-  rewriteRequestPath: () => "/track.html",
-});
-app.get("/track/:id", async (c, next) => {
-  if (!/^\d+$/.test(c.req.param("id"))) return c.notFound();
-  // serveStatic はファイルが無いと next に落とすミドルウェアなので、その場合は 404 で確定させる
-  return (await serveTrackPage(c, next)) ?? c.notFound();
+// 曲詳細の URL は /track/:id(共有される恒久 URL としてクエリより適切)。SNS クローラーは
+// JS を実行しないため、track.html の track-meta ブロックをサーバー側で曲別メタ(曲名・intro・
+// カバー)に置換して返す。非公開・不在・数字でない id は詳細 API・音源・画像と揃えて HTML も
+// 404(非公開に下げた曲は共有済みリンクも即座に死ぬ)。ページ側 JS の「曲が見つかりません」は
+// 閲覧中に非公開化された場合のフォールバックとして残っている。
+// ファイルは他の静的配信と同じくリクエストごとに読む(開発時の即時反映を維持)
+function escapeHtml(s: string): string {
+  return s
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+const SITE_DESCRIPTION =
+  "AI が毎日、新しい音楽を製造しています。すべての楽曲は AI(Suno)により生成されたものです。";
+
+app.get("/track/:id", (c) => {
+  const id = c.req.param("id");
+  if (!/^\d+$/.test(id)) return c.notFound();
+  const track = db.getPublishedTrack(Number(id));
+  if (!track) return c.notFound();
+  const title = escapeHtml(`${track.title} — Music Plant`);
+  // intro の無い曲は理論上無い(全曲バックフィル済み)が、保険でサイト共通文に落とす
+  const description = escapeHtml(track.intro || SITE_DESCRIPTION);
+  const meta = [
+    `<title>${title}</title>`,
+    `<meta name="description" content="${description}">`,
+    `<meta property="og:title" content="${title}">`,
+    `<meta property="og:description" content="${description}">`,
+    `<meta property="og:url" content="${PUBLIC_BASE_URL}/track/${track.id}">`,
+    // カバーは正方形なので summary(summary_large_image は 2:1 にクロップされる)
+    `<meta name="twitter:card" content="summary">`,
+  ];
+  if (track.image_file) {
+    meta.push(
+      `<meta property="og:image" content="${PUBLIC_BASE_URL}/site/images/${encodeURIComponent(track.image_file)}">`
+    );
+  }
+  const html = readFileSync(path.join(SITE_DIR, "track.html"), "utf8").replace(
+    /<!-- track-meta[\s\S]*?<!-- \/track-meta -->/,
+    meta.join("\n")
+  );
+  return c.html(html);
 });
 
 // 公開ページの静的ファイル(server/site/)。残りのパス全部を受けるため最後にマウントする

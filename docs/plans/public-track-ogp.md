@@ -68,5 +68,5 @@
 
 ## Phase 分割
 
-- [ ] Phase 1: サーバー実装 — `PUBLIC_BASE_URL` + `/track/:id` の曲別メタ注入 + 不在・非公開 id の 404 + ローカル検証
+- [x] Phase 1: サーバー実装 — `PUBLIC_BASE_URL` + `/track/:id` の曲別メタ注入 + 不在・非公開 id の 404 + ローカル検証(2026-08-12 完了。隔離 DB で curl 検証 — メタ 5 種 + og:image の 200・HTML エスケープ・非公開/不在/非数字 id の 404・再公開で 200・ヘッドレス Chrome で描画無変化を確認)
 - [ ] Phase 2: 本番反映 — ops 側 `.env` に `PUBLIC_BASE_URL` を追加してデプロイ、SNS プレビューでの実地確認

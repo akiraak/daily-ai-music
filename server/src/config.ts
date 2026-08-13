@@ -28,6 +28,13 @@ loadEnv();
 
 export const PORT = Number(process.env.PORT ?? 3014);
 
+// 公開ページの絶対 URL のベース(OGP の og:url / og:image 用)。Host ヘッダからの推定は
+// エッジ経由のスキーム判定(x-forwarded-proto)に依存して不確実なので採らない。
+// 本番は ops 側 .env で PUBLIC_BASE_URL=https://music.chobi.me を設定する
+export const PUBLIC_BASE_URL = (
+  process.env.PUBLIC_BASE_URL ?? `http://localhost:${PORT}`
+).replace(/\/+$/, "");
+
 export const DATA_DIR = path.join(REPO_ROOT, "data");
 export const AUDIO_DIR = path.join(DATA_DIR, "audio");
 export const IMAGE_DIR = path.join(DATA_DIR, "images");
