@@ -93,6 +93,10 @@ function taskJson(t: db.TaskRow) {
     intent: t.intent,
     llmModel: t.llm_model,
     llmPrompt: t.llm_prompt,
+    // LLM のトークン使用量(全呼び出しの合算。旧データと LLM 前に失敗したタスクは null)
+    llmInputTokens: t.llm_input_tokens,
+    llmOutputTokens: t.llm_output_tokens,
+    llmWebSearches: t.llm_web_searches,
     // web_search で参照した情報源(参照曲ありの生成のみ。他は空配列)
     sources: db.parseSources(t.llm_sources),
     realWorldWords: db.listRealWorldWords(t.id),
@@ -339,6 +343,10 @@ function trackJson(t: db.TrackWithTaskRow, prefix: string) {
     intro: t.intro,
     llmModel: t.llm_model,
     llmPrompt: t.llm_prompt,
+    // LLM のトークン使用量(全呼び出しの合算。旧データは null)
+    llmInputTokens: t.llm_input_tokens,
+    llmOutputTokens: t.llm_output_tokens,
+    llmWebSearches: t.llm_web_searches,
     // web_search で参照した情報源(参照曲ありの生成のみ。他は空配列)
     sources: db.parseSources(t.llm_sources),
     realWorldWords: db.listRealWorldWords(t.task_id),

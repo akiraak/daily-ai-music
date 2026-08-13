@@ -51,12 +51,21 @@ export interface SongPlan {
   sources: string[]; // web_search で参照した情報源(検索できなかったときは空配列)
 }
 
+// トークン使用量(コスト確認用にタスクへ記録する)。1 回の生成は LLM を複数回呼ぶことが
+// ある(pause_turn の再開・検証リトライ)ため、値は全呼び出しの合算
+export interface LlmUsage {
+  inputTokens: number;
+  outputTokens: number; // 思考 + 本文の合計(課金上の総量)
+  webSearches: number; // web_search の実行回数(トークンとは別に件数課金される)
+}
+
 // 生成結果と、生成に使用したパラメータ(記録・管理画面表示用)
 export interface SongPlanResult {
   plan: SongPlan;
   llmModel: string;
   llmPrompt: string; // LLM に送った user メッセージ全文(リファレンス・今日のコンテキスト等を含む)
   lyricsLang: VocalLanguage; // 原詞の言語(タスクに記録する)
+  llmUsage: LlmUsage;
 }
 
 // 出力スキーマ。歌詞の言語で lyrics / title の指示が変わり、日本語のときは訳が要らないので
@@ -298,10 +307,16 @@ function logSearchOutcome(message: Anthropic.Message): void {
   }
 }
 
+function addUsage(total: LlmUsage, usage: Anthropic.Usage): void {
+  total.inputTokens += usage.input_tokens;
+  total.outputTokens += usage.output_tokens;
+  total.webSearches += usage.server_tool_use?.web_search_requests ?? 0;
+}
+
 async function requestSongPlan(
   llmPrompt: string,
   lang: VocalLanguage
-): Promise<SongPlan> {
+): Promise<{ plan: SongPlan; usage: LlmUsage }> {
   // 生成は必ず参照曲を持つので web_search は常時有効。
   // code_execution は宣言しない — web_search_20260209 の動的フィルタリングが内部で使うため、
   // 別途宣言すると実行環境が 2 つになりモデルが混乱する
@@ -315,6 +330,7 @@ async function requestSongPlan(
   );
 
   let messages: Anthropic.MessageParam[] = [{ role: "user", content: llmPrompt }];
+  const usage: LlmUsage = { inputTokens: 0, outputTokens: 0, webSearches: 0 };
   for (let resumes = 0; ; resumes++) {
     // ストリーミングで受ける(応答の扱いは finalMessage() で非ストリーミングと同じ)。
     // SDK は max_tokens が 21,333 を超える非ストリーミング要求を「10 分を超える恐れ」として
@@ -333,6 +349,7 @@ async function requestSongPlan(
       })
       .finalMessage();
     logSearchOutcome(message);
+    addUsage(usage, message.usage);
     console.log(
       `[llm] 応答 stop_reason=${message.stop_reason} ` +
         `入力 ${message.usage.input_tokens} / 出力 ${message.usage.output_tokens}(上限 ${MAX_TOKENS})`
@@ -346,7 +363,7 @@ async function requestSongPlan(
       ];
       continue;
     }
-    return JSON.parse(firstText(message)) as SongPlan;
+    return { plan: JSON.parse(firstText(message)) as SongPlan, usage };
   }
 }
 
@@ -419,7 +436,9 @@ export async function generateSongPlan(input: SongPlanInput): Promise<SongPlanRe
   const limits = currentWordLimits();
   const lang = getVocalLanguage();
   let llmPrompt = buildSongPlanPrompt(input, limits, lang);
-  let plan = await requestSongPlan(llmPrompt, lang);
+  const first = await requestSongPlan(llmPrompt, lang);
+  let plan = first.plan;
+  const llmUsage = first.usage;
 
   // 検証リトライ: 禁止ワードの残留・固有名詞の混入があれば、指示を強めて 1 回だけ再生成する
   const issues = planIssues(plan, input, limits);
@@ -428,7 +447,11 @@ export async function generateSongPlan(input: SongPlanInput): Promise<SongPlanRe
       `[llm] ${issues.map((i) => i.label).join(" / ")}が含まれたため再生成します`
     );
     llmPrompt += `\n\n## 再生成の指示(厳守)\n${issues.map((i) => i.instruction).join("\n")}`;
-    plan = await requestSongPlan(llmPrompt, lang);
+    const retry = await requestSongPlan(llmPrompt, lang);
+    plan = retry.plan;
+    llmUsage.inputTokens += retry.usage.inputTokens;
+    llmUsage.outputTokens += retry.usage.outputTokens;
+    llmUsage.webSearches += retry.usage.webSearches;
     const still = planIssues(plan, input, limits);
     if (still.length > 0) {
       // 生成は止めない(警告のみ。固有名詞が残った場合は Suno 側で FAILED として観測できる)
@@ -446,5 +469,8 @@ export async function generateSongPlan(input: SongPlanInput): Promise<SongPlanRe
   }
 
   console.log(`[llm] 生成プラン: "${plan.title}" style=${plan.style.slice(0, 80)}...`);
-  return { plan, llmModel: LLM_MODEL, llmPrompt, lyricsLang: lang };
+  console.log(
+    `[llm] トークン使用量(合算): 入力 ${llmUsage.inputTokens} / 出力 ${llmUsage.outputTokens} / web_search ${llmUsage.webSearches} 回`
+  );
+  return { plan, llmModel: LLM_MODEL, llmPrompt, lyricsLang: lang, llmUsage };
 }

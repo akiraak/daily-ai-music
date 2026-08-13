@@ -30,6 +30,11 @@ export interface TaskRow {
   llm_model: string | null; // 生成に使った LLM のモデル名
   llm_prompt: string | null; // LLM に送った入力全文(プリセット・直近スタイル等を含む)
   llm_sources: string | null; // web_search で参照した情報源(JSON 配列。検索しなかったモードは null)
+  // LLM のトークン使用量(全呼び出しの合算 = pause_turn 再開 + 検証リトライを含む。
+  // 2026-08-12 追加。旧データと LLM 前に失敗したタスクは null)
+  llm_input_tokens: number | null;
+  llm_output_tokens: number | null;
+  llm_web_searches: number | null; // web_search の実行回数(件数課金なのでコストの一部)
   artist_id: number | null; // artist モードの参照アーティスト(将来の集計用。削除されると孤児になる)
   artist_song_id: number | null; // artist モードの参照曲(同上)
   ref_artist_name: string | null; // 表示用スナップショット(アーティスト削除後も残す)
@@ -159,6 +164,11 @@ addColumnIfMissing("tasks", "llm_model", "llm_model TEXT");
 addColumnIfMissing("tasks", "llm_prompt", "llm_prompt TEXT");
 // web_search で参照した情報源(2026-08-09 追加。参照曲ありの生成のみ)
 addColumnIfMissing("tasks", "llm_sources", "llm_sources TEXT");
+// LLM のトークン使用量(2026-08-12 追加。コスト確認用。console にしか出ておらず
+// docker logs はローテートで消えるため DB に持つ)
+addColumnIfMissing("tasks", "llm_input_tokens", "llm_input_tokens INTEGER");
+addColumnIfMissing("tasks", "llm_output_tokens", "llm_output_tokens INTEGER");
+addColumnIfMissing("tasks", "llm_web_searches", "llm_web_searches INTEGER");
 // artist モード(参照曲から生成)の記録。ref_* は表示用スナップショット
 addColumnIfMissing("tasks", "artist_id", "artist_id INTEGER");
 addColumnIfMissing("tasks", "artist_song_id", "artist_song_id INTEGER");
@@ -292,12 +302,17 @@ export function updateTaskPlan(
     sources?: string[];
     llmModel?: string | null;
     llmPrompt?: string | null;
+    // トークン使用量(全 LLM 呼び出しの合算)。渡されなければ null のまま
+    llmInputTokens?: number | null;
+    llmOutputTokens?: number | null;
+    llmWebSearches?: number | null;
   }
 ): void {
   const sources = plan.sources?.filter((s) => s.trim()) ?? [];
   db.prepare(
     `UPDATE tasks SET style = ?, style_ja = ?, lyrics = ?, lyrics_ja = ?, lyrics_lang = ?,
        title = ?, intent = ?, intro = ?, llm_model = ?, llm_prompt = ?, llm_sources = ?,
+       llm_input_tokens = ?, llm_output_tokens = ?, llm_web_searches = ?,
        updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?`
   ).run(
     plan.style,
@@ -311,6 +326,9 @@ export function updateTaskPlan(
     plan.llmModel ?? null,
     plan.llmPrompt ?? null,
     sources.length > 0 ? JSON.stringify(sources) : null,
+    plan.llmInputTokens ?? null,
+    plan.llmOutputTokens ?? null,
+    plan.llmWebSearches ?? null,
     id
   );
 }
@@ -398,6 +416,9 @@ export type TrackWithTaskRow = TrackRow & {
   llm_model: string | null;
   llm_prompt: string | null;
   llm_sources: string | null;
+  llm_input_tokens: number | null;
+  llm_output_tokens: number | null;
+  llm_web_searches: number | null;
   ref_artist_name: string | null;
   ref_song_title: string | null;
 };
@@ -405,7 +426,8 @@ export type TrackWithTaskRow = TrackRow & {
 const TRACK_TASK_COLUMNS = `tracks.*, tasks.mode, tasks.prompt, tasks.instrumental, tasks.model,
   tasks.style, tasks.style_ja, tasks.lyrics, tasks.lyrics_ja, tasks.lyrics_lang,
   tasks.intent, tasks.intro, tasks.llm_model, tasks.llm_prompt,
-  tasks.llm_sources, tasks.ref_artist_name, tasks.ref_song_title`;
+  tasks.llm_sources, tasks.llm_input_tokens, tasks.llm_output_tokens, tasks.llm_web_searches,
+  tasks.ref_artist_name, tasks.ref_song_title`;
 
 export function listTracks(limit = 200): TrackWithTaskRow[] {
   return db

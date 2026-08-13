@@ -24,6 +24,13 @@ const VOCAL_LANGUAGE_LABELS = {
   en: "英語",
 };
 
+// LLM のトークン使用量(全呼び出しの合算)。記録の無い旧データでは null を返して行ごと消す
+function llmTokensLabel(t) {
+  if (t.llmInputTokens == null || t.llmOutputTokens == null) return null;
+  const searches = t.llmWebSearches ? `(web_search ${t.llmWebSearches} 回)` : "";
+  return `入力 ${t.llmInputTokens.toLocaleString()} / 出力 ${t.llmOutputTokens.toLocaleString()}${searches}`;
+}
+
 // 進行中カードのバッジ用の短い表記(manual は既定なのでバッジを出さない)
 const MODE_BADGES = {
   daily: "毎日",
@@ -194,6 +201,7 @@ function trackElement(t) {
       ["歌声の言語", VOCAL_LANGUAGE_LABELS[t.lyricsLang]],
       ["Suno モデル", t.sunoModel],
       ["LLM モデル", t.llmModel],
+      ["LLM トークン", llmTokensLabel(t)],
     ]
       .filter(([, v]) => v)
       .map(([k, v]) => `${k}: ${v}`)
