@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>案2 3 タブのまま生成タブ内を整理 — 生成 UI 再構築モック</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans','Noto Sans JP',sans-serif;background:#e9e7e2;color:#333;padding:26px 32px 60px}
+.pagehead{max-width:2200px;margin:0 auto 6px}
+.pagehead h1{font-size:21px;margin-bottom:4px}
+.pagehead p{color:#666;font-size:13.5px;max-width:1080px;margin-top:3px}
+.pagehead .links{margin-top:8px;font-size:13px}
+.pagehead .links a{color:#5a6ac0;margin-right:14px}
+.memo{max-width:1080px;margin-top:10px;font-size:12.5px;color:#555;background:#f4f2ec;border:1px solid #ddd8cc;border-radius:8px;padding:10px 14px;line-height:1.6}
+.memo b{color:#333}
+section{max-width:2200px;margin:24px auto 0}
+section h2{font-size:15px;color:#444;margin-bottom:10px}
+.row{display:flex;gap:30px;align-items:flex-start;overflow-x:auto;padding:4px 2px 26px}
+.slot{flex:0 0 auto;max-width:390px}
+.cap{text-align:center;font-size:12.5px;color:#777;margin-bottom:8px}
+.note{font-size:11.5px;color:#888;margin-top:8px;line-height:1.55;padding:0 4px}
+.frame{position:relative;width:390px;height:844px;border-radius:55px;overflow:hidden;background:var(--bg);color:var(--fg);box-shadow:0 2px 6px rgba(0,0,0,.14),0 18px 50px rgba(0,0,0,.25),inset 0 0 0 1.5px rgba(0,0,0,.14);font-size:15px;line-height:1.45}
+.frame.light{--accent:#B4BA40;--bg:#FDF2E5;--deep:#787D2B;--fg:#2f2b22;--fg2:#8d8677;--sep:rgba(80,66,40,.16);--tint:rgba(180,186,64,.18)}
+.island{position:absolute;top:11px;left:50%;transform:translateX(-50%);width:122px;height:34px;border-radius:18px;background:#000;z-index:60}
+.status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 30px 4px;font-size:15px;font-weight:600;flex:none}
+.screen{position:absolute;inset:0;display:flex;flex-direction:column}
+.content{flex:1;overflow:hidden;padding:0 22px;position:relative}
+.bottombars{position:absolute;left:0;right:0;bottom:0;z-index:40;background:var(--bg)}
+.tabbar{display:flex;padding:7px 10px 24px;border-top:1px solid var(--sep)}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:10px;color:var(--fg2)}
+.tab .ic{width:25px;height:25px;fill:currentColor}
+.tab.active{color:var(--deep)}
+.tab.active .ic{fill:var(--accent)}
+.homebar{position:absolute;bottom:9px;left:50%;transform:translateX(-50%);width:140px;height:5px;border-radius:3px;background:var(--fg);opacity:.3;z-index:70}
+.ic{width:1em;height:1em;fill:currentColor}
+button{font-family:inherit;cursor:default}
+.navlarge{font-size:30px;font-weight:800;padding:6px 0 8px;display:flex;align-items:center;justify-content:space-between;letter-spacing:.01em}
+.credits{font-size:12px;font-weight:700;color:var(--deep);background:var(--tint);padding:6px 12px;border-radius:20px}
+.nav{height:42px;display:flex;align-items:center;padding:0 12px;flex:none;position:relative}
+.back{display:inline-flex;align-items:center;gap:2px;color:var(--deep);font-size:15px;font-weight:500}
+.back .ic{width:19px;height:19px}
+.navtitle{position:absolute;left:50%;transform:translateX(-50%);font-size:15.5px;font-weight:700;white-space:nowrap}
+.navright{margin-left:auto;color:var(--deep);display:flex}
+.navright .ic{width:21px;height:21px}
+.sechead{font-size:13px;font-weight:700;color:var(--fg2);margin:14px 0 4px}
+.genhero{text-align:center;padding:30px 12px 24px}
+.genhero .ic{width:38px;height:38px;fill:var(--accent)}
+.gtitle{font-size:20px;font-weight:800;margin-top:6px}
+.gdesc{font-size:12.5px;color:var(--fg2);margin:6px auto 14px;max-width:290px;line-height:1.55}
+.gbtn{font-size:15px;font-weight:700;padding:12px 36px;border-radius:26px;border:none;background:var(--deep);color:var(--bg)}
+.linkrow{display:flex;align-items:center;gap:10px;padding:13px 0;border-top:1px solid var(--sep)}
+.linkrow:last-of-type{border-bottom:1px solid var(--sep)}
+.linkrow .lmain{flex:1}
+.linkrow .lmain b{display:block;font-size:14px}
+.linkrow .lmain small{font-size:11.5px;color:var(--fg2)}
+.linkrow>.ic{width:15px;height:15px;color:var(--fg2);fill:var(--fg2);flex:none}
+.linkrow .lead{width:24px;height:24px;flex:none;color:var(--deep);fill:var(--deep)}
+.task{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--sep)}
+.spinner{width:19px;height:19px;border-radius:50%;border:2.5px solid var(--tint);border-top-color:var(--accent);animation:spin 1s linear infinite;flex:none}
+@keyframes spin{to{transform:rotate(360deg)}}
+.tick{width:22px;height:22px;border-radius:50%;background:var(--tint);color:var(--deep);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;flex:none}
+.taskmain{flex:1;min-width:0}
+.taskmain b{display:block;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.taskmain small{display:block;color:var(--fg2);font-size:11.5px;margin-top:1px}
+.tcov{width:40px;height:40px;border-radius:7px;flex:none;background:linear-gradient(135deg,#c9b98a,#8f9a5b)}
+.hint{font-size:11px;color:var(--fg2);line-height:1.55;margin-top:8px}
+.cnt{font-size:11.5px;color:var(--fg2);margin-top:9px}
+.arow{display:flex;align-items:center;gap:8px;padding:13px 0;border-bottom:1px solid var(--sep)}
+.arow .amain{flex:1;min-width:0}
+.arow .amain b{display:block;font-size:14.5px}
+.arow .amain small{display:block;font-size:11.5px;color:var(--fg2);margin-top:1px}
+.arow .chev{width:15px;height:15px;fill:var(--fg2);flex:none}
+.arow .menu{width:32px;height:32px;display:flex;align-items:center;justify-content:center;color:var(--fg2);flex:none}
+.arow .menu .ic{width:17px;height:17px}
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute">
+<defs>
+<symbol id="i-spark" viewBox="0 0 24 24"><path d="M11 2l1.7 5.6L18.3 9.3l-5.6 1.7L11 16.6 9.3 11 3.7 9.3 9.3 7.6 11 2z"/><path d="M18.5 14l1 3 3 1-3 1-1 3-1-3-3-1 3-1 1-3z"/></symbol>
+<symbol id="i-note" viewBox="0 0 24 24"><path d="M9.2 19.2c0 1.7-1.5 2.8-3.3 2.8-1.7 0-3.2-1-3.2-2.4 0-1.5 1.5-2.6 3.2-2.6.5 0 .9.1 1.3.2V6.1c0-.6.4-1.1 1-1.3l9.5-2.6c.9-.2 1.7.4 1.7 1.3v12c0 1.7-1.5 2.8-3.3 2.8-1.7 0-3.2-1-3.2-2.4 0-1.5 1.5-2.6 3.2-2.6.5 0 1 .1 1.3.2V6.3L9.2 8.4v10.8z"/></symbol>
+<symbol id="i-gear" viewBox="0 0 24 24"><path d="M12 8.2A3.8 3.8 0 1 0 12 15.8 3.8 3.8 0 0 0 12 8.2zm9.5 5.3v-3l-2.7-.7a7 7 0 0 0-.7-1.7l1.5-2.4-2.2-2.2-2.4 1.5c-.5-.3-1.1-.5-1.7-.7L12.6 1.7h-3L8.9 4.4c-.6.2-1.2.4-1.7.7L4.8 3.6 2.6 5.8 4 8.2c-.3.5-.5 1.1-.7 1.7l-2.7.7v3l2.7.7c.2.6.4 1.2.7 1.7l-1.5 2.4 2.2 2.2 2.4-1.5c.5.3 1.1.5 1.7.7l.7 2.7h3l.7-2.7c.6-.2 1.2-.4 1.7-.7l2.4 1.5 2.2-2.2-1.5-2.4c.3-.5.5-1.1.7-1.7l2.7-.7z"/></symbol>
+<symbol id="i-person" viewBox="0 0 24 24"><circle cx="12" cy="7.2" r="4.2"/><path d="M3.5 20.2c.8-4 4.3-6.6 8.5-6.6s7.7 2.6 8.5 6.6c.1.7-.4 1.3-1.1 1.3H4.6c-.7 0-1.2-.6-1.1-1.3z"/></symbol>
+<symbol id="i-chev-l" viewBox="0 0 24 24"><path d="M14.7 4.3a1 1 0 0 1 0 1.4L8.4 12l6.3 6.3a1 1 0 1 1-1.4 1.4l-7-7a1 1 0 0 1 0-1.4l7-7a1 1 0 0 1 1.4 0z"/></symbol>
+<symbol id="i-chev-r" viewBox="0 0 24 24"><path d="M9.3 4.3a1 1 0 0 0 0 1.4l6.3 6.3-6.3 6.3a1 1 0 1 0 1.4 1.4l7-7a1 1 0 0 0 0-1.4l-7-7a1 1 0 0 0-1.4 0z"/></symbol>
+<symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 4a1.1 1.1 0 0 1 1.1 1.1v5.8h5.8a1.1 1.1 0 1 1 0 2.2h-5.8v5.8a1.1 1.1 0 1 1-2.2 0v-5.8H5.1a1.1 1.1 0 1 1 0-2.2h5.8V5.1A1.1 1.1 0 0 1 12 4z"/></symbol>
+<symbol id="i-note-list" viewBox="0 0 24 24"><path d="M3 5.5h11a1 1 0 1 1 0 2H3a1 1 0 1 1 0-2zm0 5h11a1 1 0 1 1 0 2H3a1 1 0 1 1 0-2zm0 5h7a1 1 0 1 1 0 2H3a1 1 0 1 1 0-2z"/><path d="M20.8 4.2c.7-.2 1.2.3 1.2 1v8.2c0 1.3-1.1 2.2-2.5 2.2s-2.5-.8-2.5-1.9c0-1.1 1.1-2 2.5-2 .4 0 .7 0 1 .2V7l-2 .6V6l2.3-1.8z"/></symbol>
+<symbol id="i-dots-plain" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></symbol>
+</defs>
+</svg>
+
+<div class="pagehead">
+<h1>案2 3 タブのまま生成タブ内を整理</h1>
+<p>タブ構成(ライブラリ / 生成 / 設定)は変えず、生成タブの導線を「曲を選んで生成」(つくる)と「参照曲の管理」(管理)に改名・整理する。導線の名前が実態と一致するのが現状との違い。「曲を選んで生成」以降の画面(横断リスト・曲一覧・追加シート)は<a href="01-four-tabs.html">案1</a> と同一で、置き場所だけが違う。</p>
+<div class="links"><a href="01-four-tabs.html">← 案1 参照曲を独立タブに(4 タブ)</a></div>
+<div class="memo">
+<b>長所:</b> 変更が小さい(タブ・画面遷移の骨格は現状のまま)。タブ 3 つのシンプルさを保てる。<br>
+<b>短所:</b> 「参照曲の管理」という管理領域が生成タブの下に残る — 機能分解(生成 / アーティスト / 楽曲)には合致しない。管理へは常に生成タブ経由の 1 段深い導線になる。<br>
+<b>共通:</b> 「曲を選んで生成」画面(要 <code>GET /api/reference-songs</code>)・曲一覧の主従逆転(行タップ = 有効/無効、生成はボタン)は案1 と同じ。
+</div>
+</div>
+
+<section><h2>画面フロー(ライト)— 2 画面目以降は案1 と共通</h2><div class="row">
+
+<!-- 1. 生成タブ -->
+<div class="slot"><div class="cap">生成タブ(導線を「つくる 1 本 + 管理 1 本」に)</div>
+<div class="frame light"><div class="screen">
+  <div class="status"><span>9:41</span><span></span></div>
+  <div class="content">
+    <div class="navlarge">生成<span class="credits">948 クレジット</span></div>
+    <div class="genhero">
+      <svg class="ic"><use href="#i-spark"/></svg>
+      <div class="gtitle">おまかせ生成</div>
+      <p class="gdesc">登録した曲から 1 曲を選び、その曲調と今日のニュースから AI が 1 曲つくります</p>
+      <button class="gbtn">いますぐ生成</button>
+    </div>
+    <div class="linkrow">
+      <svg class="ic lead"><use href="#i-note"/></svg>
+      <div class="lmain"><b>曲を選んで生成</b><small>有効な参照曲から 1 曲選んでつくる</small></div>
+      <svg class="ic"><use href="#i-chev-r"/></svg>
+    </div>
+    <div class="linkrow">
+      <svg class="ic lead"><use href="#i-person"/></svg>
+      <div class="lmain"><b>参照曲の管理</b><small>アーティストの登録・曲の有効/無効</small></div>
+      <svg class="ic"><use href="#i-chev-r"/></svg>
+    </div>
+    <div class="linkrow">
+      <div class="lmain"><b>生成パラメータ</b><small>おまかせ生成に使われる入力</small></div>
+      <svg class="ic"><use href="#i-chev-r"/></svg>
+    </div>
+    <div class="sechead">進行状況</div>
+    <div class="task"><span class="spinner"></span>
+      <div class="taskmain"><b>曲を考えています…</b><small>おまかせ生成 · 9:12 開始</small></div></div>
+    <div class="task"><span class="tick">✓</span>
+      <div class="taskmain"><b>Where the Fog Keeps Watch</b><small>今日 9:04 完了</small></div>
+      <div class="tcov"></div></div>
+  </div>
+  <div class="bottombars"><div class="tabbar">
+    <div class="tab"><svg class="ic"><use href="#i-note"/></svg><span>ライブラリ</span></div>
+    <div class="tab active"><svg class="ic"><use href="#i-spark"/></svg><span>生成</span></div>
+    <div class="tab"><svg class="ic"><use href="#i-gear"/></svg><span>設定</span></div>
+  </div></div>
+  <div class="island"></div><div class="homebar"></div>
+</div></div>
+<p class="note">「曲名から生成」「アーティストから生成」の 2 行を「曲を選んで生成」(つくる)+「参照曲の管理」(管理)に置き換える。生成を名乗るのは生成だけになるが、管理が生成タブの下に残る。</p>
+</div>
+
+<!-- 2. 参照曲の管理(push) -->
+<div class="slot"><div class="cap">参照曲の管理(生成タブから push)</div>
+<div class="frame light"><div class="screen">
+  <div class="status"><span>9:41</span><span></span></div>
+  <div class="nav"><span class="back"><svg class="ic"><use href="#i-chev-l"/></svg>生成</span><span class="navtitle">参照曲</span><span class="navright"><svg class="ic"><use href="#i-plus"/></svg></span></div>
+  <div class="content">
+    <p class="hint">生成のもとにする曲を管理します。有効にした曲がおまかせ生成の候補になり、「曲を選んで生成」でも選べます。</p>
+    <div class="cnt" style="margin-bottom:4px">有効 27 曲 / 6 アーティスト</div>
+    <div class="arow"><div class="amain"><b>米津玄師</b><small>J-Pop · 有効 4 / 全 87 曲</small></div><span class="menu"><svg class="ic"><use href="#i-dots-plain"/></svg></span><svg class="chev"><use href="#i-chev-r"/></svg></div>
+    <div class="arow"><div class="amain"><b>Radiohead</b><small>Alternative · 有効 3 / 全 156 曲</small></div><span class="menu"><svg class="ic"><use href="#i-dots-plain"/></svg></span><svg class="chev"><use href="#i-chev-r"/></svg></div>
+    <div class="arow"><div class="amain"><b>YOASOBI</b><small>J-Pop · 有効 8 / 全 42 曲</small></div><span class="menu"><svg class="ic"><use href="#i-dots-plain"/></svg></span><svg class="chev"><use href="#i-chev-r"/></svg></div>
+    <div class="arow"><div class="amain"><b>宇多田ヒカル</b><small>J-Pop · 有効 5 / 全 118 曲</small></div><span class="menu"><svg class="ic"><use href="#i-dots-plain"/></svg></span><svg class="chev"><use href="#i-chev-r"/></svg></div>
+    <div class="arow"><div class="amain"><b>King Gnu</b><small>J-Rock · 有効 6 / 全 51 曲</small></div><span class="menu"><svg class="ic"><use href="#i-dots-plain"/></svg></span><svg class="chev"><use href="#i-chev-r"/></svg></div>
+    <div class="arow"><div class="amain"><b>Norah Jones</b><small>Jazz · 有効 1 / 全 94 曲</small></div><span class="menu"><svg class="ic"><use href="#i-dots-plain"/></svg></span><svg class="chev"><use href="#i-chev-r"/></svg></div>
+  </div>
+  <div class="island"></div><div class="homebar"></div>
+</div></div>
+<p class="note">中身は案1 の参照曲タブと同じ(名前が「〜から生成」でなくなる点が現状からの改善)。ここから先の曲一覧・追加シートは案1 のモック参照。タブでなく push なので、+ はナビゲーションバー右に置く。</p>
+</div>
+
+</div></section>
+</body>
+</html>
