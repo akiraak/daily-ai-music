@@ -24,7 +24,7 @@ description: 本番のエラーログを取得してトリアージする。台�
 ### 2. 台帳と突き合わせて分類
 
 今回の JSONL と `docs/error-triage.md` の台帳を読み、fingerprint ごとに分類する。
-日時の比較は occurredAt / lastSeenAt(UTC)を JST の日付に直して行う。
+日時の比較は occurredAt / lastSeenAt(UTC)を Mac のローカル時刻(`date` で確認。通常 PT)に直して行う。
 
 | 台帳の状態 | 分類 |
 |---|---|
@@ -68,7 +68,7 @@ description: 本番のエラーログを取得してトリアージする。台�
 |---|---|
 | fingerprint | `error_logs.fingerprint`(12 桁) |
 | 状態 | `無視` / `様子見` / `対応中` / `修正済み` |
-| 判定日 | 最後に判断した日(YYYY-MM-DD、JST) |
+| 判定日 | 最後に判断した日(YYYY-MM-DD、ローカル時刻) |
 | 修正日 | `修正済み` のみ。再発判定の基準日 |
 | 分類 | `origin/source/event` |
 | 内容 | message の代表例(1 行) |
