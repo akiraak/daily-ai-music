@@ -7,12 +7,6 @@
 
 - LLM トークン記録の最終確認 — 実装・本番反映済み。2026-08-13 の自動生成(PT 6:00)後にトークンが記録されていることを確認して DONE へ [plan](docs/plans/llm-token-usage-log.md)
 
-- アーティストから生成と曲から生成のUIが分かりにくいので整理して再構築 [plan](docs/plans/generation-ui-restructure.md)
-  - [x] Phase 0a: サーバー — `GET /api/reference-songs` の追加
-  - [x] Phase 0b: iOS — 共通の新画面 + 案 1 / 案 2 を設定で切り替え(実機比較用)
-  - [x] Phase 0c: 案 1(4 タブ化)に決定(2026-08-12)。管理画面は名前・文言の追従のみ
-  - [x] Phase 1: iOS — 落選案と切り替えトグルの撤去・確定構成への整理
-  - [ ] Phase 2: Web 管理画面 — 名前・文言・構成の追従
-  - [ ] 後片付け — CLAUDE.md 更新・プランの archive 移動
+- 生成 UI 再構築の本番反映 — サーバーを通常フロー(`git pull` → `build` → `up -d`)で反映(`GET /api/reference-songs` の追加のみ・DB 変更なし)し、iOS アプリを実機へ再インストール。**反映まで実機の「曲を選んで生成」の一覧はエラー表示になる**(他の画面は旧サーバーでも動く)[plan](docs/plans/archive/generation-ui-restructure.md)
 
 - [] 音楽になにか分類をつけてWebトップやアプリトップで絞り込みできるようにする

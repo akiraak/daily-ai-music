@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>アーティスト - Music Plant</title>
+  <title>参照曲 - Music Plant</title>
   <link rel="stylesheet" href="/admin/style.css">
 </head>
 <body>
@@ -12,18 +12,18 @@
     <div class="app-title">Music Plant</div>
     <nav class="menu">
       <a href="/admin/">楽曲一覧</a>
-      <a href="/admin/artists.html" class="active">アーティスト</a>
+      <a href="/admin/artists.html" class="active">参照曲</a>
       <a href="/admin/settings.html">設定</a>
     </nav>
   </aside>
 
   <main>
     <div class="page-header">
-      <h1>アーティスト</h1>
+      <h1>参照曲</h1>
     </div>
 
     <section class="panel">
-      <h2>登録</h2>
+      <h2>参照曲を追加</h2>
       <p class="empty" id="search-hint"></p>
       <form id="search-form" class="inline-form">
         <select id="search-kind">
@@ -46,7 +46,7 @@
 
     <section class="panel" id="songs-panel" hidden>
       <h2 id="songs-title">曲を選ぶ</h2>
-      <p class="empty">曲を選ぶと、その曲の音楽的な特徴に似た新曲を AI が作ります(原曲の歌詞は使わず、完全な新作になります)。<strong>取り込んだ曲は最初はすべて無効</strong>で、チェックを入れた曲だけがおまかせ生成の参照曲になります(無効な曲はこの画面からも生成できません)。</p>
+      <p class="empty">生成のもとにする曲(参照曲)を管理します。<strong>取り込んだ曲は最初はすべて無効</strong>で、チェックを入れた曲だけがおまかせ生成の候補になります(無効な曲はこの画面からも生成できません)。「この曲で生成」を押すと、その曲の音楽的な特徴に似た新曲を AI が作ります(原曲の歌詞は使わず、完全な新作になります)。</p>
       <div class="inline-form">
         <input id="song-filter" placeholder="曲名で絞り込み">
         <select id="song-visibility">

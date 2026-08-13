@@ -1,4 +1,5 @@
-// アーティストページ。iTunes から曲を取り込んだアーティストを管理し、曲を選んで
+// 参照曲ページ(旧アーティストページ。ファイル名は artists.html のまま)。
+// iTunes から曲を取り込んだアーティストと曲の有効/無効を管理し、曲を選んで
 // 「その曲に似た新曲」を生成する(生成経路 artist)
 // (/admin/api/* は同居サーバーの無認証 API。本番はエッジの Cloudflare Access が /admin ごと保護する)
 const $ = (id) => document.getElementById(id);
