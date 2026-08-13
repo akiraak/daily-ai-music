@@ -9,6 +9,4 @@
 
 - 生成 UI 再構築 + 生成 3 経路の本番反映 — サーバーを通常フロー(`git pull` → `build` → `up -d`)で反映(`GET /api/reference-songs` と `POST /api/generate` の `artistId` 追加のみ・DB 変更なし)し、iOS アプリを実機へ再インストール。**反映まで実機の「曲から生成」の一覧はエラー表示・「アーティストでおまかせ」の実行は 400 になる**(他の画面は旧サーバーでも動く)[plan](docs/plans/archive/generation-ui-restructure.md) / [plan](docs/plans/archive/generation-three-entries.md)
 
-- アーティスト名の日本語表示の本番反映 — サーバー通常フロー(`git pull` → `build` → `up -d`。`artists.name_ja` カラムは起動時に自動追加)→ コンテナ内で `node src/scripts/backfill-artist-name-ja.ts --dry-run` を確認してから本実行 → iOS 実機を再インストール。生成 3 経路の反映(上の項目)と同時にやってよい [plan](docs/plans/archive/artist-name-localization.md)
-
 - [] 音楽になにか分類をつけてWebトップやアプリトップで絞り込みできるようにする
