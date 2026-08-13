@@ -1,73 +1,39 @@
 import XCTest
 
 /// 生成まわりのスモークテスト: 生成タブの導線(おまかせ生成・曲を選んで生成・生成パラメータ)と
-/// 参照曲の管理(アーティスト一覧 → 曲一覧・追加シート)の表示を確認する。
-/// タブ構成は検討中(案 1 = 参照曲タブ / 案 2 = 生成タブ内。docs/plans/generation-ui-restructure.md)
-/// のため、テストごとに launch arguments で UserDefaults の uiVariant を固定して両案を確かめる。
+/// 参照曲タブ(アーティスト一覧 → 曲一覧・追加シート)の表示を確認する。
 /// 実際の生成(クレジット消費)は行わない。
 /// サーバー(http://localhost:3014)が起動していることが前提。
 final class GenerateUITests: XCTestCase {
-    /// タブ構成を固定して起動する(-uiVariant は UserDefaults の NSArgumentDomain に入る)
+    /// タブ構成(4 タブ)と生成タブの導線。生成の経路は「おまかせ / 曲を選んで生成」の 2 本で、
+    /// 参照曲の管理は独立タブに分離されている(docs/plans/generation-ui-restructure.md)
     @MainActor
-    private func launch(variant: String) -> XCUIApplication {
+    func testTabsAndGenerateEntryRows() throws {
         let app = XCUIApplication()
-        app.launchArguments += ["-uiVariant", variant]
         app.launch()
-        return app
-    }
-
-    /// 案 1(4 タブ): 生成タブは「おまかせ / 曲を選んで生成 / 生成パラメータ」だけで、
-    /// 参照曲の管理は独立タブに出る
-    @MainActor
-    func testFourTabsLayout() throws {
-        let app = launch(variant: "four_tabs")
 
         app.tabBars.buttons["生成"].tap()
         XCTAssertTrue(app.buttons["generate.daily"].waitForExistence(timeout: 5), "おまかせ生成ボタンが表示されること")
         XCTAssertTrue(app.buttons["generate.songPicker"].exists, "曲を選んで生成の行があること")
         XCTAssertTrue(app.buttons["generate.params"].exists, "生成パラメータの行があること")
-        XCTAssertFalse(app.buttons["generate.manageReference"].exists, "案 1 では参照曲の管理の行が無いこと")
+        attachScreenshot(app, name: "generate-tab")
 
         XCTAssertTrue(app.tabBars.buttons["参照曲"].exists, "参照曲タブがあること")
-        attachScreenshot(app, name: "generate-tab-four")
-
         app.tabBars.buttons["参照曲"].tap()
         XCTAssertTrue(
             app.navigationBars["参照曲"].waitForExistence(timeout: 5),
             "参照曲タブでアーティスト一覧が出ること"
         )
         XCTAssertTrue(app.buttons["artists.add"].waitForExistence(timeout: 3), "追加ボタンがあること")
-        attachScreenshot(app, name: "reference-tab-four")
-    }
-
-    /// 案 2(3 タブ): 参照曲タブは無く、生成タブに「参照曲の管理」の行が出る
-    @MainActor
-    func testThreeTabsLayout() throws {
-        let app = launch(variant: "three_tabs")
-
-        XCTAssertTrue(app.tabBars.buttons["生成"].waitForExistence(timeout: 5))
-        XCTAssertFalse(app.tabBars.buttons["参照曲"].exists, "案 2 では参照曲タブが無いこと")
-
-        app.tabBars.buttons["生成"].tap()
-        XCTAssertTrue(app.buttons["generate.daily"].waitForExistence(timeout: 5), "おまかせ生成ボタンが表示されること")
-        for identifier in ["generate.songPicker", "generate.manageReference", "generate.params"] {
-            XCTAssertTrue(app.buttons[identifier].exists, "\(identifier) の行があること")
-        }
-        attachScreenshot(app, name: "generate-tab-three")
-
-        app.buttons["generate.manageReference"].tap()
-        XCTAssertTrue(
-            app.navigationBars["参照曲"].waitForExistence(timeout: 5),
-            "参照曲の管理(アーティスト一覧)へ遷移すること"
-        )
-        attachScreenshot(app, name: "reference-pushed-three")
+        attachScreenshot(app, name: "reference-tab")
     }
 
     /// 参照曲の追加シート(アーティスト名 / 曲名の 2 経路を統合)。
     /// 登録は外部の iTunes 通信を伴うためここでは掘らない(サーバー側は curl シナリオでカバー済み)
     @MainActor
     func testAddReferenceSheet() throws {
-        let app = launch(variant: "four_tabs")
+        let app = XCUIApplication()
+        app.launch()
 
         app.tabBars.buttons["参照曲"].tap()
         let add = app.buttons["artists.add"]
@@ -94,7 +60,8 @@ final class GenerateUITests: XCTestCase {
     /// PATCH は curl シナリオでカバー済み)
     @MainActor
     func testArtistSongsShowEnabledToggle() throws {
-        let app = launch(variant: "four_tabs")
+        let app = XCUIApplication()
+        app.launch()
 
         app.tabBars.buttons["参照曲"].tap()
         let artist = app.buttons["artists.row"].firstMatch
@@ -155,7 +122,8 @@ final class GenerateUITests: XCTestCase {
     /// クレジットを消費するため。サーバー側は curl シナリオでカバー済み)
     @MainActor
     func testSongPickerAndSearchEntryPoint() throws {
-        let app = launch(variant: "four_tabs")
+        let app = XCUIApplication()
+        app.launch()
 
         app.tabBars.buttons["生成"].tap()
         let row = app.buttons["generate.songPicker"]

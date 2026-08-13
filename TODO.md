@@ -10,8 +10,8 @@
 - アーティストから生成と曲から生成のUIが分かりにくいので整理して再構築 [plan](docs/plans/generation-ui-restructure.md)
   - [x] Phase 0a: サーバー — `GET /api/reference-songs` の追加
   - [x] Phase 0b: iOS — 共通の新画面 + 案 1 / 案 2 を設定で切り替え(実機比較用)
-  - [ ] Phase 0c: 実機で両案を確認して構成を決定(管理画面の追従範囲も)
-  - [ ] Phase 1: iOS — 落選案と切り替えトグルの撤去・確定構成への整理
+  - [x] Phase 0c: 案 1(4 タブ化)に決定(2026-08-12)。管理画面は名前・文言の追従のみ
+  - [x] Phase 1: iOS — 落選案と切り替えトグルの撤去・確定構成への整理
   - [ ] Phase 2: Web 管理画面 — 名前・文言・構成の追従
   - [ ] 後片付け — CLAUDE.md 更新・プランの archive 移動
 

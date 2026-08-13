@@ -86,7 +86,7 @@ final class ScreenshotUITests: XCTestCase {
         // (残っていると以降のタップがすべてシートに吸われ、タブの中身が撮れない)
         dismissPlayerSheet(app)
 
-        for (tab, name) in [("生成", "generate"), ("設定", "settings")] {
+        for (tab, name) in [("生成", "generate"), ("参照曲", "reference"), ("設定", "settings")] {
             XCTAssertTrue(app.tabBars.buttons[tab].waitForExistence(timeout: 5))
             app.tabBars.buttons[tab].tap()
             // 設定タブはサーバー設定の読み込みを待ってから撮り、スクロール後(サーバー接続側)も撮る
