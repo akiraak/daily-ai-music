@@ -7,13 +7,13 @@
 
 - **無視** — 再提示しない(件数だけサマリに出る)
 - **様子見** — 判定日より後に発生があれば再提示
-- **対応中** — `FIXES.md` の対応項目が実施済み(`[x]`)になったら修正済み化を提案
+- **対応中** — `BACKLOG.md` の対応項目が実施済み(`[x]`)になったら修正済み化を提案
 - **修正済み** — 修正日より後に発生があれば「再発」として再オープン提案
 
 | fingerprint | 状態 | 判定日 | 修正日 | 分類 | 内容 | メモ |
 |---|---|---|---|---|---|---|
-| 1d5539b99a67 | 対応中 | 2026-08-13 | | server/generation/provider_failed | kie.ai が style の「major7」をアーティスト名と誤判定 | FIXES「style 語彙拒否への対策」。8/12(task 27)・8/13(task 46)の 2 回発生 |
-| c5be6d9bbb28 | 無視 | 2026-08-13 | | ios/ios-api/transport_failed | /api/tasks: 通信に失敗: cancelled | SwiftUI の画面遷移による正常キャンセル(-999)。報告除外を FIXES に追加済み |
+| 1d5539b99a67 | 対応中 | 2026-08-13 | | server/generation/provider_failed | kie.ai が style の「major7」をアーティスト名と誤判定 | BACKLOG「style 語彙拒否への対策」。8/12(task 27)・8/13(task 46)の 2 回発生 |
+| c5be6d9bbb28 | 無視 | 2026-08-13 | | ios/ios-api/transport_failed | /api/tasks: 通信に失敗: cancelled | SwiftUI の画面遷移による正常キャンセル(-999)。報告除外を BACKLOG に追加済み |
 | 342240bb2157 | 無視 | 2026-08-13 | | ios/ios-api/transport_failed | /api/tracks: 通信に失敗: cancelled | 同上(-999) |
 | aedbab76a1a3 | 無視 | 2026-08-13 | | ios/ios-api/transport_failed | /api/credits: 通信に失敗: cancelled | 同上(-999) |
 | ccc61802db9b | 修正済み | 2026-08-13 | 2026-08-13 | ios/ios-api/http_error | POST /api/generate: HTTP 400 | 新アプリ→旧サーバーのデプロイ順序ずれ(artistId 未対応の旧サーバーに投げた)。d721aed の本番反映で解消 |
