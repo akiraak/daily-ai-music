@@ -247,6 +247,9 @@ daily-ai-music 版は esltext(静的)・minecraft(ゲーム)に続く 3 例目�
 
 ## 実装 Phase(実装は本タスクの範囲外。着手時に TODO へ子タスク展開)
 
+> **実施順(2026-08-13 決定)**: **Phase 2(自動デプロイ)を先に**、その後 Phase 1・3(BACKLOG 修正プロセス)、最後に Phase 4。
+> push = デプロイが成立した時点で必要になるため、CLAUDE.md への push ルール明文化は Phase 3 から Phase 2 へ前倒しする。
+
 - **Phase 1 — A の実装(Mac)**: `scripts/auto-logs.sh` + launchd plist(雛形と手順)+ `/logs` SKILL の無人対応 + allowlist
 - **Phase 2 — D の実装(g3plus-ops + アプリ)**: `g3plus-ops/daily-ai-music/auto-update.sh`(flock 排他込み)+ crontab 登録 + workflow doc 改訂(自動デプロイ節・手動デプロイ枠と `deploy-hold` の規約・auto-update.sh の共通テンプレート規約)/ アプリ側は `/health` の commit SHA(+ Dockerfile の `ARG GIT_SHA` は g3plus-ops 側)。**この Phase の初回反映自体は手動デプロイ**(Dockerfile 変更を含むため)
 - **Phase 3 — C の実装(Mac)**: `.claude/skills/backlog/SKILL.md`(B の選定ルールはこの SKILL に記載)+ CLAUDE.md へ push ルールと `/backlog` の明文化 + `fetch-logs.sh` の auto-update.log 取得
