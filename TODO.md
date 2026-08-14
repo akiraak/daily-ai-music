@@ -4,4 +4,4 @@
 
 - [] 音楽になにか分類をつけてWebトップやアプリトップで絞り込みできるようにする
 
-- [] BACKLOG.md の自動更新とどのタスクを実行するかの決定方法とコードを修正してコミットからデプロイまでの流れを設計する（実装はしない） [plan](docs/plans/backlog-auto-pipeline.md)
+- [] BACKLOG 自動運用パイプラインの実装(Phase 1: `/logs` の無人定期実行 → Phase 2: `/backlog` スキル + `scripts/deploy.sh` → Phase 3: 無承認モードは実績を見て別途判断)— 設計: [plan](docs/plans/backlog-auto-pipeline.md)。着手時に Phase を子タスク展開する
