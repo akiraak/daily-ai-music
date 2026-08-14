@@ -65,7 +65,9 @@ function isValidApiSecret(provided: string | undefined): boolean {
   return crypto.timingSafeEqual(providedHash, secretHash);
 }
 
-app.get("/health", (c) => c.json({ status: "ok" }));
+// commit は本番イメージのビルド時に注入される稼働コミット(GIT_SHA)。
+// g3plus の auto-update.sh が「push したコミットが本番に出たか」の検証に使う。開発では null
+app.get("/health", (c) => c.json({ status: "ok", commit: process.env.GIT_SHA ?? null }));
 
 // API 本体。/api(iOS アプリ向け・X-API-Secret 必須)と
 // /admin/api(管理画面向け・アプリ層は無認証。本番はエッジの Cloudflare Access が /admin ごと保護)の両方にマウントする

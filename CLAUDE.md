@@ -118,6 +118,7 @@ node vibeboard/dist/cli.js --root .
 
 - **コミットは `main` に直接行う。作業ブランチは切らない**(単独開発のリポジトリで、履歴も `main` 一本のため)
 - プラン作成と実装は別のコミットに分ける(例: `488c910` プラン作成 → `0cceecb` 実装)
+- **push = 本番反映**(2026-08-13 以降): g3plus 側の `auto-update.sh`(cron 5 分おき)が origin/main を検知して自動デプロイする。`server/` に変更が無い push は再ビルドされない(iOS・ドキュメントだけなら安全)。**まだ本番に出したくないコミットは push しない**(ローカルに積んでおく)。移行・`.env`・Dockerfile 変更を伴う反映は従来の手動フロー + `deploy-hold`(手順の正本: g3plus-ops の [docs/workflows/daily-ai-music.md](../g3plus-ops/docs/workflows/daily-ai-music.md)。設計: [docs/plans/backlog-auto-pipeline.md](docs/plans/backlog-auto-pipeline.md))
 
 ## 作業着手ルール
 
