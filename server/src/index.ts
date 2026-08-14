@@ -820,6 +820,56 @@ api.get("/reference-songs", (c) => {
   return c.json({ songs });
 });
 
+// BACKLOG メール承認ループの承認キュー(設計: docs/plans/backlog-auto-pipeline.md)。
+// 読み取りは g3plus の backlog-mail.sh(結果メール)と Mac の ops-runner.sh(pending の取得)、
+// 更新は両者が status / result / notified を進めるのに使う
+api.get("/ops/approvals", (c) => {
+  const statuses = c.req.query("status")?.split(",").filter(Boolean);
+  const invalid = statuses?.find((s) => !(db.OPS_APPROVAL_STATUSES as readonly string[]).includes(s));
+  if (invalid) return c.json({ error: `unknown status: ${invalid}` }, 400);
+  const notifiedRaw = c.req.query("notified");
+  if (notifiedRaw !== undefined && notifiedRaw !== "0" && notifiedRaw !== "1") {
+    return c.json({ error: "notified must be 0 or 1" }, 400);
+  }
+  const approvals = db.listOpsApprovals({
+    statuses,
+    notified: notifiedRaw === undefined ? undefined : Number(notifiedRaw),
+  });
+  return c.json({ approvals });
+});
+
+api.patch("/ops/approvals/:id", async (c) => {
+  const id = Number(c.req.param("id"));
+  if (!Number.isInteger(id)) return c.json({ error: "invalid id" }, 400);
+  const body = (await c.req.json().catch(() => null)) as {
+    status?: unknown;
+    result?: unknown;
+    itemText?: unknown;
+    notified?: unknown;
+  } | null;
+  if (!body) return c.json({ error: "invalid json" }, 400);
+  const { status, result, itemText, notified } = body;
+  if (status !== undefined && !(db.OPS_APPROVAL_STATUSES as readonly string[]).includes(status as string)) {
+    return c.json({ error: "invalid status" }, 400);
+  }
+  if (result !== undefined && typeof result !== "string") return c.json({ error: "invalid result" }, 400);
+  if (itemText !== undefined && typeof itemText !== "string") return c.json({ error: "invalid itemText" }, 400);
+  if (notified !== undefined && notified !== 0 && notified !== 1) {
+    return c.json({ error: "notified must be 0 or 1" }, 400);
+  }
+  if (status === undefined && result === undefined && itemText === undefined && notified === undefined) {
+    return c.json({ error: "empty patch" }, 400);
+  }
+  const found = db.updateOpsApproval(id, {
+    status: status as string | undefined,
+    result,
+    itemText,
+    notified: notified as number | undefined,
+  });
+  if (!found) return c.json({ error: "not found" }, 404);
+  return c.json({ ok: true });
+});
+
 // /api/* は X-API-Secret ヘッダ必須
 app.use("/api/*", async (c, next) => {
   if (!isValidApiSecret(c.req.header("x-api-secret"))) {
@@ -954,6 +1004,41 @@ function escapeHtml(s: string): string {
 
 const SITE_DESCRIPTION =
   "AI が毎日、新しい音楽を製造しています。すべての楽曲は AI(Suno)により生成されたものです。";
+
+// BACKLOG メール承認ループの受付(設計: docs/plans/backlog-auto-pipeline.md)。
+// digest メールの「この修正を実行」リンクから GET される公開エンドポイント。
+// メールクライアントはヘッダを付けられないため secret ではなく署名付き URL で守る —
+// sig = HMAC-SHA256(API_SECRET, "approve.<item>.<exp>") 先頭 32 hex、exp は unix 秒。
+// 無効・期限切れは一律 404(スキャナが叩くだけなのでエラーログにも残さない)
+app.get("/ops/approve", (c) => {
+  const item = c.req.query("item") ?? "";
+  const exp = c.req.query("exp") ?? "";
+  const sig = c.req.query("sig") ?? "";
+  if (!/^[0-9a-f]{12}$/.test(item) || !/^\d{1,12}$/.test(exp)) return c.text("Not Found", 404);
+  const expected = crypto
+    .createHmac("sha256", API_SECRET)
+    .update(`approve.${item}.${exp}`)
+    .digest("hex")
+    .slice(0, 32);
+  const sigBuf = Buffer.from(sig);
+  const expectedBuf = Buffer.from(expected);
+  if (sigBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(sigBuf, expectedBuf)) {
+    return c.text("Not Found", 404);
+  }
+  if (Number(exp) * 1000 < Date.now()) return c.text("Not Found", 404);
+  const { created } = db.insertOpsApproval(item);
+  const message = created
+    ? "修正を受け付けました。Mac 側のランナーが順に実行し、結果はメールで届きます。"
+    : "この修正は既に受付済みです(実行待ち、または実行中)。";
+  return c.html(
+    `<!doctype html><html lang="ja"><head><meta charset="utf-8">` +
+      `<meta name="viewport" content="width=device-width, initial-scale=1">` +
+      `<meta name="robots" content="noindex"><title>Music Plant ops</title></head>` +
+      `<body style="font-family: sans-serif; max-width: 30em; margin: 4em auto; padding: 0 1em;">` +
+      `<h1 style="font-size: 1.2em;">BACKLOG 修正の承認</h1><p>${message}</p>` +
+      `<p style="color: #888; font-size: 0.85em;">項目キー: ${item}</p></body></html>`
+  );
+});
 
 app.get("/track/:id", (c) => {
   const id = c.req.param("id");

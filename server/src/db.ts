@@ -136,6 +136,16 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_error_logs_occurred ON error_logs(occurred_at);
   CREATE INDEX IF NOT EXISTS idx_error_logs_fingerprint ON error_logs(fingerprint);
+  CREATE TABLE IF NOT EXISTS ops_approvals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    item_key TEXT NOT NULL,      -- BACKLOG 項目本文の sha256 先頭 12 hex(メールのリンクと Mac ランナーで同じ計算)
+    item_text TEXT,              -- 項目本文のスナップショット(ランナーが特定後に記録。結果メールの表示用)
+    status TEXT NOT NULL DEFAULT 'pending', -- 'pending' | 'running' | 'done' | 'failed'
+    result TEXT,                 -- 実行結果の要約(done/failed でランナーが記録)
+    notified INTEGER NOT NULL DEFAULT 0,    -- 結果メール送信済みか(backlog-mail.sh が更新)
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+  );
 `);
 
 // 既存 DB への後方互換マイグレーション(カラムが無ければ追加)
@@ -947,4 +957,78 @@ export function listErrorLogs(filter: {
     ` ORDER BY last_seen_at DESC, id DESC LIMIT ?`;
   params.push(filter.limit ?? 200);
   return db.prepare(sql).all(...params) as unknown as ErrorLogRow[];
+}
+
+// --- BACKLOG メール承認ループ(ops_approvals)。設計: docs/plans/backlog-auto-pipeline.md ---
+
+export interface OpsApprovalRow {
+  id: number;
+  item_key: string;
+  item_text: string | null;
+  status: string;
+  result: string | null;
+  notified: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export const OPS_APPROVAL_STATUSES = ["pending", "running", "done", "failed"] as const;
+
+// 承認の受付。同じ項目が未処理(pending/running)のまま残っていれば増やさない(メールの再クリック対策)
+export function insertOpsApproval(itemKey: string): { created: boolean; row: OpsApprovalRow } {
+  const existing = db
+    .prepare(
+      `SELECT * FROM ops_approvals WHERE item_key = ? AND status IN ('pending', 'running')
+       ORDER BY id LIMIT 1`
+    )
+    .get(itemKey) as unknown as OpsApprovalRow | undefined;
+  if (existing) return { created: false, row: existing };
+  const inserted = db.prepare(`INSERT INTO ops_approvals (item_key) VALUES (?)`).run(itemKey);
+  const row = db
+    .prepare(`SELECT * FROM ops_approvals WHERE id = ?`)
+    .get(Number(inserted.lastInsertRowid)) as unknown as OpsApprovalRow;
+  return { created: true, row };
+}
+
+export function listOpsApprovals(
+  filter: { statuses?: string[]; notified?: number } = {}
+): OpsApprovalRow[] {
+  const where: string[] = [];
+  const params: (string | number)[] = [];
+  if (filter.statuses && filter.statuses.length > 0) {
+    where.push(`status IN (${filter.statuses.map(() => "?").join(", ")})`);
+    params.push(...filter.statuses);
+  }
+  if (filter.notified !== undefined) {
+    where.push("notified = ?");
+    params.push(filter.notified);
+  }
+  const sql =
+    `SELECT * FROM ops_approvals` +
+    (where.length > 0 ? ` WHERE ${where.join(" AND ")}` : "") +
+    ` ORDER BY id`;
+  return db.prepare(sql).all(...params) as unknown as OpsApprovalRow[];
+}
+
+export function updateOpsApproval(
+  id: number,
+  patch: { status?: string; result?: string; itemText?: string; notified?: number }
+): boolean {
+  const sets: string[] = [];
+  const params: (string | number)[] = [];
+  for (const [column, value] of [
+    ["status", patch.status],
+    ["result", patch.result],
+    ["item_text", patch.itemText],
+    ["notified", patch.notified],
+  ] as const) {
+    if (value !== undefined) {
+      sets.push(`${column} = ?`);
+      params.push(value);
+    }
+  }
+  if (sets.length === 0) return false;
+  sets.push(`updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`);
+  const updated = db.prepare(`UPDATE ops_approvals SET ${sets.join(", ")} WHERE id = ?`).run(...params, id);
+  return updated.changes > 0;
 }
