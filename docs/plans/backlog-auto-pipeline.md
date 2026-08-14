@@ -211,6 +211,47 @@ push が反映されたことを **ssh なしで外形確認**できるよう、
 
 daily-ai-music 版は esltext(静的)・minecraft(ゲーム)に続く 3 例目の変種になる。
 
+## E. メール承認ループ(2026-08-13 追加決定)
+
+C の「人がセッションを開いて承認する」を、**メールのリンクをクリックするだけ**に置き換える(モード 1.5)。
+ユーザー決定: 通知は**メール**(iPhone からもクリックできる)・クリック後は**本番反映まで全自動**。
+
+```
+BACKLOG.md が変わる(/logs・手動編集どちらでも)→ push
+  └─ g3plus: backlog-mail.sh(cron 5 分おき)が未チェック項目の変化を検知
+       └─ digest メール送信: [auto] 項目には承認リンク、要判断項目はラベルのみ
+            └─ 人がメールのリンクをクリック(iPhone 可)
+                 └─ GET /ops/approve(音楽サーバーの公開エンドポイント、HMAC トークン検証)
+                      └─ ops_approvals テーブルに pending で記録
+Mac: ops-runner.sh(launchd 5 分おき)が pending をポーリング
+  └─ running に更新 → claude -p で /backlog スキルを無人実行
+       (項目特定 → プラン → 実装 → 検証 → コミット → push → 本番反映を /health で確認
+        → BACKLOG [x] 化を push → done/failed + 結果を PATCH)
+            └─ g3plus: backlog-mail.sh が未通知の done/failed を検知して結果メール送信
+```
+
+### 決めたこと
+
+| 論点 | 決定 |
+|---|---|
+| メール送信の場所 | **すべて g3plus**(`backlog-mail.sh`、cron 5 分おきの独立プロセス)。Gmail SMTP 資材(news-generator の `.env` 借用)は minecraft の send_mail と同パターンで、**開発機には無い**ため Mac からは送らない |
+| digest の契機 | BACKLOG.md の未チェック項目部分のハッシュを状態ファイルと比較(push 経由でも手動デプロイ経由でも拾える)。変化時のみ送信 |
+| 自動実行可否の判定 | `/logs`(LLM)がトリアージ時に判定し、**BACKLOG 項目に `[auto]` タグ**を付ける(B の条件を満たすものだけ)。メールスクリプトはタグを読むだけで意味判断をしない。`[auto]` 無しの項目はリンク無しで「要判断」表示 |
+| 項目の同定 | item key = 項目テキスト(`- [ ] ` と `[auto] ` を除いた本文)の sha256 先頭 12 hex。bash(メール)と Mac(ランナー)で同じ計算。項目文が更新されたら旧リンクは failed になり、新しい digest のリンクを使う |
+| 承認リンクの保護 | `GET /ops/approve?item=&exp=&sig=`。sig = HMAC-SHA256(`API_SECRET`, `approve.<item>.<exp>`) 先頭 32 hex、exp は 7 日。無効・期限切れは 404(エラーログには残さない — スキャナノイズ防止)。リンクの秘匿性はメールの秘匿性と同等(個人運用の割り切り。漏れても発火できるのは vetted 済み `[auto]` 項目の修正だけ) |
+| 承認キュー | 音楽サーバーの DB に `ops_approvals`(CREATE TABLE IF NOT EXISTS で冪等)。公開の `/ops/approve`(トークンのみ)+ secret 付き `GET/PATCH /api/ops/approvals`(Mac ランナー・メールスクリプトが使用)。同一 item の pending/running 重複は作らない(再クリックは「受付済み」) |
+| Mac ランナー | `scripts/ops-runner.sh` + launchd 5 分おき。flock で 1 件ずつ。working tree が dirty なら見送り(人のセッションを壊さない)。claude 死亡時のフォールバック failed 化もランナーが担う |
+| headless の権限 | `--dangerously-skip-permissions` は使わず、acceptEdits 相当 + プロジェクト settings の allowlist(git・npm run typecheck・music.chobi.me への curl 等)で通す |
+| iOS 項目の完了 | 修正 push まで(実機再インストールは人)。BACKLOG は `[x]` にせず「修正済み・実機反映待ち」を追記して `[auto]` を外す |
+| 結果通知 | ランナーが result を PATCH → backlog-mail.sh が未通知(notified=0)の done/failed をメールして notified=1 に更新 |
+
+### 実装物
+
+- **サーバー(server/)**: `ops_approvals` テーブル / `GET /ops/approve`(公開・トークン)/ `GET|PATCH /api/ops/approvals`(secret)
+- **g3plus-ops**: `daily-ai-music/backlog-mail.sh`(digest + 結果通知)+ crontab 1 行
+- **Mac**: `scripts/ops-runner.sh` + launchd plist + `.claude/skills/backlog/SKILL.md`(無人修正の実行体。C の手順の headless 版)+ settings allowlist
+- **書式**: BACKLOG.md に `[auto]` タグ(`/logs` SKILL の書式節にも追記)
+
 ## 運転モード(段階導入)
 
 | モード | A(BACKLOG 更新) | デプロイ | B〜C(選定〜push) | 移行条件 |
