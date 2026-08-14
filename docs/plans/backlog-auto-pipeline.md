@@ -174,6 +174,9 @@ iOS の修正は**コミットまで**(検証はシミュレータビルド)。�
 6. 反映                git merge --ff-only origin/main
                        docker tag daily-ai-music-daily-ai-music:latest …:prev
                        docker compose build → up -d
+                       ※ build〜up の区間は flock(/home/ubuntu/g3plus-ops/.deploy.lock)で
+                       全サービス共通の排他を掛ける(4 コアのサーバーで esltext 等の cron と
+                       docker build が同時に走らないように。取れなければスキップ → 次周期)
 7. 検証                /health が 200 かつ返却 SHA が新コミットに一致(数回リトライ)。
                        失敗したら docker tag …:prev → latest に戻して up -d(ロールバック)
                        + ログに ERROR
@@ -196,9 +199,17 @@ push が反映されたことを **ssh なしで外形確認**できるよう、
 - Dockerfile・compose の変更(g3plus-ops 側の scp 追従が要る)
 - バックフィルスクリプトの実行(backfill-intro 等)
 
-### 多サービスへの一般化
+### 多サービスへの一般化(2026-08-13 調査で確定)
 
-この「常駐 API サーバー向け auto-update.sh(前チェック + 検証 + ロールバック付き)」は esltext(静的)・minecraft(ゲーム)に続く 3 例目の変種になる。esl-learning-assistant 等の他の常駐サービスへ広げたくなったら、そのときに共通化を考える(いまはコピーしない・ライブラリ化しない)。
+「1 プロセスで全サービスをまとめてデプロイするか、プロジェクトごとに別プロセスか」を調査し、**プロジェクトごとに別プロセス**に決めた。
+
+- 既存 2 本(esltext ≈20 行の git 型 / minecraft ≈200 行の image pull 型 + 通知 + バックアップ世代管理)は中身がほぼ別物で、共通なのは「cron 起動・変化なしは即終了・ログ追記」の外形だけ。「デプロイしてよいか」の判断はサービス固有(daily-ai-music なら生成中タスク・時間帯)で、集中型にしてもフックとして残り、読み解く量は減らない
+- 一般解も「制御は 1 つでもデプロイ単位はアプリごとに独立」(ArgoCD 等)。watchtower 型の一括更新が成立するのは前チェック不要の単純ケースだけ
+- 集中型(自作ミニフレームワーク)はフレームワーク自体のバグが全サービスのデプロイを止める。8 サービス規模では割に合わない
+
+**中央化するのは 2 点だけ**: ① build〜up の flock 排他ロック(上記)② 規約の共有 — ログのファイル名・形式、`deploy-hold` の置き場と意味、「変化なしは無音・失敗は記録」の原則を g3plus-ops の doc にテンプレートとして書く(コードは共有しない)。共通ライブラリ化は git 型の採用が 4〜5 サービスに増えてずれが痛くなってから(rule of three)。
+
+daily-ai-music 版は esltext(静的)・minecraft(ゲーム)に続く 3 例目の変種になる。
 
 ## 運転モード(段階導入)
 
@@ -231,12 +242,13 @@ push が反映されたことを **ssh なしで外形確認**できるよう、
 - **通知基盤(n8n webhook 等)**: まずはログ + `/logs` 取り込み + `/backlog` 監視の二段構えで。足りなければ後付け
 - **モード 2 を最初から**: 承認ゲート付きの実績を見てから別途判断
 - **BACKLOG の優先度を LLM に自由裁量で決めさせる**: 選定は決定的ルール(影響度 → 追記順)に固定し、判断の揺れをなくす
-- **auto-update.sh の他サービス共通化**: 3 例目の変種で止める。横展開のニーズが出たときに考える
+- **全サービス一括の中央デプロイプロセス**(watchtower 型・自作オーケストレータ): サービス固有の前チェックが本体で、集中化してもフックに残るだけ。中央化は flock と規約の 2 点に限定(D の「多サービスへの一般化」参照)
+- **auto-update.sh の他サービス共通化(ライブラリ化)**: 3 例目の変種で止める。git 型が 4〜5 サービスに増えてから考える
 
 ## 実装 Phase(実装は本タスクの範囲外。着手時に TODO へ子タスク展開)
 
 - **Phase 1 — A の実装(Mac)**: `scripts/auto-logs.sh` + launchd plist(雛形と手順)+ `/logs` SKILL の無人対応 + allowlist
-- **Phase 2 — D の実装(g3plus-ops + アプリ)**: `g3plus-ops/daily-ai-music/auto-update.sh` + crontab 登録 + workflow doc 改訂(自動デプロイ節・手動デプロイ枠と `deploy-hold` の規約)/ アプリ側は `/health` の commit SHA(+ Dockerfile の `ARG GIT_SHA` は g3plus-ops 側)。**この Phase の初回反映自体は手動デプロイ**(Dockerfile 変更を含むため)
+- **Phase 2 — D の実装(g3plus-ops + アプリ)**: `g3plus-ops/daily-ai-music/auto-update.sh`(flock 排他込み)+ crontab 登録 + workflow doc 改訂(自動デプロイ節・手動デプロイ枠と `deploy-hold` の規約・auto-update.sh の共通テンプレート規約)/ アプリ側は `/health` の commit SHA(+ Dockerfile の `ARG GIT_SHA` は g3plus-ops 側)。**この Phase の初回反映自体は手動デプロイ**(Dockerfile 変更を含むため)
 - **Phase 3 — C の実装(Mac)**: `.claude/skills/backlog/SKILL.md`(B の選定ルールはこの SKILL に記載)+ CLAUDE.md へ push ルールと `/backlog` の明文化 + `fetch-logs.sh` の auto-update.log 取得
 - **Phase 4 — モード 2**: 無承認クラスの無人実行(導入判断は実績を見て別途)
 
