@@ -3,6 +3,9 @@ import Foundation
 enum AppSettingsKeys {
     static let backendBaseURL = "backendBaseURL"
     static let apiSecret = "apiSecret"
+    /// ランダム再生(シャッフル)の ON/OFF。フルプレイヤーのトグルが唯一の入口なので、
+    /// 一度 ON にしたら次の起動でも効くように保存する
+    static let shuffleEnabled = "playerShuffleEnabled"
 
     /// ビルド時に Info.plist へ埋め込まれた値(実機ビルドは run-ios-device.sh が
     /// 本番 URL https://music.chobi.me を注入する。--local 時は Mac の LAN IP)。

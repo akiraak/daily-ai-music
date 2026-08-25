@@ -31,6 +31,14 @@ final class ScreenshotUITests: XCTestCase {
             app.buttons["miniplayer.open"].tap()
             if app.staticTexts["player.title"].waitForExistence(timeout: 5) {
                 attach(app, name: "\(style)-player")
+                // ランダム再生 ON の見た目(ティントが乗った状態)も撮って、撮り終えたら OFF に戻す
+                if app.buttons["player.shuffle.off"].exists {
+                    app.buttons["player.shuffle.off"].tap()
+                    _ = app.buttons["player.shuffle.on"].waitForExistence(timeout: 3)
+                    attach(app, name: "\(style)-player-shuffle")
+                    app.buttons["player.shuffle.on"].tap()
+                    _ = app.buttons["player.shuffle.off"].waitForExistence(timeout: 3)
+                }
                 if app.buttons["player.lyrics"].exists {
                     app.buttons["player.lyrics"].tap()
                     _ = app.buttons["player.lyrics.ja"].waitForExistence(timeout: 3)

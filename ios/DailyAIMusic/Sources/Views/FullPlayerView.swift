@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// フルプレイヤー(シート)。大カバー・シークバー・前後の曲・再生/停止・歌詞への導線。
+/// フルプレイヤー(シート)。大カバー・シークバー・前後の曲・再生/停止・ランダム再生・歌詞への導線。
 /// 表示対象は常に PlayerService.currentTrack(自動送りで曲が替わっても追従する)。
 /// レイアウトは案A ミニマル(docs/plans/ios-app-design-mocks/01-minimal.html)基準
 struct FullPlayerView: View {
@@ -63,10 +63,14 @@ struct FullPlayerView: View {
             }
             .padding(.top, 20)
 
-            if track.lyrics != nil || track.lyricsJa != nil {
-                lyricsLink(for: track)
-                    .padding(.top, 22)
+            // シャッフルは前/再生/次の行には足さない(4 つ目を入れると再生ボタンが中央からずれる)
+            HStack(spacing: 26) {
+                shuffleButton
+                if track.lyrics != nil || track.lyricsJa != nil {
+                    lyricsLink(for: track)
+                }
             }
+            .padding(.top, 22)
 
             Spacer(minLength: 12)
         }
@@ -107,6 +111,33 @@ struct FullPlayerView: View {
         }
         .buttonStyle(.borderless)
         .accessibilityIdentifier(player.isPlaying ? "player.pause" : "player.play")
+    }
+
+    /// ランダム再生のトグル。ON はティント色+淡いピル、OFF は secondary の文字だけ。
+    /// 隣の歌詞リンクと同じ「アイコン+文字」なので、色だけだと ON がリンクに見える。
+    /// 状態は再生順を黙って変えるうえ次回起動まで残るため、ピルで「入っている」ことを明示する。
+    /// ID を状態で切り替えるのは再生/一時停止ボタンと同じ流儀(UI テストから状態を見るため)
+    private var shuffleButton: some View {
+        Button {
+            player.toggleShuffle()
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "shuffle")
+                    .font(.system(size: 13, weight: .bold))
+                Text("ランダム")
+                    .font(.footnote.weight(.bold))
+            }
+            .foregroundStyle(player.isShuffled ? Color.accentDeep : Color.secondary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background {
+                if player.isShuffled {
+                    Capsule().fill(Color.appAccent.opacity(0.22))
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(player.isShuffled ? "player.shuffle.on" : "player.shuffle.off")
     }
 
     private func skipButton(

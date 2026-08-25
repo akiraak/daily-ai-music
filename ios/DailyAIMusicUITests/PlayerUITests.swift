@@ -51,4 +51,60 @@ final class PlayerUITests: XCTestCase {
         app.swipeDown()
         XCTAssertTrue(app.buttons["miniplayer.pause"].waitForExistence(timeout: 5), "シートを閉じてもミニプレイヤーが残ること")
     }
+
+    /// ランダム再生: トグルで状態が切り替わり、ON でも次の曲へ送れて、シートを閉じて開いても状態が残ること。
+    /// 状態は UserDefaults に残るので、開始時に OFF へ寄せ、終了時も OFF に戻して他のテストへ持ち越さない。
+    /// 並びが実際にランダムになることはここでは見ない(乱数なので UI からは決定的に確かめられない。
+    /// 順序を作る純関数側で分布を確認している)
+    @MainActor
+    func testShuffleToggle() throws {
+        let app = XCUIApplication()
+        app.launch()
+
+        let firstPlayButton = app.buttons.matching(identifier: "track.play").firstMatch
+        XCTAssertTrue(firstPlayButton.waitForExistence(timeout: 10), "楽曲一覧が読み込まれること(サーバー起動と API Secret 注入が必要)")
+        firstPlayButton.tap()
+        XCTAssertTrue(app.buttons["miniplayer.pause"].waitForExistence(timeout: 10), "再生が始まること")
+        app.buttons["miniplayer.open"].tap()
+
+        let title = app.staticTexts["player.title"]
+        XCTAssertTrue(title.waitForExistence(timeout: 5), "フルプレイヤーが開くこと")
+
+        let shuffleOn = app.buttons["player.shuffle.on"]
+        let shuffleOff = app.buttons["player.shuffle.off"]
+        XCTAssertTrue(
+            shuffleOn.waitForExistence(timeout: 5) || shuffleOff.exists,
+            "ランダム再生のトグルがあること"
+        )
+        if shuffleOn.exists { shuffleOn.tap() }
+        XCTAssertTrue(shuffleOff.waitForExistence(timeout: 5), "OFF から始められること")
+
+        // OFF → ON
+        shuffleOff.tap()
+        XCTAssertTrue(shuffleOn.waitForExistence(timeout: 5), "タップで ON になること")
+
+        // ON でも次の曲へ送れること(曲が 2 件以上あるときのみ)
+        if app.buttons["player.next"].isEnabled {
+            let originalTitle = title.label
+            app.buttons["player.next"].tap()
+            let advanced = XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "label != %@", originalTitle),
+                object: title
+            )
+            XCTAssertEqual(
+                XCTWaiter().wait(for: [advanced], timeout: 15), .completed,
+                "ランダム再生中も次の曲へ送れること(title=\(title.label))"
+            )
+        }
+
+        // シートを閉じて開き直しても ON のまま
+        app.swipeDown()
+        XCTAssertTrue(app.buttons["miniplayer.open"].waitForExistence(timeout: 5), "ミニプレイヤーへ戻ること")
+        app.buttons["miniplayer.open"].tap()
+        XCTAssertTrue(shuffleOn.waitForExistence(timeout: 5), "開き直しても ON が残ること")
+
+        // 後片付け: OFF へ戻す
+        shuffleOn.tap()
+        XCTAssertTrue(shuffleOff.waitForExistence(timeout: 5), "OFF に戻せること")
+    }
 }

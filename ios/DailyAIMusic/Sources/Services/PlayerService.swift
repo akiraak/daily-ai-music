@@ -6,6 +6,7 @@ import UIKit
 /// 楽曲のストリーミング再生(AVPlayer)。UIBackgroundModes: audio と合わせて
 /// 画面ロック・バックグラウンドでも再生を継続する。
 /// 再生キュー(ライブラリの表示順)を持ち、曲終了で次の曲へ自動送りする。
+/// 再生順は queue のインデックス列 order で持ち、シャッフル時だけ並びが変わる。
 /// ロック画面・コントロールセンターへは MPNowPlayingInfoCenter + MPRemoteCommandCenter で
 /// 曲名・カバー・操作を出す
 @MainActor
@@ -15,26 +16,40 @@ final class PlayerService: ObservableObject {
     @Published private(set) var currentTrack: Track?
     @Published private(set) var isPlaying = false
     @Published private(set) var currentTime: Double = 0
-    /// 再生キュー(ライブラリの表示順 = 新しい順)。「次の曲」はリストの 1 つ下
+    /// 再生キュー(ライブラリの表示順 = 新しい順)。表示順のまま保持し、並べ替えはしない
     @Published private(set) var queue: [Track] = []
+    /// ランダム再生(シャッフル)。アプリを閉じても状態を保つ
+    @Published private(set) var isShuffled: Bool = UserDefaults.standard.bool(
+        forKey: AppSettingsKeys.shuffleEnabled
+    )
 
     private let player = AVPlayer()
     /// 再生できなかったことを検知するための現在アイテムの status 監視(ErrorReporter へ送る)
     private var statusObservation: NSKeyValueObservation?
+
+    /// 再生順。queue のインデックス列で持つ(queue 自体は表示順のまま並べ替えない)。
+    /// シャッフル OFF なら 0..<queue.count と同じで、ON なら現在曲を先頭にランダムに並ぶ
+    private var order: [Int] = []
 
     private var currentIndex: Int? {
         guard let currentTrack else { return nil }
         return queue.firstIndex { $0.id == currentTrack.id }
     }
 
+    /// 現在曲が再生順の何番目か。「次/前の曲」は queue ではなくこの位置の ±1 で決まる
+    private var currentOrderPosition: Int? {
+        guard let currentIndex else { return nil }
+        return order.firstIndex(of: currentIndex)
+    }
+
     var nextTrack: Track? {
-        guard let index = currentIndex, index + 1 < queue.count else { return nil }
-        return queue[index + 1]
+        guard let position = currentOrderPosition, position + 1 < order.count else { return nil }
+        return queue[order[position + 1]]
     }
 
     var previousTrack: Track? {
-        guard let index = currentIndex, index > 0 else { return nil }
-        return queue[index - 1]
+        guard let position = currentOrderPosition, position > 0 else { return nil }
+        return queue[order[position - 1]]
     }
 
     private init() {
@@ -85,12 +100,15 @@ final class PlayerService: ObservableObject {
     }
 
     /// queue を渡すとキューを置き換える(ライブラリからの再生)。渡さない場合、
-    /// 既存キューに track が居ればキューを保ち(楽曲詳細からの再生)、居なければその 1 曲だけにする
+    /// 既存キューに track が居ればキューを保ち(楽曲詳細からの再生)、居なければその 1 曲だけにする。
+    /// キューを入れ替えたときだけ再生順を組み直す(次へ・自動送りでは組み直さない)
     func play(_ track: Track, queue newQueue: [Track]? = nil) {
         if let newQueue {
             queue = newQueue
+            rebuildOrder(startingAt: track)
         } else if !queue.contains(where: { $0.id == track.id }) {
             queue = [track]
+            rebuildOrder(startingAt: track)
         }
         guard let url = BackendAPI.absoluteURL(forServerPath: track.audioUrl) else { return }
         if currentTrack?.id != track.id {
@@ -174,6 +192,38 @@ final class PlayerService: ObservableObject {
             player.seek(to: .zero)
             updateNowPlayingPlaybackState()
         }
+    }
+
+    // MARK: - ランダム再生
+
+    /// シャッフルの ON/OFF。ON にすると現在の曲を先頭に残りをランダムに並べ替え、
+    /// OFF に戻すとキューの表示順へ戻る(現在の曲は表示順での位置に戻るので、
+    /// 「次の曲」は表示順の 1 つ下になる)
+    func toggleShuffle() {
+        isShuffled.toggle()
+        UserDefaults.standard.set(isShuffled, forKey: AppSettingsKeys.shuffleEnabled)
+        rebuildOrder(startingAt: currentTrack)
+    }
+
+    private func rebuildOrder(startingAt track: Track?) {
+        var generator = SystemRandomNumberGenerator()
+        let head = track.flatMap { target in queue.firstIndex { $0.id == target.id } }
+        order = Self.playbackOrder(
+            count: queue.count, head: head, shuffled: isShuffled, using: &generator
+        )
+    }
+
+    /// 再生順(queue のインデックス列)を作る純関数。シャッフル時は head を先頭に固定して
+    /// 残りをランダムに並べる — 一度作った順序は次へ・前へで辿り直すだけなので、
+    /// ON のあいだ同じ曲は二度来ず、一巡したら末尾で止まる。
+    /// テストで分布を確かめられるよう乱数を注入できるようにしてある
+    static func playbackOrder<G: RandomNumberGenerator>(
+        count: Int, head: Int?, shuffled: Bool, using generator: inout G
+    ) -> [Int] {
+        let all = Array(0..<count)
+        guard shuffled else { return all }
+        guard let head, all.indices.contains(head) else { return all.shuffled(using: &generator) }
+        return [head] + all.filter { $0 != head }.shuffled(using: &generator)
     }
 
     // MARK: - ロック画面・コントロールセンター
