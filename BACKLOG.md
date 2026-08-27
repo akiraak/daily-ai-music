@@ -4,6 +4,7 @@
 
 - 着手するときは通常の作業着手ルール(プラン作成 → 実装)に乗せる
 - **実施したら削除せず `[x]` にして残す** — 次回の `/logs` が台帳([docs/error-triage.md](docs/error-triage.md))の「修正済み」化に使う
+- **`[auto]` タグ**(2026-08-13 追加): 対策が一意で自動修正に回せる項目は `- [ ] [auto] ...` と書く(判定基準は [docs/plans/backlog-auto-pipeline.md](docs/plans/backlog-auto-pipeline.md) の B)。digest メールで承認リンクが付き、クリックすると Mac のランナーが無人で修正 → push まで行う。対策候補が複数・検討系の項目にはタグを付けない(メールには「要判断」で載る)
 
 ## 項目
 
