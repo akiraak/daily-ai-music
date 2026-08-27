@@ -400,10 +400,38 @@ export function properNounsIn(plan: SongPlan, ref: ReferenceSong): string[] {
   return found;
 }
 
-// 再生成すべき問題(検出内容と、プロンプトに足す指示)
+// 再生成すべき問題(検出内容と、プロンプトに足す指示)。
+// fatal は出力の破損 — リトライ後も残っていたら Suno に送らず失敗させる
 interface PlanIssue {
   label: string;
   instruction: string;
+  fatal?: boolean;
+}
+
+// Suno(kie.ai)のタイトル上限。超えると送信が 422 で失敗する
+const SUNO_TITLE_MAX = 80;
+
+// 出力の破損検査。構造化出力は JSON としては valid でも、まれに値へモデルの思考テキストが
+// 混入して壊れる(2026-08-26 の task 133・138。title が 80 字を超え kie.ai の 422 になった)。
+// 機械的に判定できる壊れ方だけを見る。テストから直接叩けるよう export する
+export function brokenOutputIssues(plan: SongPlan, input: SongPlanInput): PlanIssue[] {
+  const broken: string[] = [];
+  const title = plan.title.trim();
+  if (title.length === 0) broken.push("title が空");
+  if (title.length > SUNO_TITLE_MAX)
+    broken.push(`title が ${SUNO_TITLE_MAX} 字超(${title.length} 字)`);
+  if (plan.style.trim().length === 0) broken.push("style が空");
+  if (!input.instrumental && plan.lyrics.trim().length === 0) broken.push("lyrics が空");
+  if (broken.length === 0) return [];
+  return [
+    {
+      label: `出力の破損(${broken.join("・")})`,
+      fatal: true,
+      instruction:
+        `前回の出力は値が壊れていた(${broken.join("・")})。思考の途中経過や作業メモを各項目の値に書いてはいけない。` +
+        `スキーマの各項目に完成した値だけを書き、title は ${SUNO_TITLE_MAX} 文字以内の曲名にすること。`,
+    },
+  ];
 }
 
 function planIssues(
@@ -411,7 +439,7 @@ function planIssues(
   input: SongPlanInput,
   limits: WordLimits
 ): PlanIssue[] {
-  const issues: PlanIssue[] = [];
+  const issues: PlanIssue[] = [...brokenOutputIssues(plan, input)];
   const banned = bannedWordsIn(plan, limits.banned);
   if (banned.length > 0) {
     issues.push({
@@ -448,6 +476,20 @@ export async function generateSongPlan(input: SongPlanInput): Promise<SongPlanRe
   // 検証リトライ: 禁止ワードの残留・固有名詞の混入があれば、指示を強めて 1 回だけ再生成する
   const issues = planIssues(plan, input, limits);
   if (issues.length > 0) {
+    // 出力の破損はリトライで救えた場合も発生頻度を観測したいので error_logs に残す
+    const broken = issues.filter((i) => i.fatal);
+    if (broken.length > 0) {
+      logWarn({
+        source: "llm",
+        event: "plan_broken_output",
+        message: `LLM の出力が壊れていたため再生成します: ${broken.map((i) => i.label).join(" / ")}`,
+        detail: {
+          issues: broken.map((i) => i.label),
+          titleLength: plan.title.length,
+          referenceArtist: input.referenceSong.artist,
+        },
+      });
+    }
     console.warn(
       `[llm] ${issues.map((i) => i.label).join(" / ")}が含まれたため再生成します`
     );
@@ -458,8 +500,15 @@ export async function generateSongPlan(input: SongPlanInput): Promise<SongPlanRe
     llmUsage.outputTokens += retry.usage.outputTokens;
     llmUsage.webSearches += retry.usage.webSearches;
     const still = planIssues(plan, input, limits);
+    const stillFatal = still.filter((i) => i.fatal);
+    if (stillFatal.length > 0) {
+      // 壊れたまま Suno に送っても 422 か壊れた曲になるだけなので、明確な理由で止める
+      throw new Error(
+        `再生成後も LLM の出力が壊れているため中止しました: ${stillFatal.map((i) => i.label).join(" / ")}`
+      );
+    }
     if (still.length > 0) {
-      // 生成は止めない(警告のみ。固有名詞が残った場合は Suno 側で FAILED として観測できる)
+      // 破損以外(禁止ワード・固有名詞)は生成を止めない(警告のみ。固有名詞が残った場合は Suno 側で FAILED として観測できる)
       logWarn({
         source: "llm",
         event: "plan_issue_remains",

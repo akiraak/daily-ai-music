@@ -14,8 +14,8 @@
 |---|---|---|---|---|---|---|
 | 1d5539b99a67 | 対応中 | 2026-08-13 | | server/generation/provider_failed | kie.ai が style の「major7」をアーティスト名と誤判定 | BACKLOG「style 語彙拒否への対策」。8/12(task 27)・8/13(task 46)の 2 回発生 |
 | ff93b2cf8532 | 対応中 | 2026-08-26 | | server/generation/provider_failed | kie.ai が style の「skank」(スカのリズム名)をアーティスト名と誤判定 | 「style 語彙拒否への対策」の 3 例目(8/22、task 119)。同じ BACKLOG 項目で対応 |
-| 1548bc85c976 | 対応中 | 2026-08-26 | | server/generation/task_failed | LLM 構造化出力の破損で title が 80 字超過 → kie.ai 422 | BACKLOG「LLM 構造化出力の破損への対策」。task 133(daily)・138(artist)。JSON は valid だが値に思考テキストが混入(title 1173 字/127 字) |
-| 11cf439d9b6a | 対応中 | 2026-08-26 | | server/scheduler/daily_failed | 同上(daily 経路の同じ失敗) | task 133。同じ BACKLOG 項目で対応 |
+| 1548bc85c976 | 修正済み | 2026-08-26 | 2026-08-26 | server/generation/task_failed | LLM 構造化出力の破損で title が 80 字超過 → kie.ai 422 | task 133(daily)・138(artist)。値に思考テキストが混入(title 1173 字/127 字)。送信前検証+検証リトライ+fatal 時は明確に FAILED で対応(docs/plans/archive/llm-broken-output-guard.md) |
+| 11cf439d9b6a | 修正済み | 2026-08-26 | 2026-08-26 | server/scheduler/daily_failed | 同上(daily 経路の同じ失敗) | task 133。1548bc85c976 と同じ修正で対応 |
 | 82002bae1f42 | 対応中 | 2026-08-26 | | server/generation/task_failed | Anthropic クレジット不足で LLM 失敗 | 8/13 に様子見(単発)→ 8/21〜22 に 35 件再発(入金で解消)。様子見条件が成立し BACKLOG「残高・使用上限による生成失敗の検知と通知」へ昇格 |
 | 61e879eeab14 | 対応中 | 2026-08-26 | | server/scheduler/daily_failed | Anthropic クレジット不足(スケジューラ側。34 件) | 82002bae1f42 と同一エピソード(8/21〜22)。同じ BACKLOG 項目で対応 |
 | e5d44813fe9d | 対応中 | 2026-08-26 | | server/generation/task_failed | Anthropic の月次使用上限に到達(解除は 9/1 00:00 UTC) | 8/26 の task 135〜137。直後の task 138 は LLM を通過しており上限は解消済みに見える(上限引き上げか)。同じ BACKLOG 項目で対応 |
