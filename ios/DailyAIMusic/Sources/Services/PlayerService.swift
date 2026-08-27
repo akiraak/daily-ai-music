@@ -24,8 +24,14 @@ final class PlayerService: ObservableObject {
     )
 
     private let player = AVPlayer()
-    /// 再生できなかったことを検知するための現在アイテムの status 監視(ErrorReporter へ送る)
+    /// 再生できなかったことを検知するための現在アイテムの status 監視(ErrorReporter へ送る + 復旧フラグ)
     private var statusObservation: NSKeyValueObservation?
+    /// isPlaying を AVPlayer の実状態から導出するための監視。手動フラグだけだと
+    /// システム側の停止(割り込み・ストール・アイテムの失敗)で表示が実態とずれる
+    private var timeControlObservation: NSKeyValueObservation?
+    /// 現在アイテムが再生不能で、次の再生操作で作り直しが要ることを示す。
+    /// AVPlayerItem は一度 .failed になると play() では復活しない(AVFoundation の仕様)
+    private var needsItemRecovery = false
 
     /// 再生順。queue のインデックス列で持つ(queue 自体は表示順のまま並べ替えない)。
     /// シャッフル OFF なら 0..<queue.count と同じで、ON なら現在曲を先頭にランダムに並ぶ
@@ -64,6 +70,14 @@ final class PlayerService: ObservableObject {
                 self?.currentTime = time.seconds
             }
         }
+        // isPlaying は AVPlayer の実状態(timeControlStatus)から導出する。
+        // waiting はバッファ待ち = 再生しようとしている状態なので再生中扱いのまま
+        timeControlObservation = player.observe(\.timeControlStatus, options: [.new]) { @Sendable [weak self] player, _ in
+            let playing = player.timeControlStatus != .paused
+            Task { @MainActor [weak self] in
+                self?.syncIsPlaying(playing)
+            }
+        }
         NotificationCenter.default.addObserver(
             forName: AVPlayerItem.didPlayToEndTimeNotification,
             object: nil,
@@ -83,7 +97,8 @@ final class PlayerService: ObservableObject {
             let error = note.userInfo?[AVPlayerItemFailedToPlayToEndTimeErrorKey] as? Error
             let description = error?.localizedDescription ?? "不明なエラー"
             MainActor.assumeIsolated {
-                guard let track = self?.currentTrack else { return }
+                guard let self, let track = self.currentTrack else { return }
+                self.needsItemRecovery = true
                 ErrorReporter.shared.report(
                     source: "ios-player",
                     event: "playback_interrupted",
@@ -94,6 +109,36 @@ final class PlayerService: ObservableObject {
                         "error": description,
                     ]
                 )
+            }
+        }
+        // オーディオセッション割り込み(電話・アラーム・他アプリの音)。停止時の表示更新は
+        // timeControlStatus の監視が拾うので、.ended + shouldResume の自動再開だけを扱う
+        NotificationCenter.default.addObserver(
+            forName: AVAudioSession.interruptionNotification,
+            object: AVAudioSession.sharedInstance(),
+            queue: .main
+        ) { [weak self] note in
+            // Notification は Sendable ではないので、値を取り出してから MainActor に入る
+            let type = (note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt)
+                .flatMap(AVAudioSession.InterruptionType.init(rawValue:))
+            let options = AVAudioSession.InterruptionOptions(
+                rawValue: note.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0
+            )
+            MainActor.assumeIsolated {
+                guard let self, type == .ended, options.contains(.shouldResume),
+                      self.currentTrack != nil else { return }
+                try? AVAudioSession.sharedInstance().setActive(true)
+                self.player.play()
+            }
+        }
+        // メディアサービスのリセット(稀)。既存の AVPlayerItem は全て無効になるので作り直す
+        NotificationCenter.default.addObserver(
+            forName: AVAudioSession.mediaServicesWereResetNotification,
+            object: AVAudioSession.sharedInstance(),
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.handleMediaServicesReset()
             }
         }
         configureRemoteCommands()
@@ -110,19 +155,14 @@ final class PlayerService: ObservableObject {
             queue = [track]
             rebuildOrder(startingAt: track)
         }
-        guard let url = BackendAPI.absoluteURL(forServerPath: track.audioUrl) else { return }
         if currentTrack?.id != track.id {
-            // /api/audio/* は X-API-Secret 必須。AVPlayer は URLRequest を使えないため
-            // AVURLAsset のオプションでヘッダを注入する
-            let asset = AVURLAsset(url: url, options: [
-                "AVURLAssetHTTPHeaderFieldsKey": BackendAPI.mediaRequestHeaders,
-            ])
-            let item = AVPlayerItem(asset: asset)
-            observePlaybackFailure(of: item, track: track)
-            player.replaceCurrentItem(with: item)
+            guard loadItem(for: track, resumeAt: 0) else { return }
             currentTrack = track
             currentTime = 0
             updateNowPlayingInfo(for: track)
+        } else if needsCurrentItemRebuild {
+            // 電波断などで壊れたアイテムは play() しても鳴らないため、作り直して同じ位置から再開する
+            guard loadItem(for: track, resumeAt: currentTime) else { return }
         }
         try? AVAudioSession.sharedInstance().setActive(true)
         player.play()
@@ -130,12 +170,40 @@ final class PlayerService: ObservableObject {
         updateNowPlayingPlaybackState()
     }
 
+    /// 現在アイテムが再生不能で、作り直さないと再生できない状態か
+    private var needsCurrentItemRebuild: Bool {
+        needsItemRecovery || player.currentItem == nil || player.currentItem?.status == .failed
+    }
+
+    /// AVURLAsset からアイテムを作って差し替える。resumeAt > 0 ならその位置へシークする
+    @discardableResult
+    private func loadItem(for track: Track, resumeAt seconds: Double) -> Bool {
+        guard let url = BackendAPI.absoluteURL(forServerPath: track.audioUrl) else { return false }
+        // /api/audio/* は X-API-Secret 必須。AVPlayer は URLRequest を使えないため
+        // AVURLAsset のオプションでヘッダを注入する
+        let asset = AVURLAsset(url: url, options: [
+            "AVURLAssetHTTPHeaderFieldsKey": BackendAPI.mediaRequestHeaders,
+        ])
+        let item = AVPlayerItem(asset: asset)
+        observePlaybackFailure(of: item, track: track)
+        player.replaceCurrentItem(with: item)
+        needsItemRecovery = false
+        if seconds > 0 {
+            player.seek(to: CMTime(seconds: seconds, preferredTimescale: 600))
+            currentTime = seconds
+        }
+        return true
+    }
+
     /// 再生開始に失敗した(音源が取れない・認証が通らない・壊れている)ことをサーバーへ報告する。
     /// KVO のコールバックは任意のスレッドから来るので、MainActor に触らない @Sendable クロージャにする
     private func observePlaybackFailure(of item: AVPlayerItem, track: Track) {
-        statusObservation = item.observe(\.status, options: [.new]) { @Sendable item, _ in
+        statusObservation = item.observe(\.status, options: [.new]) { @Sendable [weak self] item, _ in
             guard item.status == .failed else { return }
             let message = item.error?.localizedDescription ?? "不明なエラー"
+            Task { @MainActor [weak self] in
+                self?.needsItemRecovery = true
+            }
             ErrorReporter.shared.report(
                 source: "ios-player",
                 event: "playback_failed",
@@ -150,14 +218,26 @@ final class PlayerService: ObservableObject {
     }
 
     func togglePlayPause() {
-        guard currentTrack != nil else { return }
+        guard let track = currentTrack else { return }
         if isPlaying {
             player.pause()
             isPlaying = false
+            updateNowPlayingPlaybackState()
+        } else if needsCurrentItemRebuild {
+            // 壊れたアイテムのまま play() しても鳴らない。作り直しと位置復元は play(_:) に任せる
+            play(track)
         } else {
             player.play()
             isPlaying = true
+            updateNowPlayingPlaybackState()
         }
+    }
+
+    /// timeControlStatus の変化を isPlaying へ反映する(正はこちら。
+    /// play/pause 内の手動代入はタップへ即座に表示を返すためのもの)
+    private func syncIsPlaying(_ playing: Bool) {
+        guard isPlaying != playing else { return }
+        isPlaying = playing
         updateNowPlayingPlaybackState()
     }
 
@@ -192,6 +272,15 @@ final class PlayerService: ObservableObject {
             player.seek(to: .zero)
             updateNowPlayingPlaybackState()
         }
+    }
+
+    /// メディアサービスのリセット。セッション設定は失われ、既存の AVPlayerItem は使えなくなるので、
+    /// カテゴリを設定し直して現在アイテムを同じ位置で作り直す(再生の自動再開はしない)
+    private func handleMediaServicesReset() {
+        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
+        needsItemRecovery = true
+        guard let track = currentTrack else { return }
+        loadItem(for: track, resumeAt: currentTime)
     }
 
     // MARK: - ランダム再生
